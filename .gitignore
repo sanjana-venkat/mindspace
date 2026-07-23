@@ -1,0 +1,14 @@
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+
+# Swift Package Manager build artifacts
+.build/
+.swiftpm/
+Packages/
+Package.resolved
+
+# Custom compiled binaries
+notefy
+hello
