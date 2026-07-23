@@ -10,5 +10,5 @@ Packages/
 Package.resolved
 
 # Custom compiled binaries
-notefy
-hello
+/notefy
+/hello
