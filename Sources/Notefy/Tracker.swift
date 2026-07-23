@@ -82,6 +82,12 @@ public class ExplorationTracker {
         print("▶️ Exploration tracker resumed.")
     }
     
+    public func captureCustomStep(_ step: ExplorationStep) {
+        guard isTracking && !isPaused else { return }
+        steps.append(step)
+        onStepCaptured?(step)
+    }
+    
     @objc private func handleAppChange(_ notification: Notification) {
         guard isTracking && !isPaused else { return }
         if let app = notification.userInfo?[NSWorkspace.applicationUserInfoKey] as? NSRunningApplication {
