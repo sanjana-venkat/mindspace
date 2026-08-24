@@ -62,6 +62,8 @@ struct MainWindowView: View {
         }
         .frame(minWidth: 980, minHeight: 680)
         .background(NotefyTheme.sand)
+        .clipShape(FoldedRectangle(cornerRadius: 0, foldSize: NotefyTheme.foldSize))
+        .overlay(alignment: .topTrailing) { FoldAccent() }
         .preferredColorScheme(.light)
     }
 }
@@ -112,7 +114,11 @@ private struct Sidebar: View {
         .padding(20)
         .frame(width: collapsed ? 64 : 280, height: proxyHeight, alignment: .top)
         .clipped()
-        .glassPanel(cornerRadius: 24, tint: NotefyTheme.glassTintFaint, shadowRadius: 24, shadowY: 12)
+        .background(NotefyTheme.sandDeep)
+        .grain()
+        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(NotefyTheme.glassBorder, lineWidth: 1))
+        .shadow(color: NotefyTheme.panelShadowColor, radius: 24, x: 0, y: 12)
         .animation(.easeInOut(duration: 0.18), value: collapsed)
         .alert("Rename note", isPresented: $showRenameNote) {
             TextField("Note name", text: $renameText)
@@ -254,9 +260,14 @@ private struct Sidebar: View {
     private var header: some View {
         HStack(spacing: 8) {
             if !collapsed {
-                Text("Noted")
-                    .font(NotefyFont.wordmark)
-                    .foregroundStyle(NotefyTheme.ink)
+                HStack(spacing: 14) {
+                    NotedMark(tint: NotefyTheme.ink, knockout: NotefyTheme.sandDeep)
+                        .frame(width: 20, height: 20)
+                    Text("Noted")
+                        .font(NotefyFont.sectionTitle)
+                        .tracking(-0.4)
+                        .foregroundStyle(NotefyTheme.ink)
+                }
                 Spacer()
                 Button {
                     appState.createNewNote()

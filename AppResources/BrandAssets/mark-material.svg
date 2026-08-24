@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48" role="img" aria-label="Noted">
+  <defs>
+    <linearGradient id="ntClay" x1="6" y1="6" x2="42" y2="42" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FBF8F2"/><stop offset="1" stop-color="#EDE7DA"/>
+    </linearGradient>
+    <linearGradient id="ntTab" x1="30" y1="6" x2="42" y2="18" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#DED7C8"/><stop offset="1" stop-color="#CFC7B5"/>
+    </linearGradient>
+  </defs>
+  <path d="M6 12a6 6 0 0 1 6-6h18l12 12v18a6 6 0 0 1-6 6H12a6 6 0 0 1-6-6V12z" fill="url(#ntClay)"/>
+  <path d="M6 12a6 6 0 0 1 6-6h18l12 12v18a6 6 0 0 1-6 6H12a6 6 0 0 1-6-6V12z"
+        fill="none" stroke="#FFFFFF" stroke-opacity=".9" stroke-width="1"/>
+  <path d="M30 6l12 12h-6a6 6 0 0 1-6-6V6z" fill="url(#ntTab)"/>
+  <path d="M30 6v6a6 6 0 0 0 6 6h6" fill="none" stroke="#786E5C" stroke-opacity=".35" stroke-width="1"/>
+</svg>

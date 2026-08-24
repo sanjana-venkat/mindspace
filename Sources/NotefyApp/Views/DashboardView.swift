@@ -156,10 +156,11 @@ struct DashboardView: View {
                 // This is a fixed viewport. The shared stream below is sized
                 // to its exact inner width so cards can never escape the well.
                 RoundedRectangle(cornerRadius: 32, style: .continuous)
-                    .fill(.ultraThinMaterial)
-                    .background(NotefyTheme.glassFillSubtle, in: RoundedRectangle(cornerRadius: 32, style: .continuous))
+                    .fill(NotefyTheme.sandDeep)
                     .overlay(RoundedRectangle(cornerRadius: 32, style: .continuous)
                         .stroke(NotefyTheme.glassBorder, lineWidth: 1))
+                    .grain()
+                    .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
                     .neomorphicDeboss(cornerRadius: 32)
                     .frame(width: panelWidth, height: 620)
 
@@ -233,6 +234,7 @@ struct DashboardView: View {
                     .lineSpacing(7)
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
+                    .pigmentMark()
             }
             .padding(.top, 8)
         }
@@ -253,10 +255,11 @@ struct DashboardView: View {
             CaptureStamp(step: step, analysis: appState.vlmResults[step.id])
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .background(NotefyTheme.glassFillSubtle, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .background(NotefyTheme.cardPaper, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+                .grain()
+                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(isSelected ? NotefyTheme.marginRose : NotefyTheme.glassBorderSoft, lineWidth: isSelected ? 2 : 1))
+                    .stroke(isSelected ? NotefyTheme.pigment : NotefyTheme.glassBorderSoft, lineWidth: isSelected ? 2 : 1))
                 .shadow(color: NotefyTheme.panelShadowColor, radius: 16, x: 0, y: 8)
         }
     }
@@ -503,20 +506,20 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var actionButtons: some View {
+        // Graphite pills float above the material — exactly one primary
+        // (pigment) pill per screen. Organize is the primary action here.
         if mode == .raw {
             VStack(alignment: .trailing, spacing: 7) {
                 if showOrganizationChoices {
                     organizationChoices
                 }
                 HStack(spacing: 8) {
-                    NotefyPillButton(title: isSelecting ? "Done" : "Select", systemImage: isSelecting ? "checkmark" : "checkmark.circle", filled: false) {
+                    GraphitePillButton(isSelecting ? "Done" : "Select", systemImage: isSelecting ? "checkmark" : "checkmark.circle") {
                         isSelecting.toggle()
                     }
-                    .frame(width: 120)
-                    NotefyPillButton(title: "Organize", systemImage: showOrganizationChoices ? "xmark" : "arrow.up") {
+                    GraphitePillButton("Organize", systemImage: showOrganizationChoices ? "xmark" : "arrow.up", primary: true) {
                         showOrganizationChoices.toggle()
                     }
-                    .frame(width: 154)
                 }
             }
         } else {
@@ -525,10 +528,10 @@ struct DashboardView: View {
                     organizationChoices
                 }
                 HStack(spacing: 7) {
-                    NotefyPillButton(title: "Template", systemImage: "square.grid.2x2", filled: false) {
+                    GraphitePillButton("Template", systemImage: "square.grid.2x2", primary: true) {
                         showOrganizationChoices.toggle()
                     }
-                    NotefyPillButton(title: "Raw", systemImage: "arrow.left", filled: false) {
+                    GraphitePillButton("Raw", systemImage: "arrow.left") {
                         mode = .raw
                     }
                 }

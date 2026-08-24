@@ -126,9 +126,7 @@ private struct CaptureRailView: View {
                 Button {
                     onDismiss()
                 } label: {
-                    // Keep the dismiss control and its hit target, but leave the
-                    // branding surface empty until the new Noted mark is supplied.
-                    NotedLogo()
+                    NotedMark(tint: NotefyTheme.ink, knockout: NotefyTheme.cardPaper)
                         .frame(width: 22, height: 22)
                         .frame(width: 46, height: 38)
                         .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))

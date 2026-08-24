@@ -62,6 +62,155 @@ enum NotefyTheme {
 
     static func surface(_ scheme: ColorScheme) -> Color { sand }
     static func card(_ scheme: ColorScheme) -> Color { cardPaper }
+
+    // ---- Brand layer: Kaolin / the fold ----
+    // Noted is the one opaque, matte, pressed thing on a screen full of glass.
+    // Graphite is the missing dark value (controls that FLOAT above the
+    // material — never a surface, never a fill). Pigment is the single
+    // accent, at exactly three dilutions. Never a second hue, never a fourth
+    // pigment stop.
+    static let graphite = Color(hex: 0x22201D)
+    static let graphiteHover = Color(hex: 0x2C2925)
+    static let onGraphite = Color(hex: 0xF2EFE9)
+    static let graphiteShadow = Color(hex: 0x22201D, opacity: 0.28)
+
+    static let pigment = Color(hex: 0x1E4B8F)
+    static let pigmentDeep = Color(hex: 0x163767)
+    static let pigmentWash = Color(hex: 0x1E4B8F, opacity: 0.20)
+    static let pigmentWashLight = Color(hex: 0x1E4B8F, opacity: 0.10)
+    static let pigmentWashDeep = Color(hex: 0x1E4B8F, opacity: 0.32)
+    static let pigmentBloom = Color(hex: 0x1E4B8F, opacity: 0.07)
+    static let onPigment = Color(hex: 0xDDE6F3)
+
+    // Lift: the whole Noted panel resting on the desktop. Exactly one per
+    // screen — never applied to anything inside the shell.
+    static let liftShadow1 = Color(hex: 0x28221A, opacity: 0.06)
+    static let liftShadow2 = Color(hex: 0x28221A, opacity: 0.16)
+    static let liftShadow3 = Color(hex: 0x28221A, opacity: 0.12)
+
+    // The fold: the app shell's top-right corner is turned down, echoing the mark.
+    static let foldFace = Color(hex: 0xE8E2D6)
+    static let foldFace2 = Color(hex: 0xD9D2C3)
+    static let foldShadow = Color(hex: 0x28221A, opacity: 0.16)
+    static let foldSize: CGFloat = 46
+
+    static let grainOpacity: Double = 0.055
+}
+
+extension View {
+    /// Lift: the app shell resting on the desktop. Exactly one per screen.
+    func lift() -> some View {
+        self
+            .shadow(color: NotefyTheme.liftShadow1, radius: 4, x: 0, y: 2)
+            .shadow(color: NotefyTheme.liftShadow2, radius: 40, x: 0, y: 18)
+            .shadow(color: NotefyTheme.liftShadow3, radius: 90, x: 0, y: 48)
+    }
+
+    /// Pigment annotation wash — works because the surface beneath is opaque
+    /// matte. One pigment, three dilutions. Never a second hue.
+    func pigmentMark(_ strength: PigmentStrength = .default) -> some View {
+        self
+            .padding(.horizontal, 6)
+            .padding(.vertical, 3)
+            .background(strength.color, in: RoundedRectangle(cornerRadius: 4, style: .continuous))
+    }
+}
+
+enum PigmentStrength {
+    case light, `default`, deep
+    var color: Color {
+        switch self {
+        case .light: return NotefyTheme.pigmentWashLight
+        case .default: return NotefyTheme.pigmentWash
+        case .deep: return NotefyTheme.pigmentWashDeep
+        }
+    }
+}
+
+/// Folded top-right corner of the app shell — the window silhouette matches
+/// the mark. Clip the shell to `FoldedRectangle`, then lay `FoldAccent` over
+/// the top-right corner as the visible turned page.
+struct FoldedRectangle: Shape {
+    var cornerRadius: CGFloat
+    var foldSize: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        let r = cornerRadius
+        let f = foldSize
+        path.move(to: CGPoint(x: rect.minX + r, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX - f, y: rect.minY))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.minY + f))
+        path.addLine(to: CGPoint(x: rect.maxX, y: rect.maxY - r))
+        path.addArc(center: CGPoint(x: rect.maxX - r, y: rect.maxY - r), radius: r, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
+        path.addLine(to: CGPoint(x: rect.minX + r, y: rect.maxY))
+        path.addArc(center: CGPoint(x: rect.minX + r, y: rect.maxY - r), radius: r, startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+        path.addLine(to: CGPoint(x: rect.minX, y: rect.minY + r))
+        path.addArc(center: CGPoint(x: rect.minX + r, y: rect.minY + r), radius: r, startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// The visible turned corner — sits in the triangular gap `FoldedRectangle`
+/// cuts away. Nothing interactive may live under it.
+struct FoldAccent: View {
+    var foldSize: CGFloat = NotefyTheme.foldSize
+    var body: some View {
+        Path { path in
+            path.move(to: CGPoint(x: 0, y: 0))
+            path.addLine(to: CGPoint(x: foldSize, y: foldSize))
+            path.addLine(to: CGPoint(x: 0, y: foldSize))
+            path.closeSubpath()
+        }
+        .fill(LinearGradient(colors: [NotefyTheme.foldFace, NotefyTheme.foldFace2], startPoint: .topLeading, endPoint: .bottomTrailing))
+        .frame(width: foldSize, height: foldSize)
+        .shadow(color: NotefyTheme.foldShadow, radius: 5, x: -2, y: 2)
+        .allowsHitTesting(false)
+    }
+}
+
+/// Porcelain grain: a stable procedural noise field, drawn once and tiled by
+/// `Canvas`, multiplied at very low opacity onto matte surfaces only — never
+/// over a `.ultraThinMaterial` / glass element, it fights the blur.
+struct GrainOverlay: View {
+    var opacity: Double = NotefyTheme.grainOpacity
+    var body: some View {
+        Canvas { context, size in
+            var generator = SeededGenerator(seed: 7)
+            let count = Int(size.width * size.height / 9)
+            for _ in 0..<count {
+                let x = CGFloat.random(in: 0...size.width, using: &generator)
+                let y = CGFloat.random(in: 0...size.height, using: &generator)
+                let shade = Double.random(in: 0...1, using: &generator)
+                let rect = CGRect(x: x, y: y, width: 1, height: 1)
+                context.fill(Path(rect), with: .color(.black.opacity(shade > 0.5 ? 0.5 : 0)))
+            }
+        }
+        .blendMode(.multiply)
+        .opacity(opacity)
+        .allowsHitTesting(false)
+    }
+}
+
+/// Deterministic RNG so the grain field doesn't flicker on every redraw.
+struct SeededGenerator: RandomNumberGenerator {
+    private var state: UInt64
+    init(seed: UInt64) { self.state = seed &+ 0x9E3779B97F4A7C15 }
+    mutating func next() -> UInt64 {
+        state ^= state << 13
+        state ^= state >> 7
+        state ^= state << 17
+        return state
+    }
+}
+
+extension View {
+    /// Surfaces only. Requires the host to already have its own corner radius
+    /// via `.clipShape`/`.cornerRadius` for the grain to be masked to match.
+    func grain(opacity: Double = NotefyTheme.grainOpacity) -> some View {
+        self.overlay(GrainOverlay(opacity: opacity))
+    }
 }
 
 // MARK: - Elevation grammar
@@ -227,6 +376,78 @@ struct NotedLogo: View {
         } else {
             OrigamiCrane()
         }
+    }
+}
+
+/// The new brand mark — a folded page, matching the app shell's own turned
+/// corner. `tint` fills the body, `knockout` is the colour punched through
+/// the crease so it reads correctly on any ground.
+struct NotedMark: View {
+    var tint: Color = NotefyTheme.ink
+    var knockout: Color = NotefyTheme.sand
+
+    var body: some View {
+        Canvas { context, size in
+            let sx = size.width / 48
+            let sy = size.height / 48
+            func pt(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: x * sx, y: y * sy) }
+
+            var body = Path()
+            body.move(to: pt(6, 12))
+            body.addArc(center: pt(12, 12), radius: 6 * sx, startAngle: .degrees(180), endAngle: .degrees(270), clockwise: false)
+            body.addLine(to: pt(30, 6))
+            body.addLine(to: pt(42, 18))
+            body.addLine(to: pt(42, 36))
+            body.addArc(center: pt(36, 36), radius: 6 * sx, startAngle: .degrees(0), endAngle: .degrees(90), clockwise: false)
+            body.addLine(to: pt(12, 42))
+            body.addArc(center: pt(12, 36), radius: 6 * sx, startAngle: .degrees(90), endAngle: .degrees(180), clockwise: false)
+            body.closeSubpath()
+            context.fill(body, with: .color(tint))
+
+            var crease = Path()
+            crease.move(to: pt(30, 6))
+            crease.addLine(to: pt(30, 12))
+            crease.addQuadCurve(to: pt(36, 18), control: pt(30, 18))
+            crease.addLine(to: pt(42, 18))
+            context.stroke(crease, with: .color(knockout), lineWidth: 2.6 * sx)
+        }
+    }
+}
+
+/// Graphite pill: a control that floats *above* the material rather than
+/// living inside it — the one place high contrast is correct. Never
+/// embossed, never debossed; it sits above the elevation grammar entirely.
+struct GraphitePillButton: View {
+    let title: String
+    let systemImage: String?
+    var primary: Bool = false
+    let action: () -> Void
+
+    init(_ title: String, systemImage: String? = nil, primary: Bool = false, action: @escaping () -> Void) {
+        self.title = title
+        self.systemImage = systemImage
+        self.primary = primary
+        self.action = action
+    }
+
+    var body: some View {
+        Button(action: action) {
+            Group {
+                if let systemImage {
+                    Label(title.uppercased(), systemImage: systemImage)
+                } else {
+                    Text(title.uppercased())
+                }
+            }
+            .font(NotefyFont.label)
+            .tracking(1.2)
+            .foregroundStyle(primary ? NotefyTheme.onPigment : NotefyTheme.onGraphite)
+            .padding(.horizontal, 15)
+            .padding(.vertical, 10)
+            .background(primary ? NotefyTheme.pigment : NotefyTheme.graphite, in: Capsule())
+            .shadow(color: primary ? NotefyTheme.pigment.opacity(0.36) : NotefyTheme.graphiteShadow, radius: primary ? 12 : 10, x: 0, y: 3)
+        }
+        .buttonStyle(.plain)
     }
 }
 

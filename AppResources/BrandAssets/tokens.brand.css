@@ -1,0 +1,169 @@
+/* ============================================================
+   Noted — brand layer (Kaolin / the fold)
+   ADDITIVE. Import AFTER the existing token file.
+   Nothing here overwrites an existing value except where a
+   comment says SUPERSEDES.
+   ============================================================ */
+
+:root {
+  /* ---------------------------------------------------------
+     1. GRAPHITE — the missing dark value.
+     The existing palette has no near-black at all, which is
+     why every screen reads as fog. Graphite is for controls
+     that FLOAT ABOVE the material: action pills, toolbars,
+     menus, toasts.
+     NEVER a surface. NEVER a background. NEVER a hover fill.
+     --------------------------------------------------------- */
+  --graphite:        #22201D;
+  --graphite-hover:  #2C2925;
+  --on-graphite:     #F2EFE9;
+  --graphite-shadow: 0 3px 10px rgba(34, 32, 29, 0.28);
+
+  /* ---------------------------------------------------------
+     2. PIGMENT — one colour, three dilutions.
+     Cobalt is the single accent. It appears at exactly three
+     strengths and no others. Do not introduce a fourth stop,
+     do not introduce a second hue.
+       ink   → state, primary action, links, active mark
+       wash  → highlighter / annotation on the matte surface
+       bloom → ambient field behind the panel
+     --------------------------------------------------------- */
+  --pigment:        #1E4B8F;
+  --pigment-deep:   #163767;   /* pressed / pooled */
+  --pigment-ink:    #1E4B8F;
+  --pigment-wash:   rgba(30, 75, 143, 0.20);
+  --pigment-wash-2: rgba(30, 75, 143, 0.32);  /* second pass, emphasis */
+  --pigment-wash-0: rgba(30, 75, 143, 0.10);  /* light pass */
+  --pigment-bloom:  rgba(30, 75, 143, 0.07);
+  --on-pigment:     #DDE6F3;
+
+  /* ---------------------------------------------------------
+     3. LIFT — Noted is an object resting on your desktop.
+     This is a NEW third elevation alongside emboss/deboss.
+     emboss  = a control raised out of the material
+     deboss  = content seated into the material
+     lift    = the whole Noted panel, sitting on the OS
+     Applies to the app shell only. Exactly one lift per screen.
+     --------------------------------------------------------- */
+  --lift:
+      0 2px  4px rgba(40, 34, 26, 0.06),
+      0 18px 40px rgba(40, 34, 26, 0.16),
+      0 48px 90px rgba(40, 34, 26, 0.12);
+
+  /* ---------------------------------------------------------
+     4. THE FOLD — the mark, made structural.
+     The app shell's top-right corner is turned down. The
+     window silhouette and the logo are the same shape.
+     --------------------------------------------------------- */
+  --fold-size:  62px;          /* 44px on viewports < 900px */
+  --fold-face:  #E8E2D6;
+  --fold-face-2:#D9D2C3;
+  --fold-shadow: -2px 2px 5px rgba(40, 34, 26, 0.16);
+
+  /* ---------------------------------------------------------
+     5. GRAIN — porcelain tooth.
+     Highest impact per line of code. Kills the digital-fog
+     read by giving the eye something to interpret as material.
+     Surfaces only — never over glass, it fights the blur.
+     --------------------------------------------------------- */
+  --grain-url:     url("../assets/grain.svg");
+  --grain-opacity: 0.055;
+  --grain-tile:    180px;
+
+  /* ---------------------------------------------------------
+     6. GHOST — context text behind the note body.
+     Serif at very low opacity, two columns. Gives the page
+     depth without spending colour. Decorative: aria-hidden
+     and user-select:none, always.
+     --------------------------------------------------------- */
+  --ghost-opacity: 0.055;
+  --ghost-size:    27px;
+
+  /* Mark knockout — the colour punched through the crease.
+     Set per context so the mark works on any ground. */
+  --mark-knockout: #FDFBF7;
+}
+
+/* ---------- Reusable primitives ---------- */
+
+/* Grain overlay. Requires position:relative + a border-radius
+   on the host. ::after so it doesn't disturb the box model. */
+.nt-grain { position: relative; }
+.nt-grain::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: multiply;
+  background-image: var(--grain-url);
+  background-size: var(--grain-tile) var(--grain-tile);
+}
+
+/* The folded corner. Host needs position:relative and the
+   matching clip-path (see brief §3). */
+.nt-fold {
+  position: absolute;
+  top: 0; right: 0;
+  width: var(--fold-size);
+  height: var(--fold-size);
+  z-index: 6;
+  pointer-events: none;
+  background: linear-gradient(225deg, var(--fold-face) 0%, var(--fold-face-2) 100%);
+  clip-path: polygon(0 0, 100% 100%, 0 100%);
+  box-shadow: var(--fold-shadow);
+}
+
+/* Floating graphite control. Not embossed, not debossed —
+   above the material entirely, which is why it can be high
+   contrast without breaking the neumorphic grammar. */
+.nt-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 9px;
+  padding: 10px 15px;
+  border: 0;
+  border-radius: 99px;
+  cursor: pointer;
+  background: var(--graphite);
+  color: var(--on-graphite);
+  font-family: var(--font-mono, 'Geist Mono', monospace);
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 1.2px;
+  text-transform: uppercase;
+  box-shadow: var(--graphite-shadow);
+  transition: transform 200ms cubic-bezier(.22, 1, .36, 1),
+              background 200ms cubic-bezier(.22, 1, .36, 1);
+}
+.nt-pill:hover  { background: var(--graphite-hover); transform: translateY(-1px); }
+.nt-pill:active { transform: translateY(0); }
+.nt-pill--primary {
+  background: var(--pigment);
+  color: var(--on-pigment);
+  box-shadow: 0 3px 12px rgba(30, 75, 143, 0.36);
+}
+.nt-pill--primary:hover { background: var(--pigment-deep); }
+
+/* Annotation pigment. Works BECAUSE the surface beneath is
+   opaque and matte — this effect is impossible on glass. */
+.nt-mark {
+  background: var(--pigment-wash);
+  color: var(--ink, #2B2824);
+  padding: 0.06em 0.18em;
+  margin: 0 -0.1em;
+  border-radius: 2px;
+  box-decoration-break: clone;
+  -webkit-box-decoration-break: clone;
+}
+.nt-mark--light { background: var(--pigment-wash-0); }
+.nt-mark--deep  { background: var(--pigment-wash-2); }
+
+@media (max-width: 900px) {
+  :root { --fold-size: 44px; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .nt-pill { transition-duration: 0.01ms; }
+}
