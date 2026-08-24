@@ -1,6 +1,7 @@
 import Foundation
 import AppKit
 import Dispatch
+import NotefyCore
 
 // Setup active paths
 let desktopURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")

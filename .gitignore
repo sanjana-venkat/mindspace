@@ -12,3 +12,8 @@ Package.resolved
 # Custom compiled binaries
 /notefy
 /hello
+
+# Built app bundle (regenerate with scripts/build_app.sh)
+/Notefy.app
+AppResources/AppIcon.iconset
+AppResources/icon_1024.png

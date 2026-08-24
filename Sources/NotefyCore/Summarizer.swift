@@ -5,7 +5,7 @@ public class ExplorationSummarizer {
     // Process raw steps, filter out noise, and build a formatted markdown note
     public static func summarize(steps: [ExplorationStep]) -> String {
         guard !steps.isEmpty else {
-            return "# Notefy Exploration Summary\nNo exploration data captured."
+            return "# Noted Summary\nNo note content captured."
         }
         
         // Define apps classified as context-switching/communication noise
@@ -23,7 +23,7 @@ public class ExplorationSummarizer {
         }
         
         var output = ""
-        output += "# Notefy Exploration Summary\n"
+        output += "# Noted Summary\n"
         output += "Date: \(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short))\n"
         output += "Duration: Captured \(steps.count) events (Filtered down to \(filteredSteps.count) relevant actions)\n\n"
         
@@ -60,6 +60,15 @@ public class ExplorationSummarizer {
                 
                 if let screenshot = step.screenshotPath {
                     output += "  *Screenshot recorded: \(URL(fileURLWithPath: screenshot).lastPathComponent)*\n"
+                }
+                if let html = step.htmlPath {
+                    output += "  *Chrome HTML archived: \(URL(fileURLWithPath: html).lastPathComponent)*\n"
+                }
+                if let pageText = step.pageText {
+                    let excerpt = pageText
+                        .replacingOccurrences(of: "\n", with: " ")
+                        .prefix(500)
+                    output += "  Browser excerpt: \(excerpt)\n"
                 }
                 output += "\n"
             }

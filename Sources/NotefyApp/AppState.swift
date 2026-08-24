@@ -1,0 +1,1566 @@
+import Foundation
+import AppKit
+import Combine
+import NotefyCore
+
+private enum RecordingPurpose: Equatable {
+    case sessionVoiceNote
+    case standaloneMeetingNote
+}
+
+enum OrganizationTemplate: String, Codable, CaseIterable, Identifiable {
+    case bulletList = "Bullet list"
+    case essay = "Essay"
+    case meetingNotes = "Meeting notes"
+    case diagram = "Flowchart"
+
+    var id: String { rawValue }
+
+    var icon: String {
+        switch self {
+        case .bulletList: return "list.bullet"
+        case .essay: return "text.alignleft"
+        case .meetingNotes: return "person.2"
+        case .diagram: return "point.3.connected.trianglepath.dotted"
+        }
+    }
+
+    /// The exact Markdown skeleton the model must fill in — kept separate from prose
+    /// instructions so the model has an unambiguous structure to match, not a description
+    /// to interpret loosely.
+    func structure(authorName: String) -> String {
+        switch self {
+        case .bulletList:
+            return """
+            # {Title}
+
+            ## Key Ideas
+            - One bullet per idea or finding, citing its source inline in parentheses the first time it's mentioned, e.g. (stripe.com).
+
+            ## Sources
+            - [label](url) — one line per distinct source referenced above. Omit this section if no URLs were captured.
+
+            ## \(authorName)'s Reflections
+            - \(authorName)'s own typed or spoken thoughts, paraphrased in third person, e.g. "\(authorName) noted that...". Omit this whole section if none were captured.
+            """
+        case .essay:
+            return """
+            # {Title}
+
+            ## Overview
+            One short paragraph framing what this session was about.
+
+            ## [2-4 more ## subheadings, named after the actual topics covered — do not leave the literal placeholder text]
+            Connected paragraphs, citing sources inline in parentheses the first time each is mentioned.
+
+            ## Takeaway
+            One closing paragraph tying the session together. If \(authorName) left thoughts, fold in \(authorName)'s own reasoning here in third person, e.g. "\(authorName) concluded that...".
+            """
+        case .meetingNotes:
+            return """
+            # {Title}
+
+            ## Context
+            One or two sentences on what this meeting or work session covered and, if evident, who or what was involved.
+
+            ## Key Discussion Points
+            - One bullet per topic actually discussed or shown, cited to its source in parentheses where applicable.
+
+            ## Decisions
+            - One bullet per concrete decision made. Write "No decisions recorded." if none are evident.
+
+            ## Action Items
+            - [ ] Task — Owner: name if stated in the material, otherwise "Unassigned"
+
+            ## \(authorName)'s Notes
+            \(authorName)'s own thoughts, paraphrased in third person. Omit this whole section if none were captured.
+            """
+        case .diagram:
+            return """
+            A single Mermaid flowchart and nothing else — no heading, no prose before or after.
+
+            ```mermaid
+            flowchart TD
+                S0["first capture or idea"] --> S1["next one"]
+            ```
+
+            Every node should represent a real capture, thought, or source, in the order they logically connect. Label edges when the relationship needs explaining (e.g. `-->|clarifies|`). Keep node labels short; put detail in a following node instead of a long label.
+            """
+        }
+    }
+}
+
+struct NoteDestination: Identifiable, Hashable {
+    let url: URL
+    let title: String
+    var id: URL { url }
+}
+
+enum ThoughtNodeType: String, Codable {
+    case question, observation, insight, concern, hypothesis, evidence, solution, conclusion
+}
+
+enum ThoughtRelationship: String, Codable {
+    case expands, explains, supports, questions, contradicts, exampleOf = "example_of"
+    case leadsTo = "leads_to", consequence, possibleSolution = "possible_solution", evidenceFor = "evidence_for"
+}
+
+struct ThoughtEdge: Codable, Hashable {
+    var nodeId: String
+    var relationship: ThoughtRelationship
+}
+
+struct ThoughtNode: Identifiable, Codable, Hashable {
+    var id: String
+    var title: String
+    var summary: String?
+    var type: ThoughtNodeType
+    /// Stable provenance links back to ExplorationStep.id values. A semantic thought may
+    /// reference multiple captures when repeated ideas are merged.
+    var sourceIds: [String]
+    var children: [ThoughtEdge]
+}
+
+struct ThoughtGraph: Codable, Hashable {
+    var centralQuestion: String
+    var rootNodeId: String
+    var nodes: [ThoughtNode]
+
+    static func build(steps: [ExplorationStep], annotations: [UUID: String], noteTitle: String) -> ThoughtGraph {
+        let rootID = "root"
+        let question = centralQuestion(noteTitle)
+        var semanticNodes: [ThoughtNode] = [ThoughtNode(id: rootID, title: question, summary: nil, type: .question, sourceIds: [], children: [])]
+        var byKey: [String: Int] = [:]
+        for step in steps {
+            let annotation = annotations[step.id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let selected = (step.selectedText ?? step.pageText ?? step.windowTitle)
+                .replacingOccurrences(of: "\n", with: " ")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            let seed = annotation.isEmpty ? selected : annotation
+            let key = seed.lowercased().split(whereSeparator: { $0.isWhitespace || $0.isPunctuation }).prefix(12).joined(separator: " ")
+            let title = String(seed.prefix(120)).components(separatedBy: .newlines).first ?? seed
+            let summary = annotation.isEmpty ? nil : String(selected.prefix(220))
+            if let existing = byKey[key], !key.isEmpty {
+                semanticNodes[existing].sourceIds.append(step.id.uuidString)
+            } else {
+                let type: ThoughtNodeType = annotation.contains("?") ? .question : (annotation.isEmpty ? .observation : .insight)
+                let node = ThoughtNode(
+                    id: "thought-\(UUID().uuidString)",
+                    title: title.isEmpty ? "Untitled thought" : title,
+                    summary: summary,
+                    type: type,
+                    sourceIds: [step.id.uuidString],
+                    children: []
+                )
+                byKey[key] = semanticNodes.count
+                semanticNodes.append(node)
+            }
+        }
+
+        // Stable, organic tiers: branches can converge to one continuation and branch again.
+        let pattern = [2, 3, 1, 2, 1, 3]
+        var tiers: [[String]] = []
+        var cursor = 0
+        var patternIndex = 0
+        while cursor < semanticNodes.count - 1 {
+            // The root is not part of the semantic-node count used for tiering.
+            let thoughtCount = semanticNodes.count - 1
+            let count = min(pattern[patternIndex % pattern.count], thoughtCount - cursor)
+            tiers.append(Array(semanticNodes[(cursor + 1)..<(cursor + count + 1)].map(\.id)))
+            cursor += count
+            patternIndex += 1
+        }
+        var previous = [rootID]
+        for tier in tiers {
+            let relationship: ThoughtRelationship = tier.count > previous.count ? .expands : (tier.count < previous.count ? .leadsTo : .explains)
+            for (offset, childID) in tier.enumerated() {
+                let parentID = previous[offset % max(previous.count, 1)]
+                guard let parent = semanticNodes.firstIndex(where: { $0.id == parentID }) else { continue }
+                semanticNodes[parent].children.append(ThoughtEdge(nodeId: childID, relationship: relationship))
+            }
+            previous = tier
+        }
+        return ThoughtGraph(centralQuestion: question, rootNodeId: rootID, nodes: semanticNodes)
+    }
+
+    private static func centralQuestion(_ title: String) -> String {
+        let title = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        if title.hasSuffix("?") { return title }
+        return title.isEmpty ? "What is the thread connecting these captures?" : "What is the thread through \u{201C}\(title)\u{201D}?"
+    }
+}
+
+private struct StoredNoteDocument: Codable {
+    var title: String
+    var steps: [ExplorationStep]
+    var annotations: [String: String]
+    var organized: String
+    var organizationTemplate: OrganizationTemplate?
+    var thoughtGraph: ThoughtGraph?
+}
+
+@MainActor
+final class AppState: ObservableObject {
+    let sessionDir: URL
+    let settingsURL: URL
+    let permissionCenter: PermissionCenter
+    private var noteDataDirectory: URL { sessionDir.appendingPathComponent("Note_Data", isDirectory: true) }
+    private var workspaceURL: URL { sessionDir.appendingPathComponent("workspace.json") }
+
+    @Published var workspace: Workspace = Workspace()
+    @Published var settings: NotefySettings
+    @Published var steps: [ExplorationStep] = []
+    @Published var vlmResults: [UUID: String] = [:]
+    @Published var isTracking = false
+    @Published var isPaused = false
+    @Published var isRecording = false
+    @Published var recordingPurposeIsMeetingNote = false
+    @Published var recordingStatus: String?
+    @Published var lastSavedSummaryPath: String?
+    @Published var historyFiles: [URL] = []
+    @Published var audioModelState: ModelRuntimeState = .notDownloaded
+    @Published var visionStatus: String = "Not checked"
+    @Published var noteTitle: String = "Untitled capture"
+    @Published var rawDraft: String = ""
+    @Published var annotationDraft: String = ""
+    @Published var stepAnnotations: [UUID: String] = [:]
+    @Published var selectedStepIDs: Set<UUID> = []
+    @Published var activeNoteURL: URL?
+    @Published var organizedDraft: String = ""
+    @Published var organizedGraph: ThoughtGraph? = nil
+    @Published var organizedTemplate: OrganizationTemplate = .bulletList
+    @Published var isOrganizing = false
+    @Published var audioInputDevices: [AudioInputDevice] = []
+    @Published var microphonePowerDB: Float = -160
+    @Published var systemAudioPowerDB: Float = -160
+    @Published var microphoneSourceActive = false
+    @Published var systemAudioSourceActive = false
+    @Published var isShowingPermissionOnboarding: Bool
+
+    let whisperTranscriber = LocalWhisperTranscriber()
+
+    private let tracker: ExplorationTracker
+    private let meetingRecorder = MeetingRecorder()
+    private var audioClient: AudioClient
+    private var visionClient: VisionClient
+    private var isChangingRecordingState = false
+    private var cancellables = Set<AnyCancellable>()
+    private let regionSelection = RegionSelectionController()
+    private let captureReview = CaptureReviewController()
+    private let recordingNotepad = RecordingNotepadController()
+    private let instructionToast = InstructionToastController()
+    private lazy var capturePet = CapturePetController(
+        captureText: { [weak self] in self?.captureSelectedText() },
+        capturePage: { [weak self] in self?.captureActivePage() },
+        captureRegion: { [weak self] in self?.captureSelectedRegion() },
+        toggleAudio: { [weak self] in self?.toggleSessionVoiceNote() },
+        toggleMeeting: { [weak self] in self?.toggleMeetingNote() }
+    )
+    private lazy var hotkeys = GlobalHotkeyController(
+        onMeeting: { [weak self] in
+            guard let self, !self.isRecording || self.recordingPurposeIsMeetingNote else { return }
+            self.toggleMeetingNote()
+        },
+        onSelectedText: { [weak self] in self?.captureSelectedText() },
+        onPage: { [weak self] in self?.captureActivePage() },
+        onRegion: { [weak self] in self?.captureSelectedRegion() },
+        onSessionAudio: { [weak self] in self?.toggleSessionVoiceNote() },
+        onCaptureRail: { [weak self] in self?.capturePet.toggle() }
+    )
+
+    init() {
+        let permissionCenter = PermissionCenter()
+        self.permissionCenter = permissionCenter
+        self.isShowingPermissionOnboarding = !UserDefaults.standard.bool(forKey: PermissionCenter.completionKey)
+            || !permissionCenter.snapshot.allGranted
+
+        let desktop = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
+        let dir = desktop.appendingPathComponent("Notefy_Sessions")
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        self.sessionDir = dir
+        self.settingsURL = dir.appendingPathComponent("settings.json")
+        var loaded = NotefySettings.load(from: settingsURL)
+        if loaded.audio.provider == .local && !Self.isLocalWhisperVariant(loaded.audio.modelName) {
+            loaded.audio.modelName = "base"
+            loaded.save(to: settingsURL)
+        }
+        // qwen2-vl was the old default before qwen3.5:9b (real vision + text synthesis,
+        // confirmed working via Ollama) replaced it; carry existing installs forward.
+        if loaded.vision.provider == .local && loaded.vision.modelName == "qwen2-vl" {
+            loaded.vision.modelName = "qwen3.5:9b"
+            loaded.save(to: settingsURL)
+        }
+        self.settings = loaded
+        self.audioClient = AudioClient(config: loaded.audio)
+        self.visionClient = VisionClient(config: loaded.vision)
+        self.tracker = ExplorationTracker(outputDir: dir)
+        try? FileManager.default.createDirectory(at: dir.appendingPathComponent("Note_Data", isDirectory: true), withIntermediateDirectories: true)
+        self.workspace = Workspace.load(from: dir.appendingPathComponent("workspace.json"))
+
+        tracker.onStepCaptured = { [weak self] step in
+            Task { @MainActor in
+                self?.handleCaptured(step)
+            }
+        }
+
+        meetingRecorder.onLevels = { [weak self] levels in
+            Task { @MainActor in
+                self?.microphonePowerDB = levels.microphoneDecibels
+                self?.systemAudioPowerDB = levels.systemAudioDecibels
+            }
+        }
+
+        whisperTranscriber.$state
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] state in self?.audioModelState = state }
+            .store(in: &cancellables)
+
+        refreshHistory()
+        openMostRecentNoteOrCreate()
+        refreshAudioInputDevices()
+
+        if settings.audio.provider == .local {
+            Task { await whisperTranscriber.ensureReady(variant: settings.audio.modelName) }
+        }
+        checkVisionStatus()
+    }
+
+    func installHotkeys() {
+        hotkeys.start()
+    }
+
+    func showCapturePet() {
+        guard !isShowingPermissionOnboarding else { return }
+        capturePet.show()
+    }
+
+    func toggleCaptureRail() {
+        guard !isShowingPermissionOnboarding else { return }
+        capturePet.toggle()
+    }
+
+    func showPermissionOnboarding() {
+        capturePet.hide()
+        permissionCenter.refresh()
+        isShowingPermissionOnboarding = true
+    }
+
+    func finishPermissionOnboarding() {
+        permissionCenter.markComplete()
+        isShowingPermissionOnboarding = false
+        capturePet.show()
+    }
+
+    func refreshAudioInputDevices() {
+        audioInputDevices = MeetingRecorder.availableInputDevices()
+    }
+
+    var recentNoteDestinations: [NoteDestination] {
+        Array(allNoteDestinationsByRecency.prefix(5))
+    }
+
+    /// Every real note (excluding generated "Organized_Note_" exports), newest-opened first.
+    var allNoteDestinationsByRecency: [NoteDestination] {
+        realNoteFiles.map { NoteDestination(url: $0, title: title(for: $0)) }
+            .sorted { lastOpened($0.url) > lastOpened($1.url) }
+    }
+
+    var pinnedNoteDestinations: [NoteDestination] {
+        realNoteFiles
+            .filter { isPinned($0) }
+            .map { NoteDestination(url: $0, title: title(for: $0)) }
+            .sorted { lastOpened($0.url) > lastOpened($1.url) }
+    }
+
+    private var realNoteFiles: [URL] {
+        historyFiles.filter { !$0.lastPathComponent.hasPrefix("Organized_Note_") }
+    }
+
+    var activeNoteTitle: String { noteTitle }
+
+    func selectNoteDestination(_ destination: NoteDestination) {
+        persistCurrentRawNote()
+        loadNote(destination.url)
+        recordingStatus = "Saving new captures to \(destination.title)"
+    }
+
+    /// General-purpose "open this note in the editor" used by the sidebar/library —
+    /// unlike `selectNoteDestination` it doesn't announce a status message.
+    func openNote(_ url: URL) {
+        guard url != activeNoteURL else { return }
+        persistCurrentRawNote()
+        loadNote(url)
+    }
+
+    // MARK: - Folders & note organization
+
+    func folders(withParent parentID: UUID?) -> [NoteFolder] {
+        workspace.folders.filter { $0.parentID == parentID }.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+    }
+
+    func notes(inFolder targetFolderID: UUID?) -> [NoteDestination] {
+        realNoteFiles
+            .filter { folderID(for: $0) == targetFolderID }
+            .map { NoteDestination(url: $0, title: title(for: $0)) }
+            .sorted { lastOpened($0.url) > lastOpened($1.url) }
+    }
+
+    /// Notes not yet filed into any folder.
+    var unfiledNoteDestinations: [NoteDestination] { notes(inFolder: nil) }
+
+    func folderID(for url: URL) -> UUID? {
+        workspace.noteMeta[url.lastPathComponent]?.folderID
+    }
+
+    func folderPath(for folderID: UUID?) -> String {
+        guard let folderID, let folder = workspace.folders.first(where: { $0.id == folderID }) else { return "" }
+        let parentPath = self.folderPath(for: folder.parentID)
+        return parentPath.isEmpty ? folder.name : "\(parentPath)/\(folder.name)"
+    }
+
+    @discardableResult
+    func createFolder(name: String, parentID: UUID? = nil) -> UUID {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let folder = NoteFolder(name: trimmed.isEmpty ? "New folder" : trimmed, parentID: parentID)
+        workspace.folders.append(folder)
+        saveWorkspace()
+        return folder.id
+    }
+
+    func renameFolder(_ id: UUID, to newName: String) {
+        let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty, let idx = workspace.folders.firstIndex(where: { $0.id == id }) else { return }
+        workspace.folders[idx].name = trimmed
+        saveWorkspace()
+    }
+
+    func deleteFolder(_ id: UUID) {
+        let parent = workspace.folders.first(where: { $0.id == id })?.parentID
+        for idx in workspace.folders.indices where workspace.folders[idx].parentID == id {
+            workspace.folders[idx].parentID = parent
+        }
+        workspace.folders.removeAll { $0.id == id }
+        for key in workspace.noteMeta.keys where workspace.noteMeta[key]?.folderID == id {
+            workspace.noteMeta[key]?.folderID = parent
+        }
+        saveWorkspace()
+    }
+
+    func moveNote(_ url: URL, toFolder folderID: UUID?) {
+        var meta = workspace.noteMeta[url.lastPathComponent] ?? NoteMeta()
+        meta.folderID = folderID
+        workspace.noteMeta[url.lastPathComponent] = meta
+        saveWorkspace()
+    }
+
+    func togglePinned(_ url: URL) {
+        var meta = workspace.noteMeta[url.lastPathComponent] ?? NoteMeta()
+        meta.pinned.toggle()
+        workspace.noteMeta[url.lastPathComponent] = meta
+        saveWorkspace()
+    }
+
+    func isPinned(_ url: URL) -> Bool {
+        workspace.noteMeta[url.lastPathComponent]?.pinned ?? false
+    }
+
+    func lastOpened(_ url: URL) -> Date {
+        if let recorded = workspace.noteMeta[url.lastPathComponent]?.lastOpenedAt { return recorded }
+        return (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+    }
+
+    private func touchLastOpened(_ url: URL) {
+        var meta = workspace.noteMeta[url.lastPathComponent] ?? NoteMeta()
+        meta.lastOpenedAt = Date()
+        workspace.noteMeta[url.lastPathComponent] = meta
+        saveWorkspace()
+    }
+
+    private func saveWorkspace() {
+        workspace.save(to: workspaceURL)
+    }
+
+    func renameNote(_ url: URL, to newTitle: String) {
+        let trimmed = newTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        if url == activeNoteURL {
+            noteTitle = trimmed
+            persistCurrentRawNote()
+        } else if var doc = loadDocument(for: url) {
+            doc.title = trimmed
+            saveDocument(doc, for: url)
+        }
+    }
+
+    /// Search notes by title or folder path, e.g. "matchpoint/overhaul" or just "overhaul".
+    func searchNotes(query: String) -> [NoteDestination] {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return allNoteDestinationsByRecency }
+        return allNoteDestinationsByRecency.filter { destination in
+            let path = folderPath(for: folderID(for: destination.url))
+            let full = (path.isEmpty ? destination.title : "\(path)/\(destination.title)").lowercased()
+            return full.contains(q)
+        }
+    }
+
+    private func movePendingCapture(_ step: ExplorationStep, to destination: NoteDestination) {
+        steps.removeAll { $0.id == step.id }
+        tracker.removeStep(id: step.id)
+        persistCurrentRawNote()
+        loadNote(destination.url)
+        steps.insert(step, at: 0)
+    }
+
+    func createNewNote() {
+        persistCurrentRawNote()
+        _ = tracker.stop()
+        _ = tracker.start()
+        isTracking = true
+        steps = []
+        stepAnnotations = [:]
+        vlmResults = [:]
+        rawDraft = ""
+        annotationDraft = ""
+        organizedDraft = ""
+        organizedTemplate = .bulletList
+        noteTitle = "Untitled note"
+        activeNoteURL = sessionDir.appendingPathComponent("Note_\(Int(Date().timeIntervalSince1970)).md")
+        persistCurrentRawNote()
+        touchLastOpened(activeNoteURL!)
+        recordingStatus = "New note ready"
+    }
+
+    /// Creates a new note filed directly into the given folder (used by the sidebar's
+    /// "New note" action within a folder, and by the note-search picker's "New note" option).
+    @discardableResult
+    func createNewNote(inFolder folderID: UUID?) -> NoteDestination {
+        createNewNote()
+        let url = activeNoteURL!
+        moveNote(url, toFolder: folderID)
+        return NoteDestination(url: url, title: noteTitle)
+    }
+
+    func saveActiveNote() {
+        persistCurrentRawNote()
+        recordingStatus = "Saved to \(activeNoteTitle)"
+    }
+
+    private func movePendingCaptureToNewNote(_ step: ExplorationStep) {
+        steps.removeAll { $0.id == step.id }
+        tracker.removeStep(id: step.id)
+        createNewNote()
+        steps.insert(step, at: 0)
+    }
+
+    // MARK: - Tracking controls
+
+    func toggleTracking() {
+        persistCurrentRawNote()
+        recordingStatus = "Saved to \(activeNoteTitle)"
+    }
+
+    func togglePause() {
+        guard isTracking else { return }
+        if isPaused {
+            tracker.resume()
+        } else {
+            tracker.pause()
+        }
+        isPaused.toggle()
+    }
+
+    func captureSelectedText() {
+        guard ensureCaptureSession() else { return }
+        instructionToast.show("Select any text to annotate")
+        recordingStatus = "Lifting selected text…"
+        Task { [weak self] in
+            guard let self else { return }
+            let captured = await self.tracker.captureSelectedText()
+            self.recordingStatus = captured
+                ? "Selected text ready to keep"
+                : "No selected text was available. Keep the text highlighted, then try again."
+            self.permissionCenter.refresh()
+            if !self.permissionCenter.snapshot.accessibility { self.showPermissionOnboarding() }
+        }
+    }
+
+    func captureActivePage() {
+        guard ensureCaptureSession() else { return }
+        recordingStatus = "Capturing active page…"
+        Task { [weak self] in
+            guard let self else { return }
+            let captured = await self.tracker.captureActiveWindow()
+            self.recordingStatus = captured
+                ? nil
+                : "Grant Screen & System Audio Recording access, then quit and reopen Noted."
+            self.permissionCenter.refresh()
+            if !captured && !self.permissionCenter.snapshot.screenRecording {
+                self.showPermissionOnboarding()
+            }
+        }
+    }
+
+    func captureSelectedRegion() {
+        guard ensureCaptureSession() else { return }
+        let source = tracker.currentSourceContext()
+        recordingStatus = "Drag over the region to add"
+        regionSelection.begin(outputDirectory: sessionDir) { [weak self] result in
+            guard let self else { return }
+            switch result {
+            case .success(let url):
+                self.tracker.captureScreenshotFile(url, source: source)
+                self.recordingStatus = "Selected region added"
+            case .failure(let error):
+                self.recordingStatus = error.localizedDescription
+                self.permissionCenter.refresh()
+                if !self.permissionCenter.snapshot.screenRecording { self.showPermissionOnboarding() }
+            }
+        }
+    }
+
+    /// The name used to refer to the user in generated notes — third person always,
+    /// e.g. "Sanjana noted that..." rather than "I noted that...".
+    var authorName: String {
+        let full = NSFullUserName().trimmingCharacters(in: .whitespacesAndNewlines)
+        if full.isEmpty { return "The author" }
+        return full.split(separator: " ").first.map(String.init) ?? full
+    }
+
+    /// Full display name for the sidebar's user row — falls back the same way as `authorName`.
+    var fullUserDisplayName: String {
+        let full = NSFullUserName().trimmingCharacters(in: .whitespacesAndNewlines)
+        return full.isEmpty ? "Notefy user" : full
+    }
+
+    /// Real disk usage of the sessions folder (screenshots, audio, notes), sized against a
+    /// soft 2GB visual cap — matches the "Storage used" meter shown in the sidebar footer.
+    var storageUsedPercent: Int {
+        let cap: Double = 2 * 1024 * 1024 * 1024
+        let used = Double(directorySizeInBytes(sessionDir))
+        return Int((min(used / cap, 1)) * 100)
+    }
+
+    private func directorySizeInBytes(_ url: URL) -> Int64 {
+        guard let enumerator = FileManager.default.enumerator(
+            at: url,
+            includingPropertiesForKeys: [.fileSizeKey],
+            options: [.skipsHiddenFiles]
+        ) else { return 0 }
+        var total: Int64 = 0
+        for case let fileURL as URL in enumerator {
+            if let size = try? fileURL.resourceValues(forKeys: [.fileSizeKey]).fileSize {
+                total += Int64(size)
+            }
+        }
+        return total
+    }
+
+    /// Builds the full system prompt for a template: the shared voice/citation rules plus
+    /// that template's exact required Markdown structure. Shared by every provider (local
+    /// Ollama, generic cloud API, Gemini) so results are consistent regardless of backend.
+    private func systemPrompt(for template: OrganizationTemplate) -> String {
+        """
+        You are Notefy's note-synthesis assistant. You are shown one or more screenshots \
+        \(authorName) captured while researching or working, each labeled with a source (a \
+        website domain, app name, or "Screen region"), and optionally \(authorName)'s own \
+        thought about it — typed on the spot, or spoken aloud and transcribed to text.
+
+        Write the note about \(authorName)'s session using EXACTLY this Markdown structure. \
+        Fill it in with real content — do not explain the structure, do not add extra \
+        top-level sections, do not rename the given headings:
+
+        \(template.structure(authorName: authorName))
+
+        Rules:
+        - Third person only. Never write "I" or "my" — \(authorName) is being described, not speaking.
+        - Reference concrete details actually visible in each image; never invent facts.
+        - Cite each distinct source inline in parentheses the first time it's mentioned, e.g. (stripe.com).
+        - Output valid Markdown only — no commentary about what you're doing, no meta text before or after.
+        """
+    }
+
+    func organizeCurrentSession(as template: OrganizationTemplate = .bulletList) {
+        guard !steps.isEmpty || !rawDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+            recordingStatus = "Add something to the raw note first."
+            return
+        }
+        isOrganizing = true
+        organizedTemplate = template
+        organizedGraph = ThoughtGraph.build(steps: orderedStepsForGraph, annotations: stepAnnotations, noteTitle: noteTitle)
+        let fallback = organizedFallback(for: template)
+        let orderedSteps = Array(steps.reversed())
+
+        if template == .diagram && settings.vision.provider == .gemini {
+            recordingStatus = "Finding the thread between your thoughts with Gemini…"
+            visionClient.generateNote(
+                systemPrompt: thoughtGraphPrompt,
+                context: thoughtGraphContext(steps: orderedSteps),
+                completion: { [weak self] result in
+                    Task { @MainActor in
+                        guard let self else { return }
+                        if case .success(let raw) = result,
+                           let graph = self.decodeThoughtGraph(raw, validSourceIDs: Set(orderedSteps.map { $0.id.uuidString })) {
+                            self.organizedGraph = graph
+                            self.organizedDraft = ""
+                            self.recordingStatus = nil
+                        } else {
+                            self.recordingStatus = "Used a local graph fallback; Gemini did not return valid graph data."
+                        }
+                        self.persistCurrentRawNote()
+                        self.isOrganizing = false
+                    }
+                }
+            )
+            return
+        }
+
+        let capturesWithScreenshots = orderedSteps.filter { $0.screenshotPath != nil }
+        let prompt = systemPrompt(for: template)
+
+        // Notes read best when the model actually looks at the screenshots instead of just
+        // their OCR/alt-text — synthesize from the real images whenever the configured
+        // provider can see them (local Ollama, Gemini, or a vision-capable cloud API).
+        let canUseImages = settings.vision.provider != .api || !settings.vision.apiKey.isEmpty
+        if !capturesWithScreenshots.isEmpty, canUseImages {
+            recordingStatus = "Looking at \(capturesWithScreenshots.count) capture\(capturesWithScreenshots.count == 1 ? "" : "s") with \(settings.vision.modelName)… this can take a couple of minutes"
+            let captures: [VisionClient.MentalNoteCapture] = orderedSteps.map { step in
+                let imageBase64 = step.screenshotPath
+                    .flatMap { try? Data(contentsOf: URL(fileURLWithPath: $0)) }
+                    .map { $0.base64EncodedString() }
+                return VisionClient.MentalNoteCapture(
+                    sourceLabel: mentalNoteSourceLabel(for: step),
+                    thought: stepAnnotations[step.id],
+                    imageBase64: imageBase64
+                )
+            }
+            visionClient.generateMentalNote(captures: captures, systemPrompt: prompt) { [weak self] result in
+                Task { @MainActor in
+                    guard let self else { return }
+                    switch result {
+                    case .success(let note):
+                        self.organizedDraft = note
+                        self.recordingStatus = nil
+                    case .failure(let error):
+                        self.organizedDraft = fallback
+                        self.recordingStatus = "Model unavailable; made this \(template.rawValue.lowercased()) on-device. \(error.localizedDescription)"
+                    }
+                    self.persistCurrentRawNote()
+                    self.isOrganizing = false
+                }
+            }
+            return
+        }
+
+        recordingStatus = "Organizing with \(settings.vision.modelName)…"
+        let context = """
+        Raw note:
+        \(rawDraft)
+
+        \(authorName)'s annotations:
+        \(annotationDraft)
+
+        Captures:
+        \(explorationContext(steps: orderedSteps, fallback: fallback))
+        """
+        visionClient.generateNote(systemPrompt: prompt, context: context) { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                switch result {
+                case .success(let note):
+                    self.organizedDraft = note
+                    self.recordingStatus = nil
+                case .failure(let error):
+                    self.organizedDraft = fallback
+                    self.recordingStatus = "Model unavailable; made this \(template.rawValue.lowercased()) on-device. \(error.localizedDescription)"
+                }
+                self.persistCurrentRawNote()
+                self.isOrganizing = false
+            }
+        }
+    }
+
+    private var orderedStepsForGraph: [ExplorationStep] {
+        Array(steps.reversed())
+    }
+
+    private var thoughtGraphPrompt: String {
+        """
+        You are reconstructing a person's thinking, not organizing files. First read ALL
+        source items together. Extract atomic thoughts, merge repeated ideas, identify the
+        central question, then construct a semantic reasoning tree. Preserve uncertainty.
+
+        Return JSON only, with exactly this shape:
+        {"centralQuestion":"short conversational question","rootNodeId":"root","nodes":[{"id":"root","title":"...","summary":"...","type":"question","sourceIds":[],"children":[{"nodeId":"...","relationship":"expands"}]}]}
+
+        Allowed types: question, observation, insight, concern, hypothesis, evidence, solution, conclusion.
+        Allowed relationships: expands, explains, supports, questions, contradicts, example_of,
+        leads_to, consequence, possible_solution, evidence_for.
+        Every non-root thought must have a concise semantic title, not a source label or URL.
+        Every thought must preserve one or more exact sourceIds from the input. Merge duplicate
+        ideas by putting all of their sourceIds on one node. Each node may have 0–3 children;
+        never invent branches just to make the graph symmetrical. Do not include Markdown fences.
+        """
+    }
+
+    private func thoughtGraphContext(steps: [ExplorationStep]) -> String {
+        var lines = ["NOTE TITLE: \(noteTitle)", ""]
+        for step in steps {
+            lines.append("SOURCE ID: \(step.id.uuidString)")
+            lines.append("SOURCE: \(mentalNoteSourceLabel(for: step))")
+            lines.append("TEXT: \((step.selectedText ?? step.pageText ?? step.windowTitle).prefix(1800))")
+            if let thought = stepAnnotations[step.id], !thought.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                lines.append("USER THOUGHT: \(thought.prefix(1800))")
+            }
+            lines.append("")
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func decodeThoughtGraph(_ raw: String, validSourceIDs: Set<String>) -> ThoughtGraph? {
+        var value = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        if value.hasPrefix("```") {
+            value = value.replacingOccurrences(of: "```json", with: "").replacingOccurrences(of: "```", with: "").trimmingCharacters(in: .whitespacesAndNewlines)
+        }
+        guard let start = value.firstIndex(of: "{"), let end = value.lastIndex(of: "}") else { return nil }
+        let json = String(value[start...end])
+        guard let data = json.data(using: .utf8), var graph = try? JSONDecoder().decode(ThoughtGraph.self, from: data), graph.rootNodeId == "root" else { return nil }
+        guard graph.nodes.contains(where: { $0.id == graph.rootNodeId }), graph.nodes.allSatisfy({ $0.children.count <= 3 && $0.sourceIds.allSatisfy(validSourceIDs.contains) }) else { return nil }
+        graph.nodes = graph.nodes.map { node in
+            var cleaned = node
+            cleaned.sourceIds = Array(NSOrderedSet(array: node.sourceIds)) as? [String] ?? node.sourceIds
+            return cleaned
+        }
+        return graph
+    }
+
+    /// Mirrors the source normalization shown on capture cards (Views/DashboardView.swift)
+    /// so the model sees the same clean domain/app label the user sees.
+    private func mentalNoteSourceLabel(for step: ExplorationStep) -> String {
+        if let host = step.url.flatMap(URL.init(string:))?.host, !host.isEmpty { return host }
+        if step.appName == "Audio" { return "Computer audio" }
+        if ["Notefy", "Noted", "notefy-app"].contains(step.appName) { return "Screen region" }
+        return step.appName
+    }
+
+    private func organizedFallback(for template: OrganizationTemplate) -> String {
+        let ordered = Array(steps.reversed())
+        func excerpt(_ step: ExplorationStep) -> String {
+            let value = step.selectedText ?? step.pageText ?? step.windowTitle
+            return value.replacingOccurrences(of: "\n", with: " ").prefix(260).description
+        }
+        switch template {
+        case .bulletList:
+            var lines = ["# \(noteTitle)", "", "## Key ideas"]
+            if ordered.isEmpty, !rawDraft.isEmpty { lines.append("- \(rawDraft.replacingOccurrences(of: "\n", with: " "))") }
+            for step in ordered {
+                lines.append("- **\(step.appName):** \(excerpt(step))")
+                if let thought = stepAnnotations[step.id], !thought.isEmpty {
+                    lines.append("  - *My thought:* \(thought)")
+                }
+            }
+            let sources = ordered.compactMap { step -> String? in
+                guard let url = step.url else { return nil }
+                return "- [\(step.windowTitle)](\(url))"
+            }
+            if !sources.isEmpty { lines += ["", "## Sources"] + sources }
+            return lines.joined(separator: "\n")
+        case .essay:
+            var paragraphs = ["# \(noteTitle)", ""]
+            if ordered.isEmpty, !rawDraft.isEmpty { paragraphs += [rawDraft, ""] }
+            for step in ordered {
+                paragraphs += ["## \(step.windowTitle.isEmpty ? step.appName : step.windowTitle)", "", excerpt(step)]
+                if let thought = stepAnnotations[step.id], !thought.isEmpty {
+                    paragraphs += ["", "My reflection: \(thought)"]
+                }
+                paragraphs.append("")
+            }
+            return paragraphs.joined(separator: "\n")
+        case .meetingNotes:
+            var lines = ["# \(noteTitle)", "", "## Key discussion points"]
+            if ordered.isEmpty, !rawDraft.isEmpty {
+                lines.append("- \(rawDraft.replacingOccurrences(of: "\n", with: " "))")
+            }
+            for step in ordered {
+                lines.append("- **\(step.appName):** \(excerpt(step))")
+                if let thought = stepAnnotations[step.id], !thought.isEmpty {
+                    lines.append("  - *Note:* \(thought)")
+                }
+            }
+            lines += ["", "## Decisions", "- No decisions recorded.", "", "## Action items", "- [ ] No action items recorded."]
+            return lines.joined(separator: "\n")
+        case .diagram:
+            var lines = ["# \(noteTitle)", "", "```mermaid", "flowchart TD"]
+            if ordered.isEmpty, !rawDraft.isEmpty {
+                let clean = rawDraft.replacingOccurrences(of: "\"", with: "'").replacingOccurrences(of: "\n", with: " ").prefix(240)
+                lines.append("  S0[\"\(clean)\"]")
+            }
+            for (index, step) in ordered.enumerated() {
+                let label = "\(step.appName): \(excerpt(step))"
+                    .replacingOccurrences(of: "\"", with: "'")
+                lines.append("  S\(index)[\"\(label)\"]")
+                if index > 0 { lines.append("  S\(index - 1) --> S\(index)") }
+                if let thought = stepAnnotations[step.id], !thought.isEmpty {
+                    let clean = thought.replacingOccurrences(of: "\"", with: "'").prefix(180)
+                    lines.append("  S\(index) --> T\(index)[\"My thought: \(clean)\"]")
+                }
+            }
+            lines += ["```", ""]
+            return lines.joined(separator: "\n")
+        }
+    }
+
+    /// Voice note captured *during* an active exploration session — folded into that session's timeline.
+    func toggleSessionVoiceNote() {
+        guard ensureCaptureSession() else { return }
+        guard !isChangingRecordingState,
+              !isRecording || !recordingPurposeIsMeetingNote else { return }
+        if isRecording && !recordingPurposeIsMeetingNote && recordingNotepad.isVisible {
+            recordingNotepad.insertTimestamp()
+            recordingStatus = "Timestamp added to audio notes"
+            return
+        }
+        isChangingRecordingState = true
+        Task { [weak self] in
+            guard let self else { return }
+            if self.isRecording {
+                await self.stopSessionAudio()
+            } else {
+                await self.startSessionAudio()
+            }
+            self.isChangingRecordingState = false
+        }
+    }
+
+    private func startSessionAudio() async {
+        recordingStatus = "Starting computer audio…"
+        do {
+            try await meetingRecorder.startComputerAudioOnly()
+            isRecording = true
+            recordingPurposeIsMeetingNote = false
+            microphoneSourceActive = false
+            systemAudioSourceActive = meetingRecorder.isSystemAudioActive
+            recordingStatus = "Recording computer audio"
+            let sourceApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? "Mac audio"
+            recordingNotepad.show(
+                kind: .audio,
+                sourceApp: sourceApp,
+                microphoneDB: { [weak self] in self?.microphonePowerDB ?? -60 },
+                systemDB: { [weak self] in self?.systemAudioPowerDB ?? -60 },
+                onEnd: { [weak self] in self?.endSessionAudioFromNotepad() }
+            )
+        } catch {
+            microphoneSourceActive = false
+            systemAudioSourceActive = false
+            recordingStatus = "Could not start computer audio: \(error.localizedDescription)"
+            permissionCenter.refresh()
+            if !permissionCenter.snapshot.screenRecording {
+                showPermissionOnboarding()
+            }
+        }
+    }
+
+    private func stopSessionAudio() async {
+        recordingStatus = "Finishing session audio…"
+        let notepadNotes = recordingNotepad.takeNotesAndClose()
+        guard let artifacts = await meetingRecorder.stop() else {
+            isRecording = false
+            microphoneSourceActive = false
+            systemAudioSourceActive = false
+            recordingStatus = nil
+            return
+        }
+        isRecording = false
+        microphoneSourceActive = false
+        systemAudioSourceActive = false
+        var sections: [String] = []
+        var failures: [String] = []
+        if let systemURL = artifacts.systemAudioURL {
+            switch await transcribe(audioURL: systemURL) {
+            case .success(let text): sections.append(text)
+            case .failure(let error): failures.append("Computer audio: \(error.localizedDescription)")
+            }
+            try? FileManager.default.removeItem(at: systemURL)
+        }
+
+        handleTranscription(
+            sections.joined(separator: "\n\n"),
+            purpose: .sessionVoiceNote,
+            annotation: notepadNotes
+        )
+        persistCurrentRawNote()
+        recordingStatus = failures.isEmpty
+            ? "Computer audio saved to \(activeNoteTitle)"
+            : "Computer audio saved, but transcription needs attention: \(failures.joined(separator: "; "))"
+    }
+
+    private func endSessionAudioFromNotepad() {
+        guard isRecording, !recordingPurposeIsMeetingNote, !isChangingRecordingState else { return }
+        isChangingRecordingState = true
+        Task { [weak self] in
+            guard let self else { return }
+            await self.stopSessionAudio()
+            self.isChangingRecordingState = false
+        }
+    }
+
+    /// Standalone "meeting note" — works anytime, independent of exploration tracking,
+    /// and is saved as its own note in History.
+    func toggleMeetingNote() {
+        guard !isChangingRecordingState else { return }
+        isChangingRecordingState = true
+        Task { [weak self] in
+            guard let self else { return }
+            if self.isRecording {
+                await self.stopMeetingRecording()
+            } else {
+                await self.startMeetingRecording()
+            }
+            self.isChangingRecordingState = false
+        }
+    }
+
+    private func startMeetingRecording() async {
+        guard !isRecording else { return }
+        recordingStatus = "Starting microphone and computer audio…"
+        let microphoneURL = sessionDir.appendingPathComponent("meeting_mic_\(UUID().uuidString).wav")
+        do {
+            meetingRecorder.preferredInputDeviceUID = settings.audio.inputDeviceUID
+            let warning = try await meetingRecorder.start(saveMicrophoneTo: microphoneURL)
+            isRecording = true
+            recordingPurposeIsMeetingNote = true
+            microphoneSourceActive = true
+            systemAudioSourceActive = meetingRecorder.isSystemAudioActive
+            recordingStatus = warning ?? "Recording microphone and computer audio"
+            let sourceApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? "Meeting app"
+            recordingNotepad.show(
+                kind: .meeting,
+                sourceApp: sourceApp,
+                microphoneDB: { [weak self] in self?.microphonePowerDB ?? -60 },
+                systemDB: { [weak self] in self?.systemAudioPowerDB ?? -60 },
+                onEnd: { [weak self] in self?.endMeetingFromNotepad() }
+            )
+        } catch {
+            microphoneSourceActive = false
+            systemAudioSourceActive = false
+            recordingStatus = "Could not start meeting recording: \(error.localizedDescription)"
+            permissionCenter.refresh()
+            if !permissionCenter.snapshot.microphone || !permissionCenter.snapshot.screenRecording {
+                showPermissionOnboarding()
+            }
+        }
+    }
+
+    private func stopMeetingRecording() async {
+        recordingStatus = "Finishing recording…"
+        let notepadNotes = recordingNotepad.takeNotesAndClose()
+        guard let artifacts = await meetingRecorder.stop() else {
+            isRecording = false
+            recordingPurposeIsMeetingNote = false
+            microphoneSourceActive = false
+            systemAudioSourceActive = false
+            recordingStatus = nil
+            return
+        }
+        isRecording = false
+        recordingPurposeIsMeetingNote = false
+        microphoneSourceActive = false
+        systemAudioSourceActive = false
+        recordingStatus = "Transcribing locally…"
+
+        var sections: [String] = []
+        var failures: [String] = []
+        if let microphoneURL = artifacts.microphoneURL {
+            let microphoneResult = await transcribe(audioURL: microphoneURL)
+            switch microphoneResult {
+            case .success(let text):
+                sections.append("## You (microphone)\n\n\(text)")
+            case .failure(let error):
+                failures.append("Microphone: \(error.localizedDescription)")
+            }
+            try? FileManager.default.removeItem(at: microphoneURL)
+        }
+
+        if let systemURL = artifacts.systemAudioURL {
+            let systemResult = await transcribe(audioURL: systemURL)
+            switch systemResult {
+            case .success(let text):
+                sections.append("## Other participants (computer audio)\n\n\(text)")
+            case .failure(let error):
+                failures.append("Computer audio: \(error.localizedDescription)")
+            }
+            try? FileManager.default.removeItem(at: systemURL)
+        }
+
+        handleTranscription(
+            sections.joined(separator: "\n\n"),
+            purpose: .standaloneMeetingNote,
+            annotation: notepadNotes
+        )
+        recordingStatus = failures.isEmpty
+            ? "Meeting note saved to \(activeNoteTitle)"
+            : "Meeting notes saved, but transcription needs attention: \(failures.joined(separator: "; "))"
+    }
+
+    private func endMeetingFromNotepad() {
+        guard isRecording, recordingPurposeIsMeetingNote, !isChangingRecordingState else { return }
+        isChangingRecordingState = true
+        Task { [weak self] in
+            guard let self else { return }
+            await self.stopMeetingRecording()
+            self.isChangingRecordingState = false
+        }
+    }
+
+    private func transcribe(audioURL: URL) async -> Result<String, Error> {
+        if settings.audio.provider == .local {
+            return await whisperTranscriber.transcribe(audioURL: audioURL, variant: settings.audio.modelName)
+        }
+        return await withCheckedContinuation { continuation in
+            audioClient.transcribe(audioURL: audioURL) { result in
+                continuation.resume(returning: result)
+            }
+        }
+    }
+
+    private func handleTranscription(_ text: String, purpose: RecordingPurpose, annotation: String = "") {
+        guard !text.isEmpty || !annotation.isEmpty else { return }
+        _ = ensureCaptureSession()
+        let step = ExplorationStep(
+            appName: purpose == .sessionVoiceNote ? "Computer audio" : "Meeting",
+            windowTitle: purpose == .sessionVoiceNote ? "Computer audio recording" : "Meeting note",
+            selectedText: text.isEmpty ? nil : text
+        )
+        tracker.captureCustomStep(step)
+        if !annotation.isEmpty { stepAnnotations[step.id] = annotation }
+        persistCurrentRawNote()
+    }
+
+    private func explorationContext(steps: [ExplorationStep], fallback: String) -> String {
+        var context = fallback
+        for step in steps {
+            context += "\n\n---\nApp: \(step.appName)\nWindow: \(step.windowTitle)"
+            if let url = step.url { context += "\nURL: \(url)" }
+            if let selected = step.selectedText { context += "\nSelected text: \(selected)" }
+            if let pageText = step.pageText { context += "\nBrowser page text:\n\(pageText)" }
+            if let analysis = vlmResults[step.id] { context += "\nScreen analysis:\n\(analysis)" }
+            if let thought = stepAnnotations[step.id], !thought.isEmpty {
+                context += "\nUser annotation:\n\(thought)"
+            }
+        }
+        return context
+    }
+
+    private func handleCaptured(_ step: ExplorationStep) {
+        steps.insert(step, at: 0)
+        let isRecordedTranscript = step.appName == "Audio"
+            || step.appName == "Computer audio"
+            || step.appName == "Meeting"
+        let shouldReview = !isRecordedTranscript && (
+            step.screenshotPath != nil
+                || (step.appName != "Notefy Voice" && !(step.selectedText ?? "").isEmpty)
+        )
+        if shouldReview {
+            captureReview.present(
+                step: step,
+                appState: self,
+                destinationTitle: activeNoteTitle,
+                destinations: recentNoteDestinations,
+                onSelectDestination: { [weak self] destination in self?.movePendingCapture(step, to: destination) },
+                onCreateNote: { [weak self] in self?.movePendingCaptureToNewNote(step) },
+                onTranscribeVoice: { [weak self] url in
+                    guard let self else {
+                        return .failure(NSError(
+                            domain: "Notefy.CaptureVoice",
+                            code: 1,
+                            userInfo: [NSLocalizedDescriptionKey: "Noted closed before transcription finished."]
+                        ))
+                    }
+                    return await self.transcribe(audioURL: url)
+                },
+                onKeep: { [weak self] note, voiceURL in
+                    self?.keepReviewedCapture(step, note: note, voiceURL: voiceURL)
+                },
+                onDiscard: { [weak self] in self?.discardReviewedCapture(step) }
+            )
+        } else {
+            appendCaptureToRaw(step)
+        }
+        guard let screenshot = step.screenshotPath else { return }
+        let screenshotURL = URL(fileURLWithPath: screenshot)
+        visionClient.analyzeScreen(imageURL: screenshotURL) { [weak self] result in
+            Task { @MainActor in
+                guard let self else { return }
+                guard self.steps.contains(where: { $0.id == step.id }) else { return }
+                switch result {
+                case .success(let analysis):
+                    self.vlmResults[step.id] = analysis
+                case .failure:
+                    self.vlmResults[step.id] = nil
+                }
+            }
+        }
+    }
+
+    private func keepReviewedCapture(_ step: ExplorationStep, note: String, voiceURL: URL?) {
+        appendCaptureToRaw(step)
+        if !note.isEmpty {
+            stepAnnotations[step.id] = note
+        }
+        persistCurrentRawNote()
+        guard let voiceURL else { return }
+        recordingStatus = "Transcribing capture voice note locally…"
+        Task { [weak self] in
+            guard let self else { return }
+            let result = await self.transcribe(audioURL: voiceURL)
+            try? FileManager.default.removeItem(at: voiceURL)
+            if case .success(let text) = result, !text.isEmpty {
+                let existing = self.stepAnnotations[step.id].map { $0 + "\n" } ?? ""
+                self.stepAnnotations[step.id] = existing + text
+            } else if case .failure(let error) = result {
+                self.recordingStatus = "Voice note could not be transcribed: \(error.localizedDescription)"
+            }
+            self.persistCurrentRawNote()
+            if case .success = result { self.recordingStatus = nil }
+        }
+    }
+
+    private func discardReviewedCapture(_ step: ExplorationStep) {
+        tracker.removeStep(id: step.id)
+        steps.removeAll { $0.id == step.id }
+        stepAnnotations[step.id] = nil
+        vlmResults[step.id] = nil
+        if let path = step.screenshotPath { try? FileManager.default.removeItem(atPath: path) }
+        if let path = step.htmlPath { try? FileManager.default.removeItem(atPath: path) }
+        persistCurrentRawNote()
+        recordingStatus = "Capture discarded"
+    }
+
+    private func appendCaptureToRaw(_ step: ExplorationStep) {
+        persistCurrentRawNote()
+    }
+
+    // MARK: - Chunk selection (move / forward / delete capture cards)
+
+    func toggleStepSelection(_ id: UUID) {
+        if selectedStepIDs.contains(id) {
+            selectedStepIDs.remove(id)
+        } else {
+            selectedStepIDs.insert(id)
+        }
+    }
+
+    func clearStepSelection() {
+        selectedStepIDs = []
+    }
+
+    /// Removes the selected capture cards from the current note. Only strips them from this
+    /// note's data — the underlying screenshot files are left alone, since a forwarded copy
+    /// in another note may still reference them.
+    func deleteSelectedSteps() {
+        guard !selectedStepIDs.isEmpty else { return }
+        let ids = selectedStepIDs
+        for id in ids {
+            tracker.removeStep(id: id)
+            stepAnnotations[id] = nil
+            vlmResults[id] = nil
+        }
+        steps.removeAll { ids.contains($0.id) }
+        selectedStepIDs = []
+        persistCurrentRawNote()
+        recordingStatus = "Deleted \(ids.count) capture\(ids.count == 1 ? "" : "s")"
+    }
+
+    /// Moves (or copies, if `keepInCurrent`) the selected capture cards into another note,
+    /// found via the search picker. Works whether or not that note is currently open.
+    func relocateSelectedSteps(to destination: NoteDestination, keepInCurrent: Bool) {
+        guard !selectedStepIDs.isEmpty else { return }
+        let ids = selectedStepIDs
+        let moved = steps.filter { ids.contains($0.id) }
+        guard !moved.isEmpty else { selectedStepIDs = []; return }
+
+        if destination.url == activeNoteURL {
+            selectedStepIDs = []
+            recordingStatus = "Already in \(destination.title)"
+            return
+        }
+
+        var destinationDocument = loadDocument(for: destination.url) ?? StoredNoteDocument(
+            title: destination.title,
+            steps: [],
+            annotations: [:],
+            organized: "",
+            organizationTemplate: .bulletList,
+            thoughtGraph: nil
+        )
+        destinationDocument.steps = moved + destinationDocument.steps
+        for step in moved {
+            if let thought = stepAnnotations[step.id] {
+                destinationDocument.annotations[step.id.uuidString] = thought
+            }
+        }
+        saveDocument(destinationDocument, for: destination.url)
+
+        if !keepInCurrent {
+            for id in ids {
+                tracker.removeStep(id: id)
+                stepAnnotations[id] = nil
+                vlmResults[id] = nil
+            }
+            steps.removeAll { ids.contains($0.id) }
+            persistCurrentRawNote()
+        }
+        selectedStepIDs = []
+        recordingStatus = keepInCurrent
+            ? "Forwarded \(moved.count) capture\(moved.count == 1 ? "" : "s") to \(destination.title)"
+            : "Moved \(moved.count) capture\(moved.count == 1 ? "" : "s") to \(destination.title)"
+    }
+
+    /// Creates a brand-new note and immediately relocates the current selection into it.
+    @discardableResult
+    func relocateSelectedSteps(toNewNoteNamed name: String, keepInCurrent: Bool) -> NoteDestination {
+        let previousActive = activeNoteURL
+        let previousTitle = noteTitle
+        createNewNote()
+        if !name.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            noteTitle = name
+            persistCurrentRawNote()
+        }
+        let destination = NoteDestination(url: activeNoteURL!, title: noteTitle)
+        // Switch back to the note the selection came from so relocate(to:) can read `steps` from it.
+        if let previousActive {
+            loadNote(previousActive)
+            noteTitle = previousTitle
+        }
+        relocateSelectedSteps(to: destination, keepInCurrent: keepInCurrent)
+        return destination
+    }
+
+    @discardableResult
+    private func ensureCaptureSession() -> Bool {
+        if activeNoteURL == nil { createNewNote() }
+        guard !isTracking else { return true }
+        guard tracker.start() else {
+            recordingStatus = "Could not start a working note."
+            return false
+        }
+        isTracking = true
+        isPaused = false
+        return true
+    }
+
+    private func renderNoteMarkdown(
+        title: String,
+        rawDraft: String,
+        steps: [ExplorationStep],
+        annotations: [UUID: String],
+        annotationDraft: String
+    ) -> String {
+        var lines = ["# \(title)", ""]
+        if !rawDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines += [rawDraft, ""]
+        }
+        for step in steps.reversed() {
+            lines += ["## \(step.appName) · \(step.timestamp.formatted(date: .omitted, time: .shortened))"]
+            if let selected = step.selectedText, !selected.isEmpty { lines += ["", selected] }
+            if let screenshot = step.screenshotPath { lines += ["", "![Capture](\(screenshot))"] }
+            if let annotation = annotations[step.id], !annotation.isEmpty {
+                lines += ["", "> My thought: \(annotation)"]
+            }
+            lines.append("")
+        }
+        if !annotationDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            lines += ["## My thoughts", "", annotationDraft]
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private func persistCurrentRawNote() {
+        guard let activeNoteURL else { return }
+        let markdown = renderNoteMarkdown(
+            title: noteTitle,
+            rawDraft: rawDraft,
+            steps: steps,
+            annotations: stepAnnotations,
+            annotationDraft: annotationDraft
+        )
+        try? markdown.write(to: activeNoteURL, atomically: true, encoding: .utf8)
+
+        let document = StoredNoteDocument(
+            title: noteTitle,
+            steps: steps,
+            annotations: Dictionary(uniqueKeysWithValues: stepAnnotations.map { ($0.key.uuidString, $0.value) }),
+            organized: organizedDraft,
+            organizationTemplate: organizedTemplate,
+            thoughtGraph: organizedGraph
+        )
+        if let data = try? JSONEncoder().encode(document) {
+            try? data.write(to: sidecarURL(for: activeNoteURL), options: .atomic)
+        }
+        refreshHistory()
+    }
+
+    /// Reads another note's sidecar document without disturbing the currently open note —
+    /// used by chunk move/forward and by "save this recording to a different note".
+    private func loadDocument(for url: URL) -> StoredNoteDocument? {
+        guard let data = try? Data(contentsOf: sidecarURL(for: url)) else { return nil }
+        return try? JSONDecoder().decode(StoredNoteDocument.self, from: data)
+    }
+
+    /// Writes another note's sidecar document + regenerates its markdown file, again without
+    /// touching the currently open note's editor state.
+    private func saveDocument(_ document: StoredNoteDocument, for url: URL) {
+        let annotations = Dictionary(uniqueKeysWithValues: document.annotations.compactMap { key, value in
+            UUID(uuidString: key).map { ($0, value) }
+        })
+        let markdown = renderNoteMarkdown(
+            title: document.title,
+            rawDraft: "",
+            steps: document.steps,
+            annotations: annotations,
+            annotationDraft: ""
+        )
+        try? markdown.write(to: url, atomically: true, encoding: .utf8)
+        if let data = try? JSONEncoder().encode(document) {
+            try? data.write(to: sidecarURL(for: url), options: .atomic)
+        }
+        refreshHistory()
+    }
+
+    private func openMostRecentNoteOrCreate() {
+        if let recent = historyFiles.first(where: { !$0.lastPathComponent.hasPrefix("Organized_Note_") }) {
+            loadNote(recent)
+        } else {
+            createNewNote()
+        }
+    }
+
+    func deleteNote(_ url: URL) {
+        let wasActive = url == activeNoteURL
+        try? FileManager.default.removeItem(at: url)
+        try? FileManager.default.removeItem(at: sidecarURL(for: url))
+        workspace.noteMeta.removeValue(forKey: url.lastPathComponent)
+        saveWorkspace()
+        refreshHistory()
+        if wasActive {
+            activeNoteURL = nil
+            openMostRecentNoteOrCreate()
+        }
+    }
+
+    private func loadNote(_ url: URL) {
+        activeNoteURL = url
+        touchLastOpened(url)
+        _ = tracker.stop()
+        _ = tracker.start()
+        isTracking = true
+        vlmResults = [:]
+        if let data = try? Data(contentsOf: sidecarURL(for: url)),
+           let document = try? JSONDecoder().decode(StoredNoteDocument.self, from: data) {
+            noteTitle = document.title
+            steps = document.steps
+            stepAnnotations = Dictionary(uniqueKeysWithValues: document.annotations.compactMap { key, value in
+                UUID(uuidString: key).map { ($0, value) }
+            })
+            organizedDraft = document.organized
+            organizedGraph = document.thoughtGraph
+            organizedTemplate = document.organizationTemplate ?? .bulletList
+            rawDraft = ""
+            annotationDraft = ""
+        } else {
+            let markdown = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+            noteTitle = markdown.split(separator: "\n").first(where: { $0.hasPrefix("# ") }).map { String($0.dropFirst(2)) }
+                ?? url.deletingPathExtension().lastPathComponent
+            steps = []
+            stepAnnotations = [:]
+            organizedDraft = ""
+            organizedGraph = nil
+            organizedTemplate = .bulletList
+            rawDraft = markdown
+            annotationDraft = ""
+        }
+    }
+
+    private func sidecarURL(for noteURL: URL) -> URL {
+        noteDataDirectory.appendingPathComponent(noteURL.deletingPathExtension().lastPathComponent + ".json")
+    }
+
+    private func title(for url: URL) -> String {
+        if let data = try? Data(contentsOf: sidecarURL(for: url)),
+           let document = try? JSONDecoder().decode(StoredNoteDocument.self, from: data) {
+            return document.title
+        }
+        if let text = try? String(contentsOf: url, encoding: .utf8),
+           let heading = text.split(separator: "\n").first(where: { $0.hasPrefix("# ") }) {
+            return String(heading.dropFirst(2))
+        }
+        return url.deletingPathExtension().lastPathComponent
+            .replacingOccurrences(of: "Meeting_Note_", with: "Meeting note ")
+            .replacingOccurrences(of: "Raw_Note_", with: "Captured note ")
+    }
+
+    private static func isLocalWhisperVariant(_ value: String) -> Bool {
+        let normalized = value.lowercased().trimmingCharacters(in: .whitespacesAndNewlines)
+        return !normalized.isEmpty
+            && !normalized.contains("whisper-1")
+            && !normalized.contains("/")
+            && !normalized.contains("http")
+    }
+
+    // MARK: - Settings
+
+    func saveSettings() {
+        settings.save(to: settingsURL)
+        audioClient = AudioClient(config: settings.audio)
+        visionClient = VisionClient(config: settings.vision)
+        if settings.audio.provider == .local {
+            Task { await whisperTranscriber.ensureReady(variant: settings.audio.modelName) }
+        }
+    }
+
+    func checkVisionStatus() {
+        if settings.vision.provider == .gemini {
+            visionStatus = settings.vision.apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+                ? "Gemini selected — API key required"
+                : "Gemini ready — model \(settings.vision.modelName)"
+            return
+        }
+        guard settings.vision.provider == .local, let url = URL(string: settings.vision.apiURL) else {
+            visionStatus = settings.vision.provider == .api ? "Using cloud API" : "Invalid URL"
+            return
+        }
+        visionStatus = "Checking…"
+        var components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+        components?.path = "/api/tags"
+        components?.query = nil
+        guard let statusURL = components?.url else {
+            visionStatus = "Invalid Ollama URL"
+            return
+        }
+        var request = URLRequest(url: statusURL)
+        request.httpMethod = "GET"
+        request.timeoutInterval = 3
+        URLSession.shared.dataTask(with: request) { [weak self] _, response, error in
+            Task { @MainActor in
+                if error != nil || (response as? HTTPURLResponse)?.statusCode != 200 {
+                    self?.visionStatus = "Ollama unreachable at \(url.host ?? url.absoluteString)"
+                } else {
+                    self?.visionStatus = "Ollama reachable — model \(self?.settings.vision.modelName ?? "")"
+                }
+            }
+        }.resume()
+    }
+
+    // MARK: - History
+
+    func refreshHistory() {
+        let files = (try? FileManager.default.contentsOfDirectory(at: sessionDir, includingPropertiesForKeys: [.contentModificationDateKey])) ?? []
+        historyFiles = files
+            .filter { $0.pathExtension == "md" }
+            .sorted { lhs, rhs in
+                let l = (try? lhs.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+                let r = (try? rhs.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+                return l > r
+            }
+    }
+}

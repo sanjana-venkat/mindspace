@@ -1,8 +1,17 @@
 import Foundation
 
-public enum ModelProvider: String, Codable {
+public enum ModelProvider: String, Codable, CaseIterable {
     case local = "local"
     case api = "api"
+    case gemini = "gemini"
+
+    public var displayName: String {
+        switch self {
+        case .local: return "Local"
+        case .api: return "Cloud API"
+        case .gemini: return "Gemini"
+        }
+    }
 }
 
 public struct AudioConfig: Codable {
@@ -10,12 +19,14 @@ public struct AudioConfig: Codable {
     public var apiURL: String // e.g. "https://api.openai.com/v1/audio/transcriptions"
     public var apiKey: String
     public var modelName: String // e.g. "whisper-1"
+    public var inputDeviceUID: String?
     
-    public init(provider: ModelProvider = .local, apiURL: String = "", apiKey: String = "", modelName: String = "whisper-1") {
+    public init(provider: ModelProvider = .local, apiURL: String = "", apiKey: String = "", modelName: String = "base", inputDeviceUID: String? = nil) {
         self.provider = provider
         self.apiURL = apiURL
         self.apiKey = apiKey
         self.modelName = modelName
+        self.inputDeviceUID = inputDeviceUID
     }
 }
 
@@ -25,7 +36,7 @@ public struct VisionConfig: Codable {
     public var apiKey: String
     public var modelName: String // e.g. "qwen2-vl" or "gpt-4o"
     
-    public init(provider: ModelProvider = .local, apiURL: String = "http://localhost:11434/api/chat", apiKey: String = "", modelName: String = "qwen2-vl") {
+    public init(provider: ModelProvider = .local, apiURL: String = "http://localhost:11434/api/chat", apiKey: String = "", modelName: String = "qwen3.5:9b") {
         self.provider = provider
         self.apiURL = apiURL
         self.apiKey = apiKey

@@ -9,10 +9,13 @@ public class AudioClient {
     
     // Transcribe audio using local engine or remote API
     public func transcribe(audioURL: URL, completion: @escaping (Result<String, Error>) -> Void) {
-        if config.provider == .local {
+        switch config.provider {
+        case .local:
             transcribeLocally(audioURL: audioURL, completion: completion)
-        } else {
+        case .api:
             transcribeViaAPI(audioURL: audioURL, completion: completion)
+        case .gemini:
+            GeminiClient(apiKey: config.apiKey, model: config.modelName).transcribe(audioURL: audioURL, completion: completion)
         }
     }
     
@@ -52,7 +55,8 @@ public class AudioClient {
         let filename = audioURL.lastPathComponent
         body.append("--\(boundary)\r\n".data(using: .utf8)!)
         body.append("Content-Disposition: form-data; name=\"file\"; filename=\"\(filename)\"\r\n".data(using: .utf8)!)
-        body.append("Content-Type: audio/aac\r\n\r\n".data(using: .utf8)!)
+        let mimeType = audioURL.pathExtension.lowercased() == "wav" ? "audio/wav" : "audio/aac"
+        body.append("Content-Type: \(mimeType)\r\n\r\n".data(using: .utf8)!)
         
         do {
             let fileData = try Data(contentsOf: audioURL)

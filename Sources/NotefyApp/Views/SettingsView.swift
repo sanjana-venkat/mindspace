@@ -1,0 +1,250 @@
+import SwiftUI
+import NotefyCore
+
+struct SettingsView: View {
+    @EnvironmentObject private var appState: AppState
+    @State private var saved = false
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) {
+                VStack(alignment: .leading, spacing: 5) {
+                    Text("THE WORKBENCH")
+                        .font(NotefyFont.label).tracking(1.3).foregroundStyle(NotefyTheme.inkSoft)
+                    Text("Settings")
+                        .font(NotefyFont.pageTitle)
+                        .foregroundStyle(NotefyTheme.ink)
+                }
+                permissionSection
+                providerSection(
+                    title: "Voice Transcription",
+                    icon: "waveform",
+                    provider: $appState.settings.audio.provider,
+                    apiURL: $appState.settings.audio.apiURL,
+                    apiKey: $appState.settings.audio.apiKey,
+                    modelName: $appState.settings.audio.modelName,
+                    localHint: "WhisperKit — downloads the chosen Whisper model once, then transcribes fully on-device.",
+                    modelNamePlaceholder: "tiny / base / small / medium"
+                ) {
+                    audioModelStatus
+                }
+
+                providerSection(
+                    title: "Screen Understanding",
+                    icon: "eye",
+                    provider: $appState.settings.vision.provider,
+                    apiURL: $appState.settings.vision.apiURL,
+                    apiKey: $appState.settings.vision.apiKey,
+                    modelName: $appState.settings.vision.modelName,
+                    localHint: "Local Ollama endpoint — run `ollama pull \(appState.settings.vision.modelName)` and keep Ollama running.",
+                    modelNamePlaceholder: "qwen2-vl"
+                ) {
+                    visionModelStatus
+                }
+
+                HStack {
+                    NotefyPillButton(title: "Save Settings", systemImage: "checkmark") {
+                        appState.saveSettings()
+                        saved = true
+                        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { saved = false }
+                    }
+                    .fixedSize()
+
+                    if saved {
+                        Label("Saved", systemImage: "checkmark.circle.fill")
+                            .foregroundStyle(.green)
+                            .font(NotefyFont.caption.weight(.semibold))
+                    }
+                }
+
+                Text("Settings are stored at \(appState.settingsURL.path)")
+                    .font(NotefyFont.caption)
+                    .foregroundStyle(NotefyTheme.textSecondary)
+            }
+            .padding(24)
+        }
+        .background(Color.clear)
+        .onAppear { appState.checkVisionStatus() }
+    }
+
+    private var permissionSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label("Mac Permissions", systemImage: "checkmark.shield")
+                .font(NotefyFont.heading)
+            HStack(spacing: 10) {
+                permissionBadge("MICROPHONE", granted: appState.permissionCenter.snapshot.microphone)
+                permissionBadge("ACCESSIBILITY", granted: appState.permissionCenter.snapshot.accessibility)
+                permissionBadge("SCREEN & AUDIO", granted: appState.permissionCenter.snapshot.screenRecording)
+                Spacer()
+                Button("REVIEW PERMISSIONS") { appState.showPermissionOnboarding() }
+                    .buttonStyle(.plain)
+                    .font(NotefyFont.label).tracking(0.8)
+                    .padding(.horizontal, 14).padding(.vertical, 9)
+                    .overlay(Capsule().stroke(NotefyTheme.ink.opacity(0.65), lineWidth: 1.2))
+            }
+        }
+        .padding(16)
+        .background(NotefyTheme.cardPaper)
+        .clipShape(RoundedRectangle(cornerRadius: 14))
+        .onAppear { appState.permissionCenter.refresh() }
+    }
+
+    private func permissionBadge(_ title: String, granted: Bool) -> some View {
+        Label(title, systemImage: granted ? "checkmark.circle.fill" : "exclamationmark.circle")
+            .font(NotefyFont.caption).tracking(0.5)
+            .foregroundStyle(granted ? NotefyTheme.ink : NotefyTheme.marginRose)
+            .padding(.horizontal, 10).padding(.vertical, 6)
+            .background((granted ? NotefyTheme.pebbleOlive : NotefyTheme.pebbleMauve).opacity(0.55), in: Capsule())
+    }
+
+    private var audioModelStatus: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Circle()
+                    .fill(audioStateColor)
+                    .frame(width: 8, height: 8)
+                Text(appState.audioModelState.label)
+                    .font(NotefyFont.caption.weight(.medium))
+                if case .downloading(let progress) = appState.audioModelState {
+                    ProgressView(value: progress).frame(width: 120)
+                }
+                Spacer()
+                if appState.settings.audio.provider == .local {
+                    NotefyPillButton(title: "Prepare Model", systemImage: "arrow.down.circle", tint: NotefyTheme.ink, filled: false) {
+                        Task { await appState.whisperTranscriber.ensureReady(variant: appState.settings.audio.modelName) }
+                    }
+                    .fixedSize()
+                }
+            }
+
+            Divider()
+            HStack {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("MEETING MICROPHONE")
+                        .font(NotefyFont.label).tracking(1.1)
+                    Text("Recorded as “You”. Computer audio is captured separately as “Others”.")
+                        .font(NotefyFont.caption)
+                        .foregroundStyle(NotefyTheme.inkSoft)
+                }
+                Spacer()
+                Picker("Microphone", selection: $appState.settings.audio.inputDeviceUID) {
+                    Text("System Default").tag(nil as String?)
+                    ForEach(appState.audioInputDevices) { device in
+                        Text(device.name + (device.isSystemDefault ? " (Default)" : ""))
+                            .tag(Optional(device.uid))
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 260)
+                Button { appState.refreshAudioInputDevices() } label: {
+                    Image(systemName: "arrow.clockwise")
+                }
+                .buttonStyle(.plain)
+                .help("Refresh microphones")
+            }
+        }
+    }
+
+    private var audioStateColor: Color {
+        switch appState.audioModelState {
+        case .ready: return .green
+        case .downloading, .loadingModel, .transcribing: return NotefyTheme.gold
+        case .failed: return .red
+        case .notDownloaded: return .gray
+        }
+    }
+
+    private var visionModelStatus: some View {
+        HStack(spacing: 8) {
+            Circle()
+                .fill(appState.visionStatus.contains("reachable") ? .green : .gray)
+                .frame(width: 8, height: 8)
+            Text(appState.visionStatus)
+                .font(NotefyFont.caption.weight(.medium))
+            Spacer()
+            if appState.settings.vision.provider == .local {
+                NotefyPillButton(title: "Check Status", systemImage: "arrow.clockwise", tint: NotefyTheme.ink, filled: false) {
+                    appState.checkVisionStatus()
+                }
+                .fixedSize()
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func providerSection<Footer: View>(
+        title: String,
+        icon: String,
+        provider: Binding<ModelProvider>,
+        apiURL: Binding<String>,
+        apiKey: Binding<String>,
+        modelName: Binding<String>,
+        localHint: String,
+        modelNamePlaceholder: String,
+        @ViewBuilder footer: () -> Footer
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Label(title, systemImage: icon)
+                .font(NotefyFont.heading)
+
+            LabeledContent("Provider") {
+                Picker("", selection: provider) {
+                    ForEach(ModelProvider.allCases, id: \.self) { option in
+                        Text(option.displayName).tag(option)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .frame(width: 160)
+            }
+
+            switch provider.wrappedValue {
+            case .local:
+                Text(localHint)
+                    .font(NotefyFont.caption)
+                    .foregroundStyle(NotefyTheme.textSecondary)
+                LabeledContent("Model") {
+                    TextField(modelNamePlaceholder, text: modelName)
+                        .textFieldStyle(.roundedBorder)
+                }
+            case .api:
+                LabeledContent("API URL") {
+                    TextField("https://...", text: apiURL)
+                        .textFieldStyle(.roundedBorder)
+                }
+                LabeledContent("API Key") {
+                    SecureField("sk-...", text: apiKey)
+                        .textFieldStyle(.roundedBorder)
+                }
+                LabeledContent("Model") {
+                    TextField(modelNamePlaceholder, text: modelName)
+                        .textFieldStyle(.roundedBorder)
+                }
+            case .gemini:
+                Text("Uses Google's Gemini API for both transcription and note synthesis — one key covers everything.")
+                    .font(NotefyFont.caption)
+                    .foregroundStyle(NotefyTheme.textSecondary)
+                LabeledContent("Gemini API Key") {
+                    SecureField("AIza...", text: apiKey)
+                        .textFieldStyle(.roundedBorder)
+                }
+                LabeledContent("Model") {
+                    Picker("", selection: modelName) {
+                        Text("gemini-2.5-flash").tag("gemini-2.5-flash")
+                        Text("gemini-2.5-pro").tag("gemini-2.5-pro")
+                        Text("gemini-2.0-flash").tag("gemini-2.0-flash")
+                    }
+                    .labelsHidden()
+                    .pickerStyle(.menu)
+                    .frame(width: 200)
+                }
+            }
+
+            Divider()
+            footer()
+        }
+        .padding(16)
+        .background(NotefyTheme.cardPaper)
+        .clipShape(RoundedRectangle(cornerRadius: 16))
+    }
+}
