@@ -148,7 +148,7 @@ private struct RecordingNotepadView: View {
                 .font(NotefyFont.caption)
                 .foregroundStyle(NotefyTheme.inkFaint)
                 .lineLimit(1)
-            NotedLogo().frame(width: 22, height: 20)
+            NotedMark(tint: NotefyTheme.ink, knockout: NotefyTheme.sand).frame(width: 22, height: 20)
         }
         .padding(.horizontal, 14)
         .padding(.vertical, 12)

@@ -177,15 +177,19 @@ struct PermissionOnboardingView: View {
     var body: some View {
         ZStack {
             NotefyTheme.sand.ignoresSafeArea()
-            PebbleShape().fill(NotefyTheme.pebbleTan.opacity(0.48))
-                .frame(width: 460, height: 360).offset(x: 390, y: -270)
-            PebbleShape(variant: 1).fill(NotefyTheme.pebbleMauve.opacity(0.5))
-                .frame(width: 340, height: 270).offset(x: -390, y: 300)
+            InkSplatterMark(seed: 21, opacity: 0.06)
+                .frame(width: 620, height: 520).blur(radius: 50)
+                .offset(x: 390, y: -270)
+            InkSplatterMark(seed: 34, opacity: 0.05)
+                .frame(width: 480, height: 400).blur(radius: 60)
+                .offset(x: -390, y: 300)
 
             VStack(spacing: 24) {
                 ZStack {
-                    PebbleShape().fill(NotefyTheme.pebbleTan)
-                    NotedLogo().frame(width: 72, height: 64).offset(y: -5)
+                    InkSplatterMark(seed: 5, tint: NotefyTheme.pigment, opacity: 0.20)
+                        .frame(width: 118, height: 96)
+                    NotedMark(tint: NotefyTheme.ink, knockout: NotefyTheme.sand)
+                        .frame(width: 48, height: 48)
                 }
                 .frame(width: 126, height: 92)
 

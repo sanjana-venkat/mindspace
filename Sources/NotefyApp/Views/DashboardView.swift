@@ -25,7 +25,7 @@ struct DashboardView: View {
             .overlay(alignment: .bottom) { actionShelf }
         }
         .padding(.horizontal, 46)
-        .padding(.top, 18)
+        .padding(.top, 80)
         .background(Color.clear)
     }
 
@@ -55,8 +55,9 @@ struct DashboardView: View {
             tabButton(title: "Organized", mode: .organized)
         }
         .padding(3)
-        .background(.ultraThinMaterial, in: Capsule())
-        .background(NotefyTheme.glassFillSubtle, in: Capsule())
+        .background(NotefyTheme.sandDeep, in: Capsule())
+        .grain()
+        .clipShape(Capsule())
         .overlay(Capsule().stroke(NotefyTheme.glassBorderSoft, lineWidth: 1))
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.bottom, 22)
@@ -94,10 +95,11 @@ struct DashboardView: View {
                     .foregroundStyle(NotefyTheme.inkSoft)
                     .padding(.bottom, 6)
 
-                TextField("Name this note", text: $appState.noteTitle)
+                TextField("Name this note", text: $appState.noteTitle, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(NotefyFont.pageTitle)
                     .foregroundStyle(NotefyTheme.ink)
+                    .lineLimit(1...2)
                     .onSubmit { appState.saveActiveNote() }
 
                 Text(metaText)
@@ -163,6 +165,13 @@ struct DashboardView: View {
                     .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
                     .neomorphicDeboss(cornerRadius: 32)
                     .frame(width: panelWidth, height: 620)
+                    .overlay {
+                        if steps.isEmpty {
+                            emptyPaper
+                                .padding(28)
+                                .frame(width: panelWidth, height: 620, alignment: .center)
+                        }
+                    }
 
                 // One scroll stream owns paired rows. A note and its capture
                 // leave the viewport together, so the next pair is revealed
@@ -264,86 +273,6 @@ struct DashboardView: View {
         }
     }
 
-    // Kept as a standalone paired card for the selection/legacy layout path.
-    private func legacyRawPage() -> some View {
-        Group {
-            if appState.steps.isEmpty && appState.rawDraft.isEmpty {
-                emptyPaper
-            } else if appState.steps.isEmpty && !appState.rawDraft.isEmpty {
-                Text(appState.rawDraft)
-                    .font(NotefyFont.body)
-                    .foregroundStyle(NotefyTheme.ink)
-                    .lineSpacing(7)
-                    .textSelection(.enabled)
-                    .padding(24)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .glassPanel(cornerRadius: 20, shadowRadius: 12, shadowY: 6)
-            } else {
-                // No enclosing box — each capture is its own floating pair,
-                // open on the blob field. Capture on the left, the user's own
-                // annotation as a distinct card on the right; scrolling reveals
-                // the next pair, never a shared frame around everything.
-                VStack(alignment: .leading, spacing: 20) {
-                    ForEach(Array(appState.steps.reversed())) { step in
-                        rawCaptureCard(step)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-            }
-        }
-    }
-
-    /// One capture pair: the machine-captured card on the left, the user's
-    /// own annotation as a separate floating card on the right — never
-    /// merged into one shared box.
-    private func rawCaptureCard(_ step: ExplorationStep) -> some View {
-        let isSelected = appState.selectedStepIDs.contains(step.id)
-        let annotation = appState.stepAnnotations[step.id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
-
-        return HStack(alignment: .top, spacing: 16) {
-            if isSelecting {
-                Button {
-                    appState.toggleStepSelection(step.id)
-                } label: {
-                    Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
-                        .font(.system(size: 15))
-                        .foregroundStyle(isSelected ? NotefyTheme.marginRose : NotefyTheme.inkFaint)
-                }
-                .buttonStyle(.plain)
-                .padding(.top, 18)
-            }
-
-            VStack(alignment: .leading, spacing: 9) {
-                Text("MY THOUGHT")
-                    .font(NotefyFont.label)
-                    .tracking(1.1)
-                    .foregroundStyle(NotefyTheme.inkFaint)
-                if !annotation.isEmpty {
-                    Text(annotation)
-                        .font(NotefyFont.body)
-                        .foregroundStyle(NotefyTheme.ink)
-                        .lineSpacing(7)
-                        .textSelection(.enabled)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-            }
-            .padding(20)
-            .frame(width: 260, alignment: .leading)
-
-            CaptureStamp(step: step, analysis: appState.vlmResults[step.id])
-                .padding(20)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .background(NotefyTheme.glassFillSubtle, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous)
-                        .stroke(isSelected ? NotefyTheme.marginRose : NotefyTheme.glassBorderSoft, lineWidth: isSelected ? 2 : 1)
-                }
-                .shadow(color: NotefyTheme.panelShadowColor, radius: 16, x: 0, y: 8)
-        }
-    }
-
     private var organizedPage: some View {
         VStack(alignment: .leading, spacing: 20) {
             if appState.isOrganizing {
@@ -377,14 +306,6 @@ struct DashboardView: View {
         VStack(alignment: .leading, spacing: 22) {
             HStack(alignment: .top, spacing: 34) {
                 VStack(alignment: .leading, spacing: 18) {
-                    Text(metaText.uppercased())
-                        .font(NotefyFont.caption)
-                        .tracking(1)
-                        .foregroundStyle(NotefyTheme.inkFaint)
-                    Text(appState.noteTitle.isEmpty ? "Untitled note" : appState.noteTitle)
-                        .font(NotefyFont.pageTitle)
-                        .foregroundStyle(NotefyTheme.ink)
-                        .fixedSize(horizontal: false, vertical: true)
                     Text("A considered view of what you captured, and why it matters.")
                         .font(NotefyFont.body)
                         .foregroundStyle(NotefyTheme.inkSoft)
@@ -403,10 +324,11 @@ struct DashboardView: View {
     private var organizedCaptureWell: some View {
         ZStack(alignment: .topLeading) {
             RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(.ultraThinMaterial)
-                .background(NotefyTheme.glassFillSubtle, in: RoundedRectangle(cornerRadius: 30, style: .continuous))
+                .fill(NotefyTheme.sandDeep)
                 .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous)
                     .stroke(NotefyTheme.glassBorder, lineWidth: 1))
+                .grain()
+                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
                 .neomorphicDeboss(cornerRadius: 30)
 
             ScrollView(.vertical) {
@@ -415,8 +337,9 @@ struct DashboardView: View {
                         CaptureStamp(step: step, analysis: appState.vlmResults[step.id])
                             .padding(22)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                            .background(NotefyTheme.glassFillSubtle, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .background(NotefyTheme.cardPaper, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
+                            .grain()
+                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
                                 .stroke(NotefyTheme.glassBorderSoft, lineWidth: 1))
                             .scrollTransition(.interactive, axis: .vertical) { content, phase in
@@ -461,23 +384,24 @@ struct DashboardView: View {
     }
 
     private var emptyPaper: some View {
-        HStack(spacing: 26) {
+        VStack(spacing: 18) {
             ZStack {
-                PebbleShape().fill(NotefyTheme.pebbleTan.opacity(0.62))
-                NotedLogo().frame(width: 74, height: 66)
+                InkSplatterMark(seed: 12, tint: NotefyTheme.pigment, opacity: 0.22)
+                    .frame(width: 128, height: 108)
+                NotedMark(tint: NotefyTheme.ink, knockout: NotefyTheme.sand)
+                    .frame(width: 46, height: 46)
             }
             .frame(width: 140, height: 112)
 
-            VStack(alignment: .leading, spacing: 8) {
+            VStack(spacing: 8) {
                 Text("Bring the intangible here")
                     .font(NotefyFont.sectionTitle)
                 Text("Tap Kami or use a hotkey while you browse. Only the things you choose become part of this page.")
                     .font(NotefyFont.body)
                     .foregroundStyle(NotefyTheme.inkSoft)
-                    .fixedSize(horizontal: false, vertical: true)
+                    .multilineTextAlignment(.center)
             }
         }
-        .padding(.top, 38)
     }
 
     /// A floating glass pill holding just the actions — never a full-width scrim.

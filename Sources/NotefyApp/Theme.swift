@@ -323,6 +323,78 @@ enum NotefyFont {
     static let hand = Font.custom("Caveat-Regular", size: 20)
 }
 
+/// A procedural ink blot: one irregular main body plus a few smaller satellite
+/// droplets trailing off it, the way real ink actually lands on a surface.
+/// The single brand signature — always pigment, never a second hue, never
+/// used at a size or opacity that reads as "a logo" rather than a stain.
+struct InkSplatter: Shape {
+    var seed: Int = 0
+
+    func path(in rect: CGRect) -> Path {
+        var generator = SeededGenerator(seed: UInt64(seed) &+ 41)
+        var path = Path()
+
+        // Main blot: a closed loop of points at irregular radii around the
+        // center, joined with quad curves so the silhouette stays organic
+        // rather than a scalloped circle.
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let baseRadius = min(rect.width, rect.height) * 0.5
+        let pointCount = 9
+        var points: [CGPoint] = []
+        for i in 0..<pointCount {
+            let angle = (Double(i) / Double(pointCount)) * 2 * .pi
+            let radius = baseRadius * CGFloat.random(in: 0.62...1.0, using: &generator)
+            points.append(CGPoint(
+                x: center.x + radius * cos(angle),
+                y: center.y + radius * sin(angle)
+            ))
+        }
+        path.move(to: points[0])
+        for i in points.indices {
+            let current = points[i]
+            let next = points[(i + 1) % points.count]
+            let mid = CGPoint(x: (current.x + next.x) / 2, y: (current.y + next.y) / 2)
+            path.addQuadCurve(to: mid, control: current)
+        }
+        path.closeSubpath()
+
+        // Satellite droplets, scattering outward and shrinking — the fling
+        // of ink past the main stain.
+        let dropletCount = 4
+        for i in 0..<dropletCount {
+            let angle = Double.random(in: 0...(2 * .pi), using: &generator)
+            let distance = baseRadius * CGFloat.random(in: 1.05...1.7, using: &generator)
+            let dropRadius = baseRadius * CGFloat.random(in: 0.05...0.14, using: &generator)
+            let dropCenter = CGPoint(
+                x: center.x + distance * cos(angle),
+                y: center.y + distance * sin(angle)
+            )
+            path.addEllipse(in: CGRect(
+                x: dropCenter.x - dropRadius, y: dropCenter.y - dropRadius,
+                width: dropRadius * 2, height: dropRadius * 2
+            ))
+            _ = i
+        }
+        return path
+    }
+}
+
+/// A tasteful placement of the ink signature: one splatter, one colour,
+/// low enough opacity that it reads as a stain on the clay rather than
+/// decoration competing with content.
+struct InkSplatterMark: View {
+    var seed: Int = 0
+    var tint: Color = NotefyTheme.pigment
+    var opacity: Double = 0.10
+
+    var body: some View {
+        InkSplatter(seed: seed)
+            .fill(tint)
+            .opacity(opacity)
+            .allowsHitTesting(false)
+    }
+}
+
 struct PebbleShape: Shape {
     var variant: Int = 0
     func path(in rect: CGRect) -> Path {

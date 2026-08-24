@@ -23,24 +23,20 @@ struct MainWindowView: View {
                 GeometryReader { proxy in
                     let contentHeight = proxy.size.height - 48
                     ZStack(alignment: .topLeading) {
-                        // The ambient field belongs to the window, not the
-                        // dashboard rectangle, so the gradients continue behind
-                        // both the sidebar and the main glass workspace.
-                        Circle()
-                            .fill(NotefyTheme.blobPeriwinkle)
-                            .frame(width: 720, height: 720)
-                            .blur(radius: 100)
-                            .offset(x: 40, y: -280)
-                        Circle()
-                            .fill(NotefyTheme.blobAmber)
-                            .frame(width: 760, height: 760)
-                            .blur(radius: 120)
-                            .offset(x: -460, y: 300)
-                        Circle()
-                            .fill(NotefyTheme.blobRose)
-                            .frame(width: 820, height: 820)
-                            .blur(radius: 140)
-                            .offset(x: 480, y: 340)
+                        // The ambient field is ink on clay now, not a rainbow
+                        // wash: one pigment, softened into a stain rather than
+                        // a colour glow. Mostly hidden behind the opaque matte
+                        // panels — it only shows in the gaps between them.
+                        InkSplatterMark(seed: 3, opacity: 0.05)
+                            .frame(width: 640, height: 560)
+                            .blur(radius: 60)
+                            .offset(x: -420, y: 260)
+                            .allowsHitTesting(false)
+                        InkSplatterMark(seed: 7, opacity: 0.04)
+                            .frame(width: 560, height: 480)
+                            .blur(radius: 70)
+                            .offset(x: 480, y: -260)
+                            .allowsHitTesting(false)
 
                         HStack(spacing: 24) {
                             Sidebar(selection: $selection, collapsed: $sidebarCollapsed, proxyHeight: contentHeight)
@@ -263,6 +259,11 @@ private struct Sidebar: View {
                 HStack(spacing: 14) {
                     NotedMark(tint: NotefyTheme.ink, knockout: NotefyTheme.sandDeep)
                         .frame(width: 20, height: 20)
+                        .background {
+                            InkSplatterMark(seed: 1, opacity: 0.16)
+                                .frame(width: 34, height: 34)
+                                .offset(x: -2, y: 3)
+                        }
                     Text("Noted")
                         .font(NotefyFont.sectionTitle)
                         .tracking(-0.4)

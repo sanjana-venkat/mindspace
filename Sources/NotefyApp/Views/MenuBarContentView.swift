@@ -14,7 +14,7 @@ struct MenuBarContentView: View {
                 appState.toggleCaptureRail()
             } label: {
                 HStack {
-                    NotedLogo().frame(width: 23, height: 20)
+                    NotedMark(tint: NotefyTheme.ink, knockout: NotefyTheme.sand).frame(width: 23, height: 20)
                     Text("SHOW KAMI CAPTURE RAIL").font(NotefyFont.label).tracking(0.9)
                     Spacer()
                     Text("⌘⇧K").font(NotefyFont.caption).foregroundStyle(NotefyTheme.inkFaint)
@@ -133,7 +133,7 @@ struct MenuBarContentView: View {
         HStack(spacing: 8) {
             ZStack {
                 PebbleShape().fill(NotefyTheme.pebbleTan.opacity(0.75))
-                NotedLogo().frame(width: 28, height: 25)
+                NotedMark(tint: NotefyTheme.ink, knockout: NotefyTheme.sand).frame(width: 28, height: 25)
             }
             .frame(width: 42, height: 34)
             VStack(alignment: .leading, spacing: 0) {
