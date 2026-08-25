@@ -10,10 +10,14 @@ import SwiftUI
 
 enum Stoneink {
     // ---- 1. Clay ramp — unfired stoneware, never cream/paper ----
-    static let clay000 = Color(hex: 0xF7F3EC) // slip — freshest surface
-    static let clay050 = Color(hex: 0xF1ECE4) // leaf — writing surface
-    static let clay100 = Color(hex: 0xE9E2D8) // slab — cards, panels
-    static let clay200 = Color(hex: 0xDED5C9) // bed  — app background
+    // Pigment pass: the ground deepened and warmed (was ~6% off the panel
+    // tone, so nothing read as sitting *on* anything) while the panel
+    // family lifted toward near-white, so a screenshot desaturated to
+    // greyscale still shows panels as clearly separate shapes from the bed.
+    static let clay000 = Color(hex: 0xFBF8F1) // slip — panel-raised: capture cards, the one element above panel
+    static let clay050 = Color(hex: 0xF7F3EA) // leaf — panel: the writing surface
+    static let clay100 = Color(hex: 0xF1EADC) // slab — cards, panels (between leaf and bed)
+    static let clay200 = Color(hex: 0xC9BEA9) // bed  — app background, deepened ~10% L, chroma up
     static let clay300 = Color(hex: 0xCFC4B5) // rim  — dividers
     static let clay400 = Color(hex: 0xB3A593) // hairline, strong borders
     static let clay500 = Color(hex: 0x8E8070) // icons/non-text marks ONLY
@@ -22,17 +26,25 @@ enum Stoneink {
     static let clay800 = Color(hex: 0x322B26)
     static let clay900 = Color(hex: 0x1F1A16) // fired
 
-    // ---- 2. Ink — iron-gall, warm near-black, never pure black ----
-    static let ink900 = Color(hex: 0x211B16) // body text
-    static let ink700 = Color(hex: 0x3D342B) // headings on light slabs
+    /// Vignette edge / window-chrome zone — a shade below the bed itself,
+    /// felt at the shell's corners rather than seen as its own patch.
+    static let bedDeep = Color(hex: 0xBFB29B)
 
-    // ---- Cobalt — the single accent, three dilutions ----
-    static let cobalt700 = Color(hex: 0x26397F)
-    static let cobalt600 = Color(hex: 0x2E469B) // primary accent
-    static let cobalt500 = Color(hex: 0x4459B4) // hover
-    static let cobalt300 = Color(hex: 0x93A0D3) // diluted mark
-    static let cobalt100 = Color(hex: 0xCBD1E8) // highlighter wash
-    static let cobalt050 = Color(hex: 0xE5E8F4) // selection bloom
+    // ---- 2. Ink — iron-gall, warm near-black, never pure black ----
+    static let ink900 = Color(hex: 0x16130E) // body text — warm black, not neutral
+    static let ink700 = Color(hex: 0x2A241C) // headings on light slabs
+
+    // ---- Cobalt — one hue, three dilutions. Never a second blue. ----
+    // Ink strength is the accent's only 100%-chroma appearance; wash and
+    // bloom are that same hue diluted, never a separate cooler blue —
+    // that's what makes every blue on screen read as one pigment.
+    static let cobalt700 = Color(hex: 0x16249C) // pressed
+    static let cobalt600 = Color(hex: 0x1B2FC7) // ink strength — brand dot, primary button, cursor
+    static let cobalt500 = Color(hex: 0x3F51D6) // hover
+    static let cobalt300 = Color(hex: 0x1B2FC7, opacity: 0.35) // edge-strength dilution
+    static let cobalt100 = Color(hex: 0x1B2FC7, opacity: 0.16) // wash — highlighter, selected row
+    static let cobalt050 = Color(hex: 0x1B2FC7, opacity: 0.055) // bloom — splatter, ambient bleed
+    static let cobaltEdge = Color(hex: 0x1B2FC7, opacity: 0.28) // wash-bleed edge stroke only
 
     // ---- Kiln pigments — semantic, rare ----
     static let oxide600 = Color(hex: 0x96412A)   // destructive
@@ -47,12 +59,12 @@ enum Stoneink {
     static let surfaceSlab = clay100
     static let surfaceLeaf = clay050
     static let surfaceSlip = clay000
-    static let surfacePress = Color(hex: 0xD6CCBE)
+    static let surfacePress = Color(hex: 0xEFE9DC) // panel-sunken — search field, inset wells
     static let surfaceStamp = clay800
 
     static let textPrimary = ink900
-    static let textSecondary = clay600
-    static let textMuted = clay600
+    static let textSecondary = Color(hex: 0x16130E, opacity: 0.70) // ink-70
+    static let textMuted = Color(hex: 0x16130E, opacity: 0.45) // ink-45
     static let textInverse = clay050
     static let textAccent = cobalt600
 

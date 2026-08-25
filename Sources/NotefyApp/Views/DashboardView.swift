@@ -118,34 +118,34 @@ struct DashboardView: View {
         }
     }
 
-    /// The left column beside the capture stage: title, meta, and the note's
-    /// source tags — plain typography, no box, per the source frame.
+    /// Title + meta on the left, source tags on the right — dropped the
+    /// "ACTIVE NOTE · SAVES AUTOMATICALLY" mark entirely and moved the tags
+    /// beside the title instead of stacking beneath it, so the header
+    /// takes one compact row instead of three and leaves more of the
+    /// limited vertical space for the capture itself.
     private var rawNoteHeader: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            Text("ACTIVE NOTE · SAVES AUTOMATICALLY")
-                .font(StoneFont.mark())
-                .tracking(Stoneink.trMark * 11)
-                .foregroundStyle(Stoneink.textMuted)
-                .fixedSize(horizontal: false, vertical: true)
-                .padding(.bottom, 6)
+        HStack(alignment: .top, spacing: 20) {
+            VStack(alignment: .leading, spacing: 0) {
+                TextField("Name this note", text: $appState.noteTitle, axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(StoneFont.title())
+                    .foregroundStyle(Stoneink.textPrimary)
+                    .lineSpacing(2)
+                    .onSubmit { appState.saveActiveNote() }
+                    .fixedSize(horizontal: false, vertical: true)
 
-            TextField("Name this note", text: $appState.noteTitle, axis: .vertical)
-                .textFieldStyle(.plain)
-                .font(StoneFont.title())
-                .foregroundStyle(Stoneink.textPrimary)
-                .lineSpacing(2)
-                .onSubmit { appState.saveActiveNote() }
-                .fixedSize(horizontal: false, vertical: true)
-
-            Text(metaText)
-                .font(StoneFont.mark())
-                .tracking(Stoneink.trMark * 11)
-                .foregroundStyle(Stoneink.textMuted)
-                .padding(.top, 9)
+                Text(metaText)
+                    .font(StoneFont.mark())
+                    .tracking(Stoneink.trMark * 11)
+                    .foregroundStyle(Stoneink.textMuted)
+                    .padding(.top, 9)
+            }
 
             if !sourceTags.isEmpty {
+                Spacer(minLength: 12)
                 FlowTags(tags: sourceTags)
-                    .padding(.top, 22)
+                    .frame(maxWidth: 340, alignment: .trailing)
+                    .padding(.top, 6)
             }
         }
     }
@@ -194,6 +194,10 @@ struct DashboardView: View {
             }
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+        // The splatter lives below every panel and text node, on the
+        // canvas only — never in the sidebar. Placed at fixed anchors,
+        // never randomized, so the mark set is identical on every load.
+        .background(InkSplatterField())
     }
 
     @ViewBuilder
@@ -207,7 +211,9 @@ struct DashboardView: View {
                     .foregroundStyle(Stoneink.textMuted)
                 // The user's own words — this is the one place Newsreader
                 // (the ink) appears in UI chrome, per the type rule. Set on
-                // the cobalt highlighter wash: ink lands on clay.
+                // the cobalt highlighter wash: ink lands on clay. A soft
+                // bleed sits behind it so the highlighter reads as soaked
+                // into the surface rather than pasted on top.
                 Text(annotation)
                     .font(StoneFont.readSmall())
                     .foregroundStyle(Stoneink.textPrimary)
@@ -216,6 +222,7 @@ struct DashboardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
+                    .background(InkWashBleed())
                     .background(Stoneink.cobalt100, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
             }
             .padding(.top, 8)
@@ -240,7 +247,7 @@ struct DashboardView: View {
             CaptureStamp(step: step, analysis: appState.vlmResults[step.id])
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(Stoneink.surfaceLeaf)
+                .background(Stoneink.surfaceSlip)
                 .overlay(GrogOverlay().allowsHitTesting(false))
                 .clipShape(ThrownRect.md)
                 .depthSlab(ThrownRect.md)

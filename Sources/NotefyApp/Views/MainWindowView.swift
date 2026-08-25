@@ -55,8 +55,35 @@ struct MainWindowView: View {
         // The bed: the ground slab. Darker than the cards resting on it —
         // a worn work surface, not a light "airy" background. This
         // inversion is the single most load-bearing decision in the system.
-        .background(Stoneink.surfaceBed)
+        // Three stacked layers, not a flat fill: base ground, a soft radial
+        // bloom behind the working area so the canvas isn't a dead slab,
+        // then the grain (below) and a felt-not-seen vignette (above) so
+        // the corners stop competing with the panels resting on it.
+        .background {
+            ZStack {
+                Stoneink.surfaceBed
+                GeometryReader { proxy in
+                    RadialGradient(
+                        colors: [Stoneink.surfaceLeaf.opacity(0.22), Stoneink.surfaceLeaf.opacity(0)],
+                        center: UnitPoint(x: 0.62, y: 0.38),
+                        startRadius: 0,
+                        endRadius: max(proxy.size.width, proxy.size.height) * 0.7
+                    )
+                }
+            }
+        }
         .overlay(GrogOverlay().allowsHitTesting(false))
+        .overlay {
+            GeometryReader { proxy in
+                RadialGradient(
+                    colors: [Color.clear, Stoneink.bedDeep.opacity(0.14)],
+                    center: .center,
+                    startRadius: min(proxy.size.width, proxy.size.height) * 0.35,
+                    endRadius: max(proxy.size.width, proxy.size.height) * 0.75
+                )
+            }
+            .allowsHitTesting(false)
+        }
         .preferredColorScheme(.light)
     }
 }
