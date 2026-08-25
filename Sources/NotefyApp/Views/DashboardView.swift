@@ -150,10 +150,17 @@ struct DashboardView: View {
 
     private var rawPage: some View {
         GeometryReader { proxy in
-            let panelWidth = min(640, max(460, proxy.size.width * 0.66))
-            let columnGap: CGFloat = 34
-            let leftWidth = max(270, proxy.size.width - panelWidth - columnGap)
-            let captureWidth = panelWidth - 48
+            // Capture column reads bigger than the notes column — it's the
+            // evidence; the thought is a short annotation beside it. The two
+            // minimums (notes column legibility, capture column usefulness)
+            // can't both be honored in a narrow window, so panelWidth yields
+            // first — leftWidth's minimum always wins, never overlapped.
+            let columnGap: CGFloat = 28
+            let minLeftWidth: CGFloat = 270
+            let preferredPanelWidth = min(760, max(520, proxy.size.width * 0.74))
+            let panelWidth = min(preferredPanelWidth, proxy.size.width - minLeftWidth - columnGap)
+            let leftWidth = max(minLeftWidth, proxy.size.width - panelWidth - columnGap)
+            let captureWidth = panelWidth - 24
             let steps = Array(appState.steps.reversed())
 
             ZStack(alignment: .topTrailing) {
@@ -192,7 +199,7 @@ struct DashboardView: View {
 
                             if let first = steps.first {
                                 rawCaptureBlock(first)
-                                    .padding(.horizontal, 24)
+                                    .padding(.horizontal, 12)
                                     .frame(width: captureWidth, alignment: .leading)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                             } else {
@@ -208,7 +215,7 @@ struct DashboardView: View {
                                 rawThoughtBlock(step)
                                     .frame(width: leftWidth, alignment: .leading)
                                 rawCaptureBlock(step)
-                                    .padding(.horizontal, 24)
+                                    .padding(.horizontal, 12)
                                     .frame(width: captureWidth, alignment: .leading)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                             }
@@ -315,55 +322,18 @@ struct DashboardView: View {
 
     /// Organized is the interpretation layer. Raw screenshots stay in Raw;
     /// this view should read as a clean, continuous page of understanding.
+    // Organized is the AI's own read of the note — text only. Raw screenshots
+    // stay in Raw; showing the capture stream again here was a redundant
+    // second copy of the same evidence, not a second view of it.
     private var organizedSplitPage: some View {
-        VStack(alignment: .leading, spacing: 22) {
-            HStack(alignment: .top, spacing: 34) {
-                VStack(alignment: .leading, spacing: 18) {
-                    Text("A considered view of what you captured, and why it matters.")
-                        .font(StoneFont.body())
-                        .foregroundStyle(Stoneink.textSecondary)
-                    FlowTags(tags: sourceTags)
-                    OrganizedMarkdownView(markdown: appState.organizedDraft)
-                }
-                .frame(maxWidth: .infinity, alignment: .leading)
-
-                organizedCaptureWell
-                    .frame(width: 500, height: 680)
-            }
+        VStack(alignment: .leading, spacing: 18) {
+            Text("A considered view of what you captured, and why it matters.")
+                .font(StoneFont.body())
+                .foregroundStyle(Stoneink.textSecondary)
+            FlowTags(tags: sourceTags)
+            OrganizedMarkdownView(markdown: appState.organizedDraft)
         }
-        .frame(maxWidth: 980, alignment: .leading)
-    }
-
-    private var organizedCaptureWell: some View {
-        ZStack(alignment: .topLeading) {
-            ThrownRect.lg
-                .fill(Stoneink.surfaceLeaf)
-                .overlay(GrogOverlay().allowsHitTesting(false))
-                .clipShape(ThrownRect.lg)
-                .depthSlab(ThrownRect.lg)
-
-            ScrollView(.vertical) {
-                VStack(alignment: .leading, spacing: 20) {
-                    ForEach(Array(appState.steps.reversed())) { step in
-                        CaptureStamp(step: step, analysis: appState.vlmResults[step.id])
-                            .padding(22)
-                            .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(Stoneink.surfaceSlab)
-                            .overlay(GrogOverlay().allowsHitTesting(false))
-                            .clipShape(ThrownRect.md)
-                            .depthSlab(ThrownRect.md)
-                            .scrollTransition(.interactive, axis: .vertical) { content, phase in
-                                content
-                                    .opacity(phase.isIdentity ? 1 : 0.72)
-                                    .scaleEffect(phase.isIdentity ? 1 : 0.97)
-                            }
-                    }
-                }
-                .padding(24)
-            }
-            .scrollIndicators(.automatic)
-            .clipShape(ThrownRect.lg)
-        }
+        .frame(maxWidth: 760, alignment: .leading)
     }
 
     private var sourceTags: [String] {
@@ -941,7 +911,11 @@ private struct CaptureStamp: View {
                     .clipShape(RoundedRectangle(cornerRadius: 6))
             }
 
-            if let selected = displayText {
+            // Show the description line once — as body copy if there's real
+            // selected text, or as the small mono caption if there isn't.
+            // Showing both when they're the same placeholder ("Selected
+            // screen region" twice) is the redundant second wrapper.
+            if let selected = displayText, selected != sourceDescription {
                 Text(selected)
                     .font(StoneFont.body())
                     .foregroundStyle(Stoneink.textPrimary)
@@ -954,9 +928,11 @@ private struct CaptureStamp: View {
                     .foregroundStyle(Stoneink.textSecondary)
                     .lineLimit(4)
             }
-            Text(sourceDescription)
-                .font(StoneFont.mark())
-                .foregroundStyle(Stoneink.textMuted)
+            if displayText != sourceDescription {
+                Text(sourceDescription)
+                    .font(StoneFont.mark())
+                    .foregroundStyle(Stoneink.textMuted)
+            }
         }
     }
 
