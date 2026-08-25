@@ -179,15 +179,21 @@ struct DashboardView: View {
                                     // Narrower than the full page: at full
                                     // width the aspect-fit image scales up
                                     // wide-and-short, so less of it is
-                                    // visible without scrolling. Capped
-                                    // narrower, it scales down instead and
-                                    // more of the capture fits on screen
-                                    // at once.
-                                    VStack(alignment: .leading, spacing: 12) {
+                                    // visible without scrolling. Narrower,
+                                    // it scales down instead and more of
+                                    // the capture fits on screen at once.
+                                    // An actual `width` (not `maxWidth`) —
+                                    // a ScrollView doesn't propose a width
+                                    // to its content, so `maxWidth` alone
+                                    // was capping the reported size without
+                                    // ever reproposing a narrower width
+                                    // down to the text, which just clipped
+                                    // instead of wrapping.
+                                    VStack(alignment: .leading, spacing: 24) {
                                         rawThoughtBlock(step)
                                         rawCaptureBlock(step)
                                     }
-                                    .frame(maxWidth: 620, alignment: .leading)
+                                    .frame(width: 780, alignment: .leading)
                                 }
                                 .scrollIndicators(.hidden)
                                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
