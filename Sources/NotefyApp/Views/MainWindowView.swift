@@ -27,7 +27,7 @@ struct MainWindowView: View {
                     // own chrome and no tab strip to clear, so it only needs
                     // enough padding to keep its logo out from under the
                     // traffic lights — not the full inset the tabs need.
-                    let topInset: CGFloat = 38
+                    let topInset: CGFloat = 26
                     let sidebarTopInset: CGFloat = 20
                     let bottomInset: CGFloat = 24
                     let contentHeight = proxy.size.height - topInset - bottomInset

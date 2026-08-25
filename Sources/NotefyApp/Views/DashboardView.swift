@@ -29,7 +29,7 @@ struct DashboardView: View {
         // matching reduction in pageViewport's own top padding below, so the
         // note column's absolute position doesn't move when this changes —
         // only the tab strip's distance from the window top does.
-        .padding(.top, 10)
+        .padding(.top, 2)
         .background(Color.clear)
     }
 
@@ -161,6 +161,10 @@ struct DashboardView: View {
             let panelWidth = max(420, proxy.size.width - leftWidth - columnGap)
             let captureWidth = panelWidth - 8
             let steps = Array(appState.steps.reversed())
+            // Fill the height actually available instead of a fixed 620 —
+            // on a taller window that's wasted room the capture card could
+            // use, and on a shorter one 620 was what was clipping content.
+            let pageHeight = proxy.size.height
 
             ZStack(alignment: .topTrailing) {
                 // This is a fixed viewport: a slab of fresh slip resting on
@@ -171,12 +175,12 @@ struct DashboardView: View {
                     .overlay(GrogOverlay().allowsHitTesting(false))
                     .clipShape(ThrownRect.lg)
                     .depthSlab(ThrownRect.lg)
-                    .frame(width: panelWidth, height: 620)
+                    .frame(width: panelWidth, height: pageHeight)
                     .overlay {
                         if steps.isEmpty {
                             emptyPaper
                                 .padding(28)
-                                .frame(width: panelWidth, height: 620, alignment: .center)
+                                .frame(width: panelWidth, height: pageHeight, alignment: .center)
                         }
                     }
 
@@ -197,29 +201,39 @@ struct DashboardView: View {
                             .frame(width: leftWidth, alignment: .leading)
 
                             if let first = steps.first {
-                                rawCaptureBlock(first)
-                                    .padding(.horizontal, 4)
-                                    .frame(width: captureWidth, alignment: .leading)
-                                    .frame(maxWidth: .infinity, alignment: .trailing)
+                                // The capture itself scrolls internally when
+                                // it's taller than the page — nothing gets
+                                // clipped off the bottom, it's just reachable
+                                // by scrolling this one card instead.
+                                ScrollView(.vertical) {
+                                    rawCaptureBlock(first)
+                                        .padding(.horizontal, 4)
+                                }
+                                .scrollIndicators(.hidden)
+                                .frame(width: captureWidth, height: pageHeight - 26, alignment: .top)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
                             } else {
                                 Color.clear.frame(maxWidth: .infinity, minHeight: 1, alignment: .trailing)
                             }
                         }
                         .padding(.top, 26)
-                        .frame(width: proxy.size.width, height: 620, alignment: .topLeading)
+                        .frame(width: proxy.size.width, height: pageHeight, alignment: .topLeading)
                         .revealTransition()
 
                         ForEach(Array(steps.dropFirst())) { step in
                             ZStack(alignment: .topLeading) {
                                 rawThoughtBlock(step)
                                     .frame(width: leftWidth, alignment: .leading)
-                                rawCaptureBlock(step)
-                                    .padding(.horizontal, 4)
-                                    .frame(width: captureWidth, alignment: .leading)
-                                    .frame(maxWidth: .infinity, alignment: .trailing)
+                                ScrollView(.vertical) {
+                                    rawCaptureBlock(step)
+                                        .padding(.horizontal, 4)
+                                }
+                                .scrollIndicators(.hidden)
+                                .frame(width: captureWidth, height: pageHeight - 26, alignment: .top)
+                                .frame(maxWidth: .infinity, alignment: .trailing)
                             }
                             .padding(.top, 26)
-                            .frame(width: proxy.size.width, height: 620, alignment: .topLeading)
+                            .frame(width: proxy.size.width, height: pageHeight, alignment: .topLeading)
                             .revealTransition()
                         }
                     }
@@ -228,12 +242,12 @@ struct DashboardView: View {
                 }
                 .scrollTargetBehavior(.paging)
                 .scrollIndicators(.hidden)
-                .frame(width: proxy.size.width, height: 620, alignment: .topLeading)
+                .frame(width: proxy.size.width, height: pageHeight, alignment: .topLeading)
                 .clipShape(ThrownRect.lg)
             }
-            .frame(minHeight: 620, maxHeight: 620)
+            .frame(minHeight: pageHeight, maxHeight: pageHeight)
         }
-        .frame(maxWidth: .infinity, minHeight: 620, maxHeight: 620, alignment: .topLeading)
+        .frame(maxWidth: .infinity, alignment: .topLeading)
     }
 
     @ViewBuilder
