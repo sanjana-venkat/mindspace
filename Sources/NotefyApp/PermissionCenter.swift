@@ -176,7 +176,12 @@ struct PermissionOnboardingView: View {
 
     var body: some View {
         ZStack {
-            NotefyTheme.sand.ignoresSafeArea()
+            // This screen predates the Stoneink pass and was still on the
+            // old NotefyTheme palette (a near-white "sand" canvas) — it
+            // read as a plain white window against the rest of the app's
+            // clay bed. Match the same background the main window uses.
+            Stoneink.surfaceBed.ignoresSafeArea()
+            GrogOverlay().ignoresSafeArea().allowsHitTesting(false)
             InkSplatterMark(seed: 21, opacity: 0.06)
                 .frame(width: 620, height: 520).blur(radius: 50)
                 .offset(x: 390, y: -270)
