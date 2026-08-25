@@ -122,22 +122,32 @@ extension View {
         }
     }
 
-    /// A heavy piece of clay resting on the bed. A fired edge — a light
-    /// lip along the top inner edge, a dark one along the bottom — plus a
-    /// tight, short contact shadow. Never a soft floating shadow.
+    /// A pillow of clay resting on the bed — the "pinch": a soft glow of
+    /// highlight along the top inner edge, a soft pool of shade along the
+    /// bottom, and a cast shadow with real blur beneath it. This is what
+    /// reads as inflated, pinched clay rather than a flat card with a
+    /// hairline rule — the claymorphic signature, not the kiln-fired one.
     func depthSlab<S: Shape>(_ shape: S) -> some View {
         self
             .overlay {
                 VStack(spacing: 0) {
-                    Rectangle().fill(Color.stoneEdgeLight).frame(height: 1)
+                    LinearGradient(
+                        colors: [Color.stoneEdgeLight.opacity(0.95), .clear],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .frame(height: 11)
                     Spacer(minLength: 0)
-                    Rectangle().fill(Stoneink.edgeDark).frame(height: 1)
+                    LinearGradient(
+                        colors: [.clear, Stoneink.edgeDark.opacity(0.65)],
+                        startPoint: .top, endPoint: .bottom
+                    )
+                    .frame(height: 15)
                 }
                 .clipShape(shape)
                 .allowsHitTesting(false)
             }
-            .shadow(color: Color(hex: 0x2D2218, opacity: 0.06), radius: 0, x: 0, y: 1)
-            .shadow(color: Color(hex: 0x2D2218, opacity: 0.14), radius: 3, x: 0, y: 2)
+            .shadow(color: Color(hex: 0x2D2218, opacity: 0.10), radius: 3, x: 0, y: 2)
+            .shadow(color: Color(hex: 0x2D2218, opacity: 0.16), radius: 18, x: 0, y: 10)
     }
 
     /// A well cut into the clay — inputs, search, wells, active tabs.

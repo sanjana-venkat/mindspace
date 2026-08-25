@@ -150,110 +150,35 @@ struct DashboardView: View {
         }
     }
 
+    // No enclosing well: captures rest flat on the bed as their own small
+    // clay cards, not held inside one big panel. The note itself — title,
+    // tags — stays fixed at the top-left as the anchor the captures
+    // gather around, so the whole page reads as one blob of note rather
+    // than two boxed-off panels side by side.
     private var rawPage: some View {
-        GeometryReader { proxy in
-            // Notes column stays a fixed, legible width; the capture panel
-            // claims all remaining space and runs to the right edge — it's
-            // the evidence, the thought is a short annotation beside it.
-            let columnGap: CGFloat = 28
-            let minLeftWidth: CGFloat = 270
-            let leftWidth = minLeftWidth
-            let panelWidth = max(420, proxy.size.width - leftWidth - columnGap)
-            let captureWidth = panelWidth - 8
-            let steps = Array(appState.steps.reversed())
-            // Fill the height actually available instead of a fixed 620 —
-            // on a taller window that's wasted room the capture card could
-            // use, and on a shorter one 620 was what was clipping content.
-            let pageHeight = proxy.size.height
+        let steps = Array(appState.steps.reversed())
+        return HStack(alignment: .top, spacing: 28) {
+            rawNoteHeader
+                .frame(width: 270, alignment: .leading)
 
-            ZStack(alignment: .topTrailing) {
-                // This is a fixed viewport: a slab of fresh slip resting on
-                // the bed. The shared stream below is sized to its exact
-                // inner width so cards can never escape the well.
-                ThrownRect.lg
-                    .fill(Stoneink.surfaceLeaf)
-                    .overlay(GrogOverlay().allowsHitTesting(false))
-                    .clipShape(ThrownRect.lg)
-                    .depthSlab(ThrownRect.lg)
-                    .frame(width: panelWidth, height: pageHeight)
-                    .overlay {
-                        if steps.isEmpty {
-                            emptyPaper
-                                .padding(28)
-                                .frame(width: panelWidth, height: pageHeight, alignment: .center)
-                        }
-                    }
-
-                // One page, one pair: exactly one capture and its thought are
-                // visible at a time, each sized to the full well height. The
-                // outgoing pair slides up and fades as the next one rises in
-                // from below and fades in — a reveal, not a continuous drift.
-                // `.paging` makes the scroll hard-snap to that one-page unit.
+            if steps.isEmpty {
+                emptyPaper
+                    .padding(28)
+                    .frame(maxWidth: .infinity, minHeight: 420, alignment: .center)
+            } else {
                 ScrollView(.vertical) {
-                    LazyVStack(alignment: .leading, spacing: 0) {
-                        ZStack(alignment: .topLeading) {
-                            VStack(alignment: .leading, spacing: 28) {
-                                rawNoteHeader
-                                if let first = steps.first {
-                                    rawThoughtBlock(first)
-                                }
-                            }
-                            .frame(width: leftWidth, alignment: .leading)
-
-                            if let first = steps.first {
-                                // The capture itself scrolls internally when
-                                // it's taller than the page — nothing gets
-                                // clipped off the bottom, it's just reachable
-                                // by scrolling this one card instead.
-                                ScrollView(.vertical) {
-                                    // A ScrollView only clips to the width
-                                    // you give it — it doesn't hand that
-                                    // width down to content, which sizes to
-                                    // its own ideal (narrower) width unless
-                                    // told otherwise. Force it explicitly so
-                                    // the card actually fills the panel.
-                                    rawCaptureBlock(first)
-                                        .frame(width: captureWidth - 8, alignment: .leading)
-                                        .padding(.horizontal, 4)
-                                }
-                                .scrollIndicators(.hidden)
-                                .frame(width: captureWidth, height: pageHeight - 26, alignment: .top)
-                                .frame(maxWidth: .infinity, alignment: .trailing)
-                            } else {
-                                Color.clear.frame(maxWidth: .infinity, minHeight: 1, alignment: .trailing)
-                            }
-                        }
-                        .padding(.top, 26)
-                        .frame(width: proxy.size.width, height: pageHeight, alignment: .topLeading)
-                        .revealTransition()
-
-                        ForEach(Array(steps.dropFirst())) { step in
-                            ZStack(alignment: .topLeading) {
+                    LazyVStack(alignment: .leading, spacing: 30) {
+                        ForEach(steps) { step in
+                            VStack(alignment: .leading, spacing: 10) {
                                 rawThoughtBlock(step)
-                                    .frame(width: leftWidth, alignment: .leading)
-                                ScrollView(.vertical) {
-                                    rawCaptureBlock(step)
-                                        .frame(width: captureWidth - 8, alignment: .leading)
-                                        .padding(.horizontal, 4)
-                                }
-                                .scrollIndicators(.hidden)
-                                .frame(width: captureWidth, height: pageHeight - 26, alignment: .top)
-                                .frame(maxWidth: .infinity, alignment: .trailing)
+                                rawCaptureBlock(step)
                             }
-                            .padding(.top, 26)
-                            .frame(width: proxy.size.width, height: pageHeight, alignment: .topLeading)
-                            .revealTransition()
                         }
                     }
-                    .scrollTargetLayout()
-                    .frame(width: proxy.size.width, alignment: .topLeading)
+                    .padding(.bottom, 48)
                 }
-                .scrollTargetBehavior(.paging)
                 .scrollIndicators(.hidden)
-                .frame(width: proxy.size.width, height: pageHeight, alignment: .topLeading)
-                .clipShape(ThrownRect.lg)
             }
-            .frame(minHeight: pageHeight, maxHeight: pageHeight)
         }
         .frame(maxWidth: .infinity, alignment: .topLeading)
     }
