@@ -25,7 +25,7 @@ struct DashboardView: View {
             .overlay(alignment: .bottom) { actionShelf }
         }
         .padding(.horizontal, 46)
-        .padding(.top, 104)
+        .padding(.top, 20)
         .background(Color.clear)
     }
 
@@ -124,6 +124,7 @@ struct DashboardView: View {
                 .font(StoneFont.mark())
                 .tracking(Stoneink.trMark * 11)
                 .foregroundStyle(Stoneink.textMuted)
+                .fixedSize(horizontal: false, vertical: true)
                 .padding(.bottom, 6)
 
             TextField("Name this note", text: $appState.noteTitle, axis: .vertical)
@@ -151,7 +152,7 @@ struct DashboardView: View {
         GeometryReader { proxy in
             let panelWidth = min(640, max(460, proxy.size.width * 0.66))
             let columnGap: CGFloat = 34
-            let leftWidth = max(220, proxy.size.width - panelWidth - columnGap)
+            let leftWidth = max(270, proxy.size.width - panelWidth - columnGap)
             let captureWidth = panelWidth - 48
             let steps = Array(appState.steps.reversed())
 
@@ -173,13 +174,13 @@ struct DashboardView: View {
                         }
                     }
 
-                // One scroll stream owns paired rows. A note and its capture
-                // leave the viewport together, so the next pair is revealed
-                // as one coherent unit rather than as two drifting columns.
-                // Scroll-target snapping makes each pair settle into view
-                // like a held clay slab, rather than drifting to a stop.
+                // One page, one pair: exactly one capture and its thought are
+                // visible at a time, each sized to the full well height. The
+                // outgoing pair slides up and fades as the next one rises in
+                // from below and fades in — a reveal, not a continuous drift.
+                // `.paging` makes the scroll hard-snap to that one-page unit.
                 ScrollView(.vertical) {
-                    VStack(alignment: .leading, spacing: 28) {
+                    LazyVStack(alignment: .leading, spacing: 0) {
                         ZStack(alignment: .topLeading) {
                             VStack(alignment: .leading, spacing: 28) {
                                 rawNoteHeader
@@ -198,13 +199,9 @@ struct DashboardView: View {
                                 Color.clear.frame(maxWidth: .infinity, minHeight: 1, alignment: .trailing)
                             }
                         }
-                        .frame(width: proxy.size.width, alignment: .topLeading)
-                        .scrollTransition(.interactive, axis: .vertical) { content, phase in
-                            content
-                                .opacity(phase.isIdentity ? 1 : 0.78)
-                                .scaleEffect(phase.isIdentity ? 1 : 0.985)
-                                .offset(y: phase.isIdentity ? 0 : phase.value * 14)
-                        }
+                        .padding(.top, 26)
+                        .frame(width: proxy.size.width, height: 620, alignment: .topLeading)
+                        .revealTransition()
 
                         ForEach(Array(steps.dropFirst())) { step in
                             ZStack(alignment: .topLeading) {
@@ -215,24 +212,18 @@ struct DashboardView: View {
                                     .frame(width: captureWidth, alignment: .leading)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                             }
-                            .frame(width: proxy.size.width, alignment: .topLeading)
-                            .scrollTransition(.interactive, axis: .vertical) { content, phase in
-                                content
-                                    .opacity(phase.isIdentity ? 1 : 0.78)
-                                    .scaleEffect(phase.isIdentity ? 1 : 0.985)
-                                    .offset(y: phase.isIdentity ? 0 : phase.value * 14)
-                            }
+                            .padding(.top, 26)
+                            .frame(width: proxy.size.width, height: 620, alignment: .topLeading)
+                            .revealTransition()
                         }
                     }
                     .scrollTargetLayout()
                     .frame(width: proxy.size.width, alignment: .topLeading)
-                    .padding(.top, 24)
-                    .padding(.bottom, 40)
                 }
-                .scrollTargetBehavior(.viewAligned)
-                .scrollIndicators(.automatic)
+                .scrollTargetBehavior(.paging)
+                .scrollIndicators(.hidden)
                 .frame(width: proxy.size.width, height: 620, alignment: .topLeading)
-                .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
+                .clipShape(ThrownRect.lg)
             }
             .frame(minHeight: 620, maxHeight: 620)
         }

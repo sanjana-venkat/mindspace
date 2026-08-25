@@ -109,6 +109,19 @@ extension Color {
 // hover only wets the surface (steps one clay value lighter).
 
 extension View {
+    /// The one-at-a-time page reveal: as a pair scrolls past identity it
+    /// fades out while rising further away; the next pair rises up from
+    /// below and fades in as it settles. Paired with `.scrollTargetBehavior
+    /// (.paging)` so exactly one capture + thought is ever on screen.
+    func revealTransition() -> some View {
+        self.scrollTransition(.interactive, axis: .vertical) { content, phase in
+            content
+                .opacity(phase.isIdentity ? 1 : 0)
+                .scaleEffect(phase.isIdentity ? 1 : 0.94)
+                .offset(y: phase.value * 60)
+        }
+    }
+
     /// A heavy piece of clay resting on the bed. A fired edge — a light
     /// lip along the top inner edge, a dark one along the bottom — plus a
     /// tight, short contact shadow. Never a soft floating shadow.
@@ -189,10 +202,12 @@ struct ThrownRect: Shape {
     var bottomRight: CGFloat
     var bottomLeft: CGFloat
 
-    static let lg = ThrownRect(topLeft: 20, topRight: 18, bottomRight: 21, bottomLeft: 17)
-    static let md = ThrownRect(topLeft: 14, topRight: 13, bottomRight: 15, bottomLeft: 12)
-    static let sm = ThrownRect(topLeft: 10, topRight: 11, bottomRight: 9, bottomLeft: 11)
-    static let press = ThrownRect(topLeft: 8, topRight: 9, bottomRight: 8, bottomLeft: 9)
+    // Bumped rounder across the board per direct request — still thrown
+    // (unequal per corner), just a visibly softer, more rounded object.
+    static let lg = ThrownRect(topLeft: 34, topRight: 31, bottomRight: 35, bottomLeft: 30)
+    static let md = ThrownRect(topLeft: 24, topRight: 22, bottomRight: 25, bottomLeft: 21)
+    static let sm = ThrownRect(topLeft: 16, topRight: 17, bottomRight: 15, bottomLeft: 17)
+    static let press = ThrownRect(topLeft: 12, topRight: 13, bottomRight: 12, bottomLeft: 13)
 
     func path(in rect: CGRect) -> Path {
         let tl = min(topLeft, rect.width / 2, rect.height / 2)

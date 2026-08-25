@@ -94,5 +94,9 @@ struct NotefyMenuBarApp: App {
         }
         .defaultSize(width: 1180, height: 780)
         .windowResizability(.contentMinSize)
+        // The native title bar was a hard white bar across the top of an
+        // otherwise all-clay window — hide it so the bed's own colour reads
+        // all the way to the traffic lights, the way a real object would.
+        .windowStyle(.hiddenTitleBar)
     }
 }

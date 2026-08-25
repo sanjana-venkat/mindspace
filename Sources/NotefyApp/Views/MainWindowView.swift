@@ -21,7 +21,11 @@ struct MainWindowView: View {
                 )
             } else {
                 GeometryReader { proxy in
-                    let contentHeight = proxy.size.height - 48
+                    // Extra top clearance: with the title bar hidden, the
+                    // traffic lights float directly over our own content, so
+                    // the sidebar and dashboard both need real room to clear them.
+                    let topInset: CGFloat = 44
+                    let contentHeight = proxy.size.height - topInset - 24
                     HStack(spacing: Stoneink.sp5) {
                         Sidebar(selection: $selection, collapsed: $sidebarCollapsed, proxyHeight: contentHeight)
                         Group {
@@ -34,7 +38,9 @@ struct MainWindowView: View {
                         .frame(maxWidth: .infinity)
                         .frame(height: contentHeight)
                     }
-                    .padding(24)
+                    .padding(.horizontal, 24)
+                    .padding(.top, topInset)
+                    .padding(.bottom, 24)
                 }
             }
         }
