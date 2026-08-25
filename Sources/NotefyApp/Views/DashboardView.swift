@@ -92,12 +92,6 @@ struct DashboardView: View {
             rawPage
         } else {
             VStack(alignment: .leading, spacing: 0) {
-                Text("ACTIVE NOTE · SAVES AUTOMATICALLY")
-                    .font(StoneFont.mark())
-                    .tracking(Stoneink.trMark * 11)
-                    .foregroundStyle(Stoneink.textMuted)
-                    .padding(.bottom, 6)
-
                 TextField("Name this note", text: $appState.noteTitle, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(StoneFont.title())
