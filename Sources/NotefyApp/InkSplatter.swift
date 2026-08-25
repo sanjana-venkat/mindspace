@@ -144,17 +144,3 @@ struct InkSplatterField: View {
         }
     }
 }
-
-/// The one anchor tied to a specific element rather than the canvas at
-/// large: a soft bleed sitting behind the "MY THOUGHT" wash block, so the
-/// highlighter reads as soaked into the surface instead of pasted on top.
-struct InkWashBleed: View {
-    var body: some View {
-        OrganicBlob(variant: 2)
-            .fill(Stoneink.cobalt600)
-            .opacity(0.07)
-            .frame(width: 160, height: 90)
-            .offset(x: -16, y: 10)
-            .allowsHitTesting(false)
-    }
-}

@@ -176,10 +176,18 @@ struct DashboardView: View {
                                 // gets clipped, it's just reachable by
                                 // scrolling that one card in place.
                                 ScrollView(.vertical) {
+                                    // Narrower than the full page: at full
+                                    // width the aspect-fit image scales up
+                                    // wide-and-short, so less of it is
+                                    // visible without scrolling. Capped
+                                    // narrower, it scales down instead and
+                                    // more of the capture fits on screen
+                                    // at once.
                                     VStack(alignment: .leading, spacing: 12) {
                                         rawThoughtBlock(step)
                                         rawCaptureBlock(step)
                                     }
+                                    .frame(maxWidth: 620, alignment: .leading)
                                 }
                                 .scrollIndicators(.hidden)
                                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
@@ -211,9 +219,7 @@ struct DashboardView: View {
                     .foregroundStyle(Stoneink.textMuted)
                 // The user's own words — this is the one place Newsreader
                 // (the ink) appears in UI chrome, per the type rule. Set on
-                // the cobalt highlighter wash: ink lands on clay. A soft
-                // bleed sits behind it so the highlighter reads as soaked
-                // into the surface rather than pasted on top.
+                // the cobalt highlighter wash: ink lands on clay.
                 Text(annotation)
                     .font(StoneFont.readSmall())
                     .foregroundStyle(Stoneink.textPrimary)
@@ -222,7 +228,6 @@ struct DashboardView: View {
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
-                    .background(InkWashBleed())
                     .background(Stoneink.cobalt100, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
             }
             .padding(.top, 8)
