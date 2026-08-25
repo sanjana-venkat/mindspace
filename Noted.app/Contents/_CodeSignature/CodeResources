@@ -40,9 +40,45 @@
 		<data>
 		D+rm7JShN69BFFyfZqO0ZWTRUVk=
 		</data>
+		<key>Resources/Fonts/IBMPlexMono-Medium.ttf</key>
+		<data>
+		0SRigKMVw3emUYeQR3I7q247QR4=
+		</data>
+		<key>Resources/Fonts/IBMPlexMono-Regular.ttf</key>
+		<data>
+		K3wjk//0Gm4URv1jUQAuGqGpmeg=
+		</data>
+		<key>Resources/Fonts/IBMPlexSans-Medium.ttf</key>
+		<data>
+		xfU5tpv3prDU0JFCl4iCfN31iMo=
+		</data>
+		<key>Resources/Fonts/IBMPlexSans-Regular.ttf</key>
+		<data>
+		ekJbnZVYZV4FEl4VJXiqef7qyaI=
+		</data>
+		<key>Resources/Fonts/IBMPlexSans-SemiBold.ttf</key>
+		<data>
+		/gGr6rXAim7Wtshe95TAUsJSB1Y=
+		</data>
 		<key>Resources/Fonts/InstrumentSerif-Regular.ttf</key>
 		<data>
 		dg3OLkMvs3EVedTeHPUxnsryjH8=
+		</data>
+		<key>Resources/Fonts/Newsreader-DisplayRegular.ttf</key>
+		<data>
+		McR7UtfQ9ncqLJZdKFrao2JfgtQ=
+		</data>
+		<key>Resources/Fonts/Newsreader-ReadItalic.ttf</key>
+		<data>
+		qBKMZhJx/HEOXf18UN+LJClcLLc=
+		</data>
+		<key>Resources/Fonts/Newsreader-ReadRegular.ttf</key>
+		<data>
+		zK7san+Zri8Cc0gKJ7v9ThenENg=
+		</data>
+		<key>Resources/Fonts/Newsreader-ReadSemiBold.ttf</key>
+		<data>
+		oOI6/9uSCBxOj9JM3YVWcafCy/Q=
 		</data>
 		<key>Resources/Fonts/PatrickHand-Regular.ttf</key>
 		<data>
@@ -126,11 +162,74 @@
 			/RbRtYwheDFdEQ6zmakssCusgPglDgtYpgX+lu4lc2Q=
 			</data>
 		</dict>
+		<key>Resources/Fonts/IBMPlexMono-Medium.ttf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			qbTEm7KZ4FtfbEgef7XniUPSeTJJoMiHSrV0otHqZ1U=
+			</data>
+		</dict>
+		<key>Resources/Fonts/IBMPlexMono-Regular.ttf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			ajQS8FjH2N/ZFwxB6FreSOUVbsuJNWEQylegonc0r0Y=
+			</data>
+		</dict>
+		<key>Resources/Fonts/IBMPlexSans-Medium.ttf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			OcHK47goknxyzWwYwuTU5Rl+5n15KEPxGLSpbKjFaIU=
+			</data>
+		</dict>
+		<key>Resources/Fonts/IBMPlexSans-Regular.ttf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			0tY5hTotoLQN4+4QYeBFEr0bEwdW+pWEAzNoXbq5/+k=
+			</data>
+		</dict>
+		<key>Resources/Fonts/IBMPlexSans-SemiBold.ttf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			aq9G6crG5BDihIpV/9e/iNrOACb7+MB3XOAilZBAVzQ=
+			</data>
+		</dict>
 		<key>Resources/Fonts/InstrumentSerif-Regular.ttf</key>
 		<dict>
 			<key>hash2</key>
 			<data>
 			SY79Rh9t38t6ERv5pWVwnSCF1IIB1QHq2WDZPoT/u4g=
+			</data>
+		</dict>
+		<key>Resources/Fonts/Newsreader-DisplayRegular.ttf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			NTOjB3StdJ639ETDZlnwwRQHh+0qmgReIfMJ65yOj04=
+			</data>
+		</dict>
+		<key>Resources/Fonts/Newsreader-ReadItalic.ttf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			+8rgzlP9gCFdJaygTjwjeUcxAFeUf6WBVL4LrrPeyDI=
+			</data>
+		</dict>
+		<key>Resources/Fonts/Newsreader-ReadRegular.ttf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			GWjNiGcS3hRoN645Rg/Yy9l+M0v+U7ppj3RC6tjR/oo=
+			</data>
+		</dict>
+		<key>Resources/Fonts/Newsreader-ReadSemiBold.ttf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			soSDv8Lno4UywpkNe8EwvjcSycME8ZvROxiVE1+KnAk=
 			</data>
 		</dict>
 		<key>Resources/Fonts/PatrickHand-Regular.ttf</key>

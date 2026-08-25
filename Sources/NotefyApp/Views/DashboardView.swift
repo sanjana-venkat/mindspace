@@ -55,28 +55,29 @@ struct DashboardView: View {
             tabButton(title: "Organized", mode: .organized)
         }
         .padding(3)
-        .background(NotefyTheme.sandDeep, in: Capsule())
-        .grain()
+        .background(Stoneink.surfacePress)
         .clipShape(Capsule())
-        .overlay(Capsule().stroke(NotefyTheme.glassBorderSoft, lineWidth: 1))
+        .depthPress(Capsule())
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.bottom, 22)
         .zIndex(3)
     }
 
+    /// The active tab is a slab resting inside the press well — an
+    /// impression, never a raised element competing with real buttons.
     private func tabButton(title: String, mode candidate: NoteViewMode) -> some View {
         let isActive = candidate == mode
         return Button {
             mode = candidate
         } label: {
             Text(title)
-                .font(NotefyFont.bodyMedium)
-                .foregroundStyle(isActive ? NotefyTheme.inkStrong : NotefyTheme.inkMuted)
+                .font(StoneFont.bodyMedium())
+                .foregroundStyle(isActive ? Stoneink.textPrimary : Stoneink.textMuted)
                 .padding(.horizontal, 16)
-                .padding(.vertical, 9)
+                .padding(.vertical, 8)
                 .background {
                     if isActive {
-                        Capsule().fill(NotefyTheme.cardPaper).emboss()
+                        Capsule().fill(Stoneink.surfaceSlab).depthSlab(Capsule())
                     }
                 }
         }
@@ -90,22 +91,22 @@ struct DashboardView: View {
         } else {
             VStack(alignment: .leading, spacing: 0) {
                 Text("ACTIVE NOTE · SAVES AUTOMATICALLY")
-                    .font(NotefyFont.label)
-                    .tracking(1.4)
-                    .foregroundStyle(NotefyTheme.inkSoft)
+                    .font(StoneFont.mark())
+                    .tracking(Stoneink.trMark * 11)
+                    .foregroundStyle(Stoneink.textMuted)
                     .padding(.bottom, 6)
 
                 TextField("Name this note", text: $appState.noteTitle, axis: .vertical)
                     .textFieldStyle(.plain)
-                    .font(NotefyFont.pageTitle)
-                    .foregroundStyle(NotefyTheme.ink)
+                    .font(StoneFont.title())
+                    .foregroundStyle(Stoneink.textPrimary)
                     .lineLimit(1...2)
                     .onSubmit { appState.saveActiveNote() }
 
                 Text(metaText)
-                    .font(NotefyFont.caption)
-                    .tracking(0.9)
-                    .foregroundStyle(NotefyTheme.inkFaint)
+                    .font(StoneFont.mark())
+                    .tracking(Stoneink.trMark * 11)
+                    .foregroundStyle(Stoneink.textMuted)
                     .padding(.top, 9)
                     .padding(.bottom, 30)
 
@@ -120,23 +121,23 @@ struct DashboardView: View {
     private var rawNoteHeader: some View {
         VStack(alignment: .leading, spacing: 0) {
             Text("ACTIVE NOTE · SAVES AUTOMATICALLY")
-                .font(NotefyFont.label)
-                .tracking(1.4)
-                .foregroundStyle(NotefyTheme.inkSoft)
+                .font(StoneFont.mark())
+                .tracking(Stoneink.trMark * 11)
+                .foregroundStyle(Stoneink.textMuted)
                 .padding(.bottom, 6)
 
             TextField("Name this note", text: $appState.noteTitle, axis: .vertical)
                 .textFieldStyle(.plain)
-                .font(NotefyFont.pageTitle)
-                .foregroundStyle(NotefyTheme.ink)
+                .font(StoneFont.title())
+                .foregroundStyle(Stoneink.textPrimary)
                 .lineSpacing(2)
                 .onSubmit { appState.saveActiveNote() }
                 .fixedSize(horizontal: false, vertical: true)
 
             Text(metaText)
-                .font(NotefyFont.caption)
-                .tracking(0.9)
-                .foregroundStyle(NotefyTheme.inkFaint)
+                .font(StoneFont.mark())
+                .tracking(Stoneink.trMark * 11)
+                .foregroundStyle(Stoneink.textMuted)
                 .padding(.top, 9)
 
             if !sourceTags.isEmpty {
@@ -155,15 +156,14 @@ struct DashboardView: View {
             let steps = Array(appState.steps.reversed())
 
             ZStack(alignment: .topTrailing) {
-                // This is a fixed viewport. The shared stream below is sized
-                // to its exact inner width so cards can never escape the well.
-                RoundedRectangle(cornerRadius: 32, style: .continuous)
-                    .fill(NotefyTheme.sandDeep)
-                    .overlay(RoundedRectangle(cornerRadius: 32, style: .continuous)
-                        .stroke(NotefyTheme.glassBorder, lineWidth: 1))
-                    .grain()
-                    .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
-                    .neomorphicDeboss(cornerRadius: 32)
+                // This is a fixed viewport: a slab of fresh slip resting on
+                // the bed. The shared stream below is sized to its exact
+                // inner width so cards can never escape the well.
+                ThrownRect.lg
+                    .fill(Stoneink.surfaceLeaf)
+                    .overlay(GrogOverlay().allowsHitTesting(false))
+                    .clipShape(ThrownRect.lg)
+                    .depthSlab(ThrownRect.lg)
                     .frame(width: panelWidth, height: 620)
                     .overlay {
                         if steps.isEmpty {
@@ -234,21 +234,29 @@ struct DashboardView: View {
         if !annotation.isEmpty {
             VStack(alignment: .leading, spacing: 9) {
                 Text("MY THOUGHT")
-                    .font(NotefyFont.label)
-                    .tracking(1.1)
-                    .foregroundStyle(NotefyTheme.inkFaint)
+                    .font(StoneFont.mark())
+                    .tracking(Stoneink.trMark * 11)
+                    .foregroundStyle(Stoneink.textMuted)
+                // The user's own words — this is the one place Newsreader
+                // (the ink) appears in UI chrome, per the type rule. Set on
+                // the cobalt highlighter wash: ink lands on clay.
                 Text(annotation)
-                    .font(NotefyFont.body)
-                    .foregroundStyle(NotefyTheme.ink)
-                    .lineSpacing(7)
+                    .font(StoneFont.read())
+                    .foregroundStyle(Stoneink.textPrimary)
+                    .lineSpacing(Stoneink.tRead * (Stoneink.lhRead - 1))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
-                    .pigmentMark()
+                    .padding(.horizontal, 6)
+                    .padding(.vertical, 3)
+                    .background(Stoneink.cobalt100, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
             }
             .padding(.top, 8)
         }
     }
 
+    /// A note card: fresh slip on the bed. The most repeated object in the
+    /// product. Selected: a cobalt rule + cobalt stroke, never a colour
+    /// the palette doesn't have.
     private func rawCaptureBlock(_ step: ExplorationStep) -> some View {
         let isSelected = appState.selectedStepIDs.contains(step.id)
         return HStack(alignment: .top, spacing: 10) {
@@ -256,7 +264,7 @@ struct DashboardView: View {
                 Button { appState.toggleStepSelection(step.id) } label: {
                     Image(systemName: isSelected ? "checkmark.circle.fill" : "circle")
                         .font(.system(size: 15))
-                        .foregroundStyle(isSelected ? NotefyTheme.marginRose : NotefyTheme.inkFaint)
+                        .foregroundStyle(isSelected ? Stoneink.cobalt600 : Stoneink.clay500)
                 }
                 .buttonStyle(.plain)
                 .padding(.top, 18)
@@ -264,12 +272,15 @@ struct DashboardView: View {
             CaptureStamp(step: step, analysis: appState.vlmResults[step.id])
                 .padding(20)
                 .frame(maxWidth: .infinity, alignment: .leading)
-                .background(NotefyTheme.cardPaper, in: RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .grain()
-                .clipShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
-                    .stroke(isSelected ? NotefyTheme.pigment : NotefyTheme.glassBorderSoft, lineWidth: isSelected ? 2 : 1))
-                .shadow(color: NotefyTheme.panelShadowColor, radius: 16, x: 0, y: 8)
+                .background(Stoneink.surfaceLeaf)
+                .overlay(GrogOverlay().allowsHitTesting(false))
+                .clipShape(ThrownRect.md)
+                .depthSlab(ThrownRect.md)
+                .overlay {
+                    if isSelected {
+                        ThrownRect.md.stroke(Stoneink.cobalt600, lineWidth: 2)
+                    }
+                }
         }
     }
 
@@ -279,13 +290,13 @@ struct DashboardView: View {
                 HStack(spacing: 12) {
                     ProgressView().controlSize(.small)
                     Text("Setting the page in order…")
-                        .font(NotefyFont.body)
-                        .foregroundStyle(NotefyTheme.inkSoft)
+                        .font(StoneFont.body())
+                        .foregroundStyle(Stoneink.textSecondary)
                 }
             } else if appState.organizedDraft.isEmpty {
                 Text("Choose Bullet List, Essay, or Diagram from Organize below.")
-                    .font(NotefyFont.body)
-                    .foregroundStyle(NotefyTheme.inkSoft)
+                    .font(StoneFont.body())
+                    .foregroundStyle(Stoneink.textSecondary)
             } else if appState.organizedTemplate == .diagram {
                 OrganizedDiagramView(
                     steps: Array(appState.steps.reversed()),
@@ -307,8 +318,8 @@ struct DashboardView: View {
             HStack(alignment: .top, spacing: 34) {
                 VStack(alignment: .leading, spacing: 18) {
                     Text("A considered view of what you captured, and why it matters.")
-                        .font(NotefyFont.body)
-                        .foregroundStyle(NotefyTheme.inkSoft)
+                        .font(StoneFont.body())
+                        .foregroundStyle(Stoneink.textSecondary)
                     FlowTags(tags: sourceTags)
                     OrganizedMarkdownView(markdown: appState.organizedDraft)
                 }
@@ -323,13 +334,11 @@ struct DashboardView: View {
 
     private var organizedCaptureWell: some View {
         ZStack(alignment: .topLeading) {
-            RoundedRectangle(cornerRadius: 30, style: .continuous)
-                .fill(NotefyTheme.sandDeep)
-                .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous)
-                    .stroke(NotefyTheme.glassBorder, lineWidth: 1))
-                .grain()
-                .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
-                .neomorphicDeboss(cornerRadius: 30)
+            ThrownRect.lg
+                .fill(Stoneink.surfaceLeaf)
+                .overlay(GrogOverlay().allowsHitTesting(false))
+                .clipShape(ThrownRect.lg)
+                .depthSlab(ThrownRect.lg)
 
             ScrollView(.vertical) {
                 VStack(alignment: .leading, spacing: 20) {
@@ -337,11 +346,10 @@ struct DashboardView: View {
                         CaptureStamp(step: step, analysis: appState.vlmResults[step.id])
                             .padding(22)
                             .frame(maxWidth: .infinity, alignment: .leading)
-                            .background(NotefyTheme.cardPaper, in: RoundedRectangle(cornerRadius: 22, style: .continuous))
-                            .grain()
-                            .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
-                                .stroke(NotefyTheme.glassBorderSoft, lineWidth: 1))
+                            .background(Stoneink.surfaceSlab)
+                            .overlay(GrogOverlay().allowsHitTesting(false))
+                            .clipShape(ThrownRect.md)
+                            .depthSlab(ThrownRect.md)
                             .scrollTransition(.interactive, axis: .vertical) { content, phase in
                                 content
                                     .opacity(phase.isIdentity ? 1 : 0.72)
@@ -352,7 +360,7 @@ struct DashboardView: View {
                 .padding(24)
             }
             .scrollIndicators(.automatic)
-            .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+            .clipShape(ThrownRect.lg)
         }
     }
 
@@ -363,43 +371,47 @@ struct DashboardView: View {
         }).prefix(3))
     }
 
-    /// Simple wrapping tag row — source tags read left to right and wrap to a
-    /// new line when the column runs out of width, rather than clipping.
+    /// Simple wrapping tag-coil row — source tags read left to right and
+    /// wrap to a new line when the column runs out of width.
     private struct FlowTags: View {
         let tags: [String]
 
         var body: some View {
             FlowLayout(spacing: 8) {
                 ForEach(tags, id: \.self) { tag in
-                    Text(tag)
-                        .font(NotefyFont.caption)
-                        .foregroundStyle(NotefyTheme.inkSoft)
-                        .padding(.horizontal, 12)
-                        .padding(.vertical, 7)
-                        .background(NotefyTheme.glassFillTag, in: Capsule())
-                        .overlay(Capsule().stroke(NotefyTheme.glassBorder, lineWidth: 1))
+                    TagCoil(text: tag)
                 }
             }
         }
     }
 
+    /// The one place the full splatter mark appears at scale, per the
+    /// system's own rule: one splatter, maximum, per screen.
     private var emptyPaper: some View {
         VStack(spacing: 18) {
-            ZStack {
-                InkSplatterMark(seed: 12, tint: NotefyTheme.pigment, opacity: 0.22)
-                    .frame(width: 128, height: 108)
-                NotedMark(tint: NotefyTheme.ink, knockout: NotefyTheme.sand)
-                    .frame(width: 46, height: 46)
-            }
-            .frame(width: 140, height: 112)
+            StoneinkMark(tint: Stoneink.cobalt100)
+                .frame(width: 96, height: 96)
 
             VStack(spacing: 8) {
-                Text("Bring the intangible here")
-                    .font(NotefyFont.sectionTitle)
-                Text("Tap Kami or use a hotkey while you browse. Only the things you choose become part of this page.")
-                    .font(NotefyFont.body)
-                    .foregroundStyle(NotefyTheme.inkSoft)
+                Text("Nothing kept yet")
+                    .font(StoneFont.title())
+                    .foregroundStyle(Stoneink.textPrimary)
+                Text("Capture anything on screen and it lands here.")
+                    .font(StoneFont.body())
+                    .foregroundStyle(Stoneink.textSecondary)
                     .multilineTextAlignment(.center)
+                    .frame(maxWidth: 280)
+
+                Text("⌘⇧N")
+                    .font(StoneFont.markMedium())
+                    .tracking(Stoneink.trMark * 11)
+                    .foregroundStyle(Stoneink.textMuted)
+                    .padding(.horizontal, 10)
+                    .frame(height: 24)
+                    .background(Stoneink.surfacePress)
+                    .clipShape(ThrownRect.press)
+                    .depthPress(ThrownRect.press)
+                    .padding(.top, 6)
             }
         }
     }
@@ -430,18 +442,18 @@ struct DashboardView: View {
 
     @ViewBuilder
     private var actionButtons: some View {
-        // Graphite pills float above the material — exactly one primary
-        // (pigment) pill per screen. Organize is the primary action here.
+        // One primary `ink` (cobalt) button per screen; everything else is
+        // `stamp`. Never floating, never glowing — the fired edge carries it.
         if mode == .raw {
             VStack(alignment: .trailing, spacing: 7) {
                 if showOrganizationChoices {
                     organizationChoices
                 }
                 HStack(spacing: 8) {
-                    GraphitePillButton(isSelecting ? "Done" : "Select", systemImage: isSelecting ? "checkmark" : "checkmark.circle") {
+                    StoneButton(title: isSelecting ? "Done" : "Select", systemImage: isSelecting ? "checkmark" : "checkmark.circle", variant: .stamp) {
                         isSelecting.toggle()
                     }
-                    GraphitePillButton("Organize", systemImage: showOrganizationChoices ? "xmark" : "arrow.up", primary: true) {
+                    StoneButton(title: "Organize", systemImage: showOrganizationChoices ? "xmark" : "arrow.up", variant: .ink) {
                         showOrganizationChoices.toggle()
                     }
                 }
@@ -452,10 +464,10 @@ struct DashboardView: View {
                     organizationChoices
                 }
                 HStack(spacing: 7) {
-                    GraphitePillButton("Template", systemImage: "square.grid.2x2", primary: true) {
+                    StoneButton(title: "Template", systemImage: "square.grid.2x2", variant: .ink) {
                         showOrganizationChoices.toggle()
                     }
-                    GraphitePillButton("Raw", systemImage: "arrow.left") {
+                    StoneButton(title: "Raw", systemImage: "arrow.left", variant: .stamp) {
                         mode = .raw
                     }
                 }
@@ -465,18 +477,18 @@ struct DashboardView: View {
 
     private var selectionToolbar: some View {
         HStack(spacing: 10) {
-            Text("\(appState.selectedStepIDs.count) SELECTED")
-                .font(NotefyFont.label).tracking(1)
-                .foregroundStyle(NotefyTheme.inkSoft)
+            Text("\(appState.selectedStepIDs.count) selected")
+                .font(StoneFont.mark()).tracking(Stoneink.trMark * 11)
+                .foregroundStyle(Stoneink.textSecondary)
 
             Button {
                 showMovePicker = true
             } label: {
                 Label("Move", systemImage: "arrow.right.doc.on.clipboard")
-                    .font(NotefyFont.label).tracking(0.6)
+                    .font(StoneFont.bodyMedium())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(NotefyTheme.ink)
+            .foregroundStyle(Stoneink.textPrimary)
             .popover(isPresented: $showMovePicker, arrowEdge: .bottom) {
                 NoteSearchPicker(
                     title: "Move to",
@@ -490,10 +502,10 @@ struct DashboardView: View {
                 showForwardPicker = true
             } label: {
                 Label("Forward", systemImage: "arrowshape.turn.up.right")
-                    .font(NotefyFont.label).tracking(0.6)
+                    .font(StoneFont.bodyMedium())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(NotefyTheme.ink)
+            .foregroundStyle(Stoneink.textPrimary)
             .popover(isPresented: $showForwardPicker, arrowEdge: .bottom) {
                 NoteSearchPicker(
                     title: "Forward to",
@@ -507,17 +519,17 @@ struct DashboardView: View {
                 appState.deleteSelectedSteps()
             } label: {
                 Label("Delete", systemImage: "trash")
-                    .font(NotefyFont.label).tracking(0.6)
+                    .font(StoneFont.bodyMedium())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(NotefyTheme.marginRose)
+            .foregroundStyle(Stoneink.oxide600)
 
             Button {
                 appState.clearStepSelection()
             } label: {
-                Text("CANCEL")
-                    .font(NotefyFont.label).tracking(0.8)
-                    .foregroundStyle(NotefyTheme.inkFaint)
+                Text("Cancel")
+                    .font(StoneFont.bodyMedium())
+                    .foregroundStyle(Stoneink.textMuted)
             }
             .buttonStyle(.plain)
         }
@@ -529,25 +541,24 @@ struct DashboardView: View {
             appState.organizeCurrentSession(as: template)
             mode = .organized
         } label: {
-            Label(template.rawValue.uppercased(), systemImage: icon)
-                .font(NotefyFont.label)
-                .tracking(0.8)
-                .foregroundStyle(NotefyTheme.inkStrong)
+            Label(template.rawValue, systemImage: icon)
+                .font(StoneFont.bodyMedium())
+                .foregroundStyle(Stoneink.textPrimary)
                 .padding(.horizontal, 14)
-                .padding(.vertical, 9)
-                .frame(width: 154, alignment: .leading)
-                .background(NotefyTheme.cardPaper, in: Capsule())
-                .emboss()
+                .frame(width: 154, height: 38, alignment: .leading)
+                .background(Stoneink.surfaceSlab)
+                .clipShape(ThrownRect.sm)
+                .depthSlab(ThrownRect.sm)
         }
         .buttonStyle(.plain)
     }
 
     private var organizationChoices: some View {
         VStack(alignment: .trailing, spacing: 7) {
-            Text(appState.visionStatus.uppercased())
-                .font(NotefyFont.caption)
-                .tracking(0.6)
-                .foregroundStyle(NotefyTheme.inkSoft)
+            Text(appState.visionStatus)
+                .font(StoneFont.mark())
+                .tracking(Stoneink.trMark * 11)
+                .foregroundStyle(Stoneink.textSecondary)
                 .frame(maxWidth: 270, alignment: .trailing)
             organizationChoice(.bulletList, icon: "list.bullet")
             organizationChoice(.essay, icon: "text.alignleft")
@@ -582,49 +593,49 @@ private struct OrganizedMarkdownView: View {
             EmptyView()
         } else if trimmed.hasPrefix("### ") {
             inlineMarkdown(String(trimmed.dropFirst(4)))
-                .font(NotefyFont.heading)
-                .foregroundStyle(NotefyTheme.ink)
+                .font(StoneFont.heading())
+                .foregroundStyle(Stoneink.textPrimary)
                 .padding(.top, 9)
                 .padding(.bottom, 4)
         } else if trimmed.hasPrefix("## ") {
             inlineMarkdown(String(trimmed.dropFirst(3)))
-                .font(NotefyFont.label)
+                .font(StoneFont.mark())
                 .tracking(1.1)
-                .foregroundStyle(NotefyTheme.inkSoft)
+                .foregroundStyle(Stoneink.textSecondary)
                 .padding(.top, 14)
                 .padding(.bottom, 7)
         } else if trimmed.hasPrefix("# ") {
             inlineMarkdown(String(trimmed.dropFirst(2)))
-                .font(NotefyFont.sectionTitle)
-                .foregroundStyle(NotefyTheme.ink)
+                .font(StoneFont.title())
+                .foregroundStyle(Stoneink.textPrimary)
                 .padding(.bottom, 10)
         } else if trimmed.hasPrefix("- [ ] ") {
             HStack(alignment: .top, spacing: 9) {
                 Image(systemName: "square")
                     .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(NotefyTheme.inkSoft)
+                    .foregroundStyle(Stoneink.textSecondary)
                     .padding(.top, 4)
                 inlineMarkdown(String(trimmed.dropFirst(6)))
-                    .font(NotefyFont.body)
-                    .foregroundStyle(NotefyTheme.ink)
+                    .font(StoneFont.body())
+                    .foregroundStyle(Stoneink.textPrimary)
             }
             .padding(.vertical, 3)
         } else if trimmed.hasPrefix("- ") {
             HStack(alignment: .top, spacing: 10) {
                 Circle()
-                    .fill(NotefyTheme.marginRose)
+                    .fill(Stoneink.oxide600)
                     .frame(width: 5, height: 5)
                     .padding(.top, 9)
                 inlineMarkdown(String(trimmed.dropFirst(2)))
-                    .font(NotefyFont.body)
-                    .foregroundStyle(NotefyTheme.ink)
+                    .font(StoneFont.body())
+                    .foregroundStyle(Stoneink.textPrimary)
                     .lineSpacing(4)
             }
             .padding(.vertical, 3)
         } else {
             inlineMarkdown(trimmed)
-                .font(NotefyFont.body)
-                .foregroundStyle(NotefyTheme.ink)
+                .font(StoneFont.body())
+                .foregroundStyle(Stoneink.textPrimary)
                 .lineSpacing(5)
                 .padding(.vertical, 2)
         }
@@ -657,7 +668,7 @@ private struct OrganizedDiagramView: View {
             diagramNode(
                 eyebrow: "CENTRAL QUESTION",
                 text: graph.centralQuestion,
-                tint: NotefyTheme.pebbleTan.opacity(0.58),
+                tint: Stoneink.cobalt050.opacity(0.58),
                 emphasis: true
             )
             .frame(maxWidth: 470)
@@ -688,7 +699,7 @@ private struct OrganizedDiagramView: View {
 
     private var legacyGraphBody: some View {
         VStack(spacing: 0) {
-            diagramNode(eyebrow: "CENTRAL QUESTION", text: centralQuestion, tint: NotefyTheme.pebbleTan.opacity(0.58), emphasis: true)
+            diagramNode(eyebrow: "CENTRAL QUESTION", text: centralQuestion, tint: Stoneink.cobalt050.opacity(0.58), emphasis: true)
                 .frame(maxWidth: 470)
             GraphStem(height: 28)
             ForEach(Array(tiers.enumerated()), id: \.offset) { index, tier in
@@ -717,55 +728,55 @@ private struct OrganizedDiagramView: View {
     private func integratedNode(step: ExplorationStep, index: Int) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             Text("THREAD \(index) · \(sourceName(for: step))".uppercased())
-                .font(NotefyFont.caption).tracking(0.9)
-                .foregroundStyle(NotefyTheme.inkSoft)
+                .font(StoneFont.mark()).tracking(0.9)
+                .foregroundStyle(Stoneink.textSecondary)
             Text(excerpt(for: step))
-                .font(NotefyFont.body)
-                .foregroundStyle(NotefyTheme.ink)
+                .font(StoneFont.body())
+                .foregroundStyle(Stoneink.textPrimary)
                 .lineLimit(5)
                 .fixedSize(horizontal: false, vertical: true)
             Rectangle()
-                .fill(NotefyTheme.ink.opacity(0.14))
+                .fill(Stoneink.textPrimary.opacity(0.14))
                 .frame(height: 1)
             Text("THEN…")
-                .font(NotefyFont.caption).tracking(0.8)
-                .foregroundStyle(NotefyTheme.inkSoft)
+                .font(StoneFont.mark()).tracking(0.8)
+                .foregroundStyle(Stoneink.textSecondary)
             Text(thought(for: step))
-                .font(NotefyFont.body)
-                .foregroundStyle(NotefyTheme.ink)
+                .font(StoneFont.body())
+                .foregroundStyle(Stoneink.textPrimary)
                 .lineLimit(4)
                 .fixedSize(horizontal: false, vertical: true)
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NotefyTheme.cardPaper)
+        .background(Stoneink.surfaceSlab)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(NotefyTheme.ink.opacity(0.14), lineWidth: 1))
-        .neomorphicDeboss(cornerRadius: 12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Stoneink.textPrimary.opacity(0.14), lineWidth: 1))
+        .depthSlab(RoundedRectangle(cornerRadius: 12))
     }
 
     private func semanticNode(_ node: ThoughtNode) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             Text("\(node.type.rawValue.uppercased()) · \(node.sourceIds.count) SOURCE\(node.sourceIds.count == 1 ? "" : "S")")
-                .font(NotefyFont.caption).tracking(0.9)
-                .foregroundStyle(NotefyTheme.inkSoft)
+                .font(StoneFont.mark()).tracking(0.9)
+                .foregroundStyle(Stoneink.textSecondary)
             Text(node.title)
-                .font(NotefyFont.body.weight(.medium))
-                .foregroundStyle(NotefyTheme.ink)
+                .font(StoneFont.bodyMedium())
+                .foregroundStyle(Stoneink.textPrimary)
                 .fixedSize(horizontal: false, vertical: true)
             if let summary = node.summary, !summary.isEmpty {
                 Text(summary)
-                    .font(NotefyFont.caption)
-                    .foregroundStyle(NotefyTheme.inkSoft)
+                    .font(StoneFont.mark())
+                    .foregroundStyle(Stoneink.textSecondary)
                     .lineLimit(4)
             }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(NotefyTheme.cardPaper)
+        .background(Stoneink.surfaceSlab)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(NotefyTheme.ink.opacity(0.14), lineWidth: 1))
-        .neomorphicDeboss(cornerRadius: 12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Stoneink.textPrimary.opacity(0.14), lineWidth: 1))
+        .depthSlab(RoundedRectangle(cornerRadius: 12))
     }
 
     private func semanticTiers(_ graph: ThoughtGraph) -> [[ThoughtNode]] {
@@ -787,11 +798,11 @@ private struct OrganizedDiagramView: View {
     private func diagramNode(eyebrow: String, text: String, tint: Color, emphasis: Bool = false) -> some View {
         VStack(alignment: .leading, spacing: 7) {
             Text(eyebrow.uppercased())
-                .font(NotefyFont.caption).tracking(0.9)
-                .foregroundStyle(NotefyTheme.inkSoft)
+                .font(StoneFont.mark()).tracking(0.9)
+                .foregroundStyle(Stoneink.textSecondary)
             Text(text)
-                .font(emphasis ? NotefyFont.heading : NotefyFont.body)
-                .foregroundStyle(NotefyTheme.ink)
+                .font(emphasis ? StoneFont.heading() : StoneFont.body())
+                .foregroundStyle(Stoneink.textPrimary)
                 .lineLimit(emphasis ? 3 : 6)
                 .fixedSize(horizontal: false, vertical: true)
         }
@@ -799,8 +810,8 @@ private struct OrganizedDiagramView: View {
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(tint)
         .clipShape(RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(NotefyTheme.ink.opacity(0.14), lineWidth: 1))
-        .neomorphicDeboss(cornerRadius: 12)
+        .overlay(RoundedRectangle(cornerRadius: 12).stroke(Stoneink.textPrimary.opacity(0.14), lineWidth: 1))
+        .depthSlab(RoundedRectangle(cornerRadius: 12))
     }
 
     private func excerpt(for step: ExplorationStep) -> String {
@@ -854,16 +865,16 @@ private struct GraphBranchArms: View {
             ForEach(0..<count, id: \.self) { index in
                 VStack(spacing: 0) {
                     Rectangle()
-                        .fill(NotefyTheme.inkSoft.opacity(0.45))
+                        .fill(Stoneink.textSecondary.opacity(0.45))
                         .frame(width: 1, height: 9)
                     Circle()
-                        .fill(NotefyTheme.inkSoft.opacity(0.7))
+                        .fill(Stoneink.textSecondary.opacity(0.7))
                         .frame(width: 5, height: 5)
                 }
                 .frame(maxWidth: .infinity)
                 if index < count - 1 {
                     Rectangle()
-                        .fill(NotefyTheme.inkSoft.opacity(0.35))
+                        .fill(Stoneink.textSecondary.opacity(0.35))
                         .frame(height: 1)
                         .frame(maxWidth: .infinity)
                 }
@@ -877,7 +888,7 @@ private struct GraphStem: View {
 
     var body: some View {
         Rectangle()
-            .fill(NotefyTheme.inkSoft.opacity(0.45))
+            .fill(Stoneink.textSecondary.opacity(0.45))
             .frame(width: 1, height: height)
     }
 }
@@ -892,12 +903,12 @@ private struct GraphArrow: View {
                 control1: CGPoint(x: size.width * 0.35, y: size.height * 0.12),
                 control2: CGPoint(x: size.width * 0.62, y: size.height * 0.88)
             )
-            context.stroke(line, with: .color(NotefyTheme.inkSoft), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
+            context.stroke(line, with: .color(Stoneink.textSecondary), style: StrokeStyle(lineWidth: 1.5, lineCap: .round))
             var tip = Path()
             tip.move(to: CGPoint(x: size.width - 18, y: size.height * 0.31))
             tip.addLine(to: CGPoint(x: size.width - 7, y: size.height / 2))
             tip.addLine(to: CGPoint(x: size.width - 18, y: size.height * 0.69))
-            context.stroke(tip, with: .color(NotefyTheme.inkSoft), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+            context.stroke(tip, with: .color(Stoneink.textSecondary), style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
         }
     }
 }
@@ -913,12 +924,12 @@ private struct CaptureStamp: View {
         VStack(alignment: .leading, spacing: 9) {
             HStack {
                 Text(sourceName.uppercased())
-                    .font(NotefyFont.label).tracking(1.1)
-                    .foregroundStyle(NotefyTheme.inkFaint)
+                    .font(StoneFont.mark()).tracking(1.1)
+                    .foregroundStyle(Stoneink.textMuted)
                 Spacer()
                 Text(step.timestamp, style: .time)
-                    .font(NotefyFont.caption)
-                    .foregroundStyle(NotefyTheme.inkFaint)
+                    .font(StoneFont.mark())
+                    .foregroundStyle(Stoneink.textMuted)
             }
 
             if let path = step.screenshotPath, let image = NSImage(contentsOfFile: path) {
@@ -930,20 +941,20 @@ private struct CaptureStamp: View {
 
             if let selected = displayText {
                 Text(selected)
-                    .font(NotefyFont.capturedBody)
-                    .foregroundStyle(NotefyTheme.ink)
+                    .font(StoneFont.body())
+                    .foregroundStyle(Stoneink.textPrimary)
                     .lineSpacing(3)
                     .textSelection(.enabled)
             }
             if let analysis {
                 Text(analysis)
-                    .font(NotefyFont.caption)
-                    .foregroundStyle(NotefyTheme.inkSoft)
+                    .font(StoneFont.mark())
+                    .foregroundStyle(Stoneink.textSecondary)
                     .lineLimit(4)
             }
             Text(sourceDescription)
-                .font(NotefyFont.caption)
-                .foregroundStyle(NotefyTheme.inkFaint)
+                .font(StoneFont.mark())
+                .foregroundStyle(Stoneink.textMuted)
         }
     }
 

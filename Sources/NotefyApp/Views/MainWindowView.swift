@@ -22,50 +22,34 @@ struct MainWindowView: View {
             } else {
                 GeometryReader { proxy in
                     let contentHeight = proxy.size.height - 48
-                    ZStack(alignment: .topLeading) {
-                        // The ambient field is ink on clay now, not a rainbow
-                        // wash: one pigment, softened into a stain rather than
-                        // a colour glow. Mostly hidden behind the opaque matte
-                        // panels — it only shows in the gaps between them.
-                        InkSplatterMark(seed: 3, opacity: 0.05)
-                            .frame(width: 640, height: 560)
-                            .blur(radius: 60)
-                            .offset(x: -420, y: 260)
-                            .allowsHitTesting(false)
-                        InkSplatterMark(seed: 7, opacity: 0.04)
-                            .frame(width: 560, height: 480)
-                            .blur(radius: 70)
-                            .offset(x: 480, y: -260)
-                            .allowsHitTesting(false)
-
-                        HStack(spacing: 24) {
-                            Sidebar(selection: $selection, collapsed: $sidebarCollapsed, proxyHeight: contentHeight)
-                            Group {
-                                switch selection {
-                                case .dashboard: DashboardView()
-                                case .history: HistoryView(openNote: { selection = .dashboard })
-                                case .settings: SettingsView()
-                                }
+                    HStack(spacing: Stoneink.sp5) {
+                        Sidebar(selection: $selection, collapsed: $sidebarCollapsed, proxyHeight: contentHeight)
+                        Group {
+                            switch selection {
+                            case .dashboard: DashboardView()
+                            case .history: HistoryView(openNote: { selection = .dashboard })
+                            case .settings: SettingsView()
                             }
-                            .frame(maxWidth: .infinity)
-                            .frame(height: contentHeight)
                         }
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                        .frame(maxWidth: .infinity)
+                        .frame(height: contentHeight)
                     }
                     .padding(24)
                 }
             }
         }
         .frame(minWidth: 980, minHeight: 680)
-        .background(NotefyTheme.sand)
-        .clipShape(FoldedRectangle(cornerRadius: 0, foldSize: NotefyTheme.foldSize))
-        .overlay(alignment: .topTrailing) { FoldAccent() }
+        // The bed: the ground slab. Darker than the cards resting on it —
+        // a worn work surface, not a light "airy" background. This
+        // inversion is the single most load-bearing decision in the system.
+        .background(Stoneink.surfaceBed)
+        .overlay(GrogOverlay().allowsHitTesting(false))
         .preferredColorScheme(.light)
     }
 }
 
-/// Collapsible sidebar: Pinned notes, Projects (nested folders), and Recents —
-/// mirroring the reference ChatGPT-style layout.
+/// Collapsible sidebar: Pinned notes, Projects (nested folders), and Recents.
+/// The sidebar itself is a slab resting on the bed.
 private struct Sidebar: View {
     @EnvironmentObject private var appState: AppState
     @Binding var selection: NotefySection
@@ -90,7 +74,7 @@ private struct Sidebar: View {
             if !collapsed {
                 searchBar
                 ScrollView {
-                    VStack(alignment: .leading, spacing: 8) {
+                    VStack(alignment: .leading, spacing: 2) {
                         if searchQuery.trimmingCharacters(in: .whitespaces).isEmpty {
                             defaultSections
                         } else {
@@ -110,11 +94,10 @@ private struct Sidebar: View {
         .padding(20)
         .frame(width: collapsed ? 64 : 280, height: proxyHeight, alignment: .top)
         .clipped()
-        .background(NotefyTheme.sandDeep)
-        .grain()
-        .clipShape(RoundedRectangle(cornerRadius: 24, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 24, style: .continuous).stroke(NotefyTheme.glassBorder, lineWidth: 1))
-        .shadow(color: NotefyTheme.panelShadowColor, radius: 24, x: 0, y: 12)
+        .background(Stoneink.surfaceSlab)
+        .overlay(GrogOverlay().allowsHitTesting(false))
+        .clipShape(ThrownRect.lg)
+        .depthSlab(ThrownRect.lg)
         .animation(.easeInOut(duration: 0.18), value: collapsed)
         .alert("Rename note", isPresented: $showRenameNote) {
             TextField("Note name", text: $renameText)
@@ -144,9 +127,7 @@ private struct Sidebar: View {
         appState.allNoteDestinationsByRecency.filter { !appState.isPinned($0.url) }
     }
 
-    /// Collapsed rail: keep this quiet and icon-only. The expanded sidebar
-    /// remains the place for note names; abbreviations are not meaningful at
-    /// this width and compete with the capture workspace.
+    /// Collapsed rail: quiet and icon-only.
     private var collapsedRail: some View {
         ScrollView {
             VStack(spacing: 10) {
@@ -154,7 +135,7 @@ private struct Sidebar: View {
                     collapsedNoteBadge(destination)
                 }
                 if !appState.pinnedNoteDestinations.isEmpty {
-                    Rectangle().fill(NotefyTheme.glassBorder).frame(height: 1).padding(.vertical, 2)
+                    Rectangle().fill(Stoneink.score).frame(height: 1).padding(.vertical, 2)
                 }
                 ForEach(recentUnpinned.prefix(6)) { destination in
                     collapsedNoteBadge(destination)
@@ -173,21 +154,13 @@ private struct Sidebar: View {
             appState.openNote(destination.url)
             selection = .dashboard
         } label: {
-            if isActive {
-                Image(systemName: "doc.text.fill")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(NotefyTheme.inkStrong)
-                    .frame(width: 36, height: 36)
-                    .background(NotefyTheme.sandDeep, in: Circle())
-                    .deboss(cornerRadius: 18)
-            } else {
-                Image(systemName: "doc.text")
-                    .font(.system(size: 16, weight: .medium))
-                    .foregroundStyle(NotefyTheme.inkSoft)
-                    .frame(width: 36, height: 36)
-                    .background(NotefyTheme.sandDeep, in: Circle())
-                    .emboss()
-            }
+            Image(systemName: isActive ? "doc.text.fill" : "doc.text")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(isActive ? Stoneink.cobalt600 : Stoneink.clay500)
+                .frame(width: 36, height: 36)
+                .background(isActive ? Stoneink.surfacePress : Color.clear)
+                .clipShape(ThrownRect.sm)
+                .modifier(ConditionalPress(isActive: isActive))
         }
         .buttonStyle(.plain)
         .help(destination.title)
@@ -212,7 +185,7 @@ private struct Sidebar: View {
             } label: {
                 Image(systemName: "plus")
                     .font(.system(size: 9, weight: .bold))
-                    .foregroundStyle(NotefyTheme.inkFaint)
+                    .foregroundStyle(Stoneink.clay500)
             }
             .buttonStyle(.plain)
         }
@@ -227,10 +200,10 @@ private struct Sidebar: View {
         Button {
             selection = .history
         } label: {
-            Text("SEE ALL IN LIBRARY")
-                .font(NotefyFont.label)
-                .tracking(1)
-                .foregroundStyle(NotefyTheme.inkFaint)
+            Text("See all in library")
+                .font(StoneFont.markMedium())
+                .tracking(Stoneink.trMark * 11)
+                .foregroundStyle(Stoneink.textMuted)
                 .padding(.horizontal, 12)
                 .padding(.top, 6)
         }
@@ -246,8 +219,8 @@ private struct Sidebar: View {
         }
         if results.isEmpty {
             Text("No notes match \u{201C}\(searchQuery)\u{201D}.")
-                .font(NotefyFont.caption)
-                .foregroundStyle(NotefyTheme.inkFaint)
+                .font(StoneFont.body())
+                .foregroundStyle(Stoneink.textMuted)
                 .padding(.horizontal, 12)
                 .padding(.top, 8)
         }
@@ -256,18 +229,12 @@ private struct Sidebar: View {
     private var header: some View {
         HStack(spacing: 8) {
             if !collapsed {
-                HStack(spacing: 14) {
-                    NotedMark(tint: NotefyTheme.ink, knockout: NotefyTheme.sandDeep)
+                HStack(spacing: 12) {
+                    StoneinkMark()
                         .frame(width: 20, height: 20)
-                        .background {
-                            InkSplatterMark(seed: 1, opacity: 0.16)
-                                .frame(width: 34, height: 34)
-                                .offset(x: -2, y: 3)
-                        }
                     Text("Noted")
-                        .font(NotefyFont.sectionTitle)
-                        .tracking(-0.4)
-                        .foregroundStyle(NotefyTheme.ink)
+                        .font(StoneFont.title())
+                        .foregroundStyle(Stoneink.textPrimary)
                 }
                 Spacer()
                 Button {
@@ -276,10 +243,11 @@ private struct Sidebar: View {
                 } label: {
                     Image(systemName: "plus")
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(NotefyTheme.ink)
-                        .padding(8)
-                        .background(NotefyTheme.sandDeep, in: Circle())
-                        .emboss()
+                        .foregroundStyle(Stoneink.textPrimary)
+                        .frame(width: 30, height: 30)
+                        .background(Stoneink.surfaceSlab)
+                        .clipShape(ThrownRect.sm)
+                        .depthSlab(ThrownRect.sm)
                 }
                 .buttonStyle(.plain)
                 .help("New note")
@@ -289,36 +257,34 @@ private struct Sidebar: View {
             } label: {
                 Image(systemName: collapsed ? "sidebar.right" : "sidebar.left")
                     .font(.system(size: 15))
-                    .foregroundStyle(NotefyTheme.inkSoft)
+                    .foregroundStyle(Stoneink.textSecondary)
             }
             .buttonStyle(.plain)
         }
     }
 
-    /// Search receives input, so per the elevation grammar it's debossed, not
-    /// raised — with the hairline glass stroke carried over from the source frame.
+    /// A well cut into the clay — inputs and search are pressed, never raised.
     private var searchBar: some View {
         HStack(spacing: 8) {
             Image(systemName: "magnifyingglass")
                 .font(.system(size: 12))
-                .foregroundStyle(NotefyTheme.inkFaint)
-            TextField("Search notes...", text: $searchQuery)
+                .foregroundStyle(Stoneink.clay500)
+            TextField("Search notes", text: $searchQuery)
                 .textFieldStyle(.plain)
-                .font(NotefyFont.body)
+                .font(StoneFont.body())
         }
         .padding(.horizontal, 12)
-        .padding(.vertical, 10)
-        .background(NotefyTheme.sandDeep)
-        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous).stroke(NotefyTheme.glassBorder, lineWidth: 1))
-        .debossSoft(cornerRadius: 12)
+        .frame(height: 36)
+        .background(Stoneink.surfacePress)
+        .clipShape(ThrownRect.press)
+        .depthPress(ThrownRect.press)
     }
 
     private func sectionLabel(_ title: String) -> some View {
         Text(title.uppercased())
-            .font(NotefyFont.label)
-            .tracking(1.2)
-            .foregroundStyle(NotefyTheme.inkFaint)
+            .font(StoneFont.markMedium())
+            .tracking(Stoneink.trMark * 11)
+            .foregroundStyle(Stoneink.textMuted)
             .padding(.horizontal, 4)
             .padding(.top, 8)
             .padding(.bottom, 2)
@@ -339,30 +305,25 @@ private struct Sidebar: View {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(folder.name)
-                        .font(NotefyFont.bodyMedium)
-                        .foregroundStyle(NotefyTheme.ink)
+                        .font(StoneFont.bodyMedium())
+                        .foregroundStyle(Stoneink.textPrimary)
                         .lineLimit(1)
                     Text("\(noteCount) note\(noteCount == 1 ? "" : "s")")
-                        .font(NotefyFont.label)
-                        .tracking(1)
-                        .foregroundStyle(NotefyTheme.inkFaint)
+                        .font(StoneFont.mark())
+                        .tracking(Stoneink.trMark * 11)
+                        .foregroundStyle(Stoneink.textMuted)
                 }
                 Spacer()
                 Image(systemName: isExpanded ? "chevron.down" : "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(NotefyTheme.inkFaint)
+                    .foregroundStyle(Stoneink.clay500)
             }
-            .padding(.leading, CGFloat(depth) * 14 + 12)
-            .padding(.trailing, 12)
-            .padding(.vertical, 10)
+            .padding(.leading, CGFloat(depth) * 14 + 10)
+            .padding(.trailing, 10)
+            .frame(height: 34)
             .frame(maxWidth: .infinity)
-            .background {
-                if isExpanded {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(NotefyTheme.sandDeep)
-                        .deboss(cornerRadius: 12)
-                }
-            }
+            .background(isExpanded ? Stoneink.surfaceSlab : Color.clear)
+            .clipShape(ThrownRect.sm)
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
@@ -397,6 +358,8 @@ private struct Sidebar: View {
         }
     }
 
+    /// Active: cobalt bloom fill + 2px cobalt rule on the left edge —
+    /// the selected-state grammar used everywhere in this system.
     private func noteRow(_ destination: NoteDestination, depth: Int) -> some View {
         let isActive = destination.url == appState.activeNoteURL
         return Button {
@@ -406,33 +369,33 @@ private struct Sidebar: View {
             HStack(alignment: .top, spacing: 8) {
                 VStack(alignment: .leading, spacing: 2) {
                     Text(destination.title)
-                        .font(isActive ? NotefyFont.heading : NotefyFont.bodyMedium)
-                        .foregroundStyle(NotefyTheme.ink)
+                        .font(StoneFont.bodyMedium())
+                        .foregroundStyle(Stoneink.textPrimary)
                         .lineLimit(1)
                     Text(DateFormatter.localizedString(from: appState.lastOpened(destination.url), dateStyle: .none, timeStyle: .short))
-                        .font(NotefyFont.label)
-                        .tracking(1)
-                        .foregroundStyle(NotefyTheme.inkFaint)
+                        .font(StoneFont.mark())
+                        .tracking(Stoneink.trMark * 11)
+                        .foregroundStyle(Stoneink.textMuted)
                 }
                 Spacer()
                 if appState.isPinned(destination.url) {
                     Image(systemName: "pin.fill")
                         .font(.system(size: 9))
-                        .foregroundStyle(NotefyTheme.marginRose)
+                        .foregroundStyle(Stoneink.amber600)
                 }
                 Image(systemName: "chevron.right")
                     .font(.system(size: 10, weight: .semibold))
-                    .foregroundStyle(NotefyTheme.inkFaint)
+                    .foregroundStyle(Stoneink.clay500)
             }
-            .padding(.leading, CGFloat(depth) * 14 + 12)
-            .padding(.trailing, 12)
-            .padding(.vertical, 10)
+            .padding(.leading, CGFloat(depth) * 14 + 10)
+            .padding(.trailing, 10)
+            .frame(height: 34)
             .frame(maxWidth: .infinity)
-            .background {
+            .background(isActive ? Stoneink.cobalt050 : Color.clear)
+            .clipShape(Capsule())
+            .overlay(alignment: .leading) {
                 if isActive {
-                    RoundedRectangle(cornerRadius: 12, style: .continuous)
-                        .fill(NotefyTheme.sandDeep)
-                        .deboss(cornerRadius: 12)
+                    Capsule().fill(Stoneink.cobalt600).frame(width: 2).padding(.vertical, 6).padding(.leading, 2)
                 }
             }
             .contentShape(Rectangle())
@@ -476,28 +439,28 @@ private struct Sidebar: View {
                     selection = .settings
                 } label: {
                     Image(systemName: "slider.horizontal.3")
-                        .foregroundStyle(NotefyTheme.inkSoft)
+                        .foregroundStyle(Stoneink.textSecondary)
                 }
                 .buttonStyle(.plain)
             } else {
                 HStack {
                     Text("Storage used")
-                        .font(NotefyFont.caption.weight(.regular))
-                        .foregroundStyle(NotefyTheme.inkSoft)
+                        .font(StoneFont.body())
+                        .foregroundStyle(Stoneink.textSecondary)
                     Spacer()
                     Text("\(appState.storageUsedPercent)%")
-                        .font(NotefyFont.label)
-                        .tracking(1)
-                        .foregroundStyle(NotefyTheme.inkFaint)
+                        .font(StoneFont.mark())
+                        .tracking(Stoneink.trMark * 11)
+                        .foregroundStyle(Stoneink.textMuted)
                 }
                 GeometryReader { proxy in
-                    RoundedRectangle(cornerRadius: 3, style: .continuous)
-                        .fill(NotefyTheme.sandDeep)
-                        .debossSoft(cornerRadius: 3)
+                    Capsule()
+                        .fill(Stoneink.surfacePress)
+                        .depthStamp(Capsule())
                         .overlay(alignment: .leading) {
-                            RoundedRectangle(cornerRadius: 3, style: .continuous)
-                                .fill(NotefyTheme.inkMid)
-                                .frame(width: proxy.size.width * CGFloat(appState.storageUsedPercent) / 100)
+                            Capsule()
+                                .fill(Stoneink.cobalt600)
+                                .frame(width: max(6, proxy.size.width * CGFloat(appState.storageUsedPercent) / 100))
                         }
                 }
                 .frame(height: 6)
@@ -505,14 +468,15 @@ private struct Sidebar: View {
                 HStack {
                     HStack(spacing: 10) {
                         Text(userInitials)
-                            .font(NotefyFont.mono.weight(.semibold))
-                            .foregroundStyle(NotefyTheme.inkSoft)
-                            .frame(width: 36, height: 36)
-                            .background(NotefyTheme.sandDeep, in: Circle())
-                            .emboss()
+                            .font(StoneFont.markMedium())
+                            .foregroundStyle(Stoneink.textSecondary)
+                            .frame(width: 34, height: 34)
+                            .background(Stoneink.surfaceSlab)
+                            .clipShape(Circle())
+                            .depthSlab(Circle())
                         Text(appState.fullUserDisplayName)
-                            .font(NotefyFont.heading)
-                            .foregroundStyle(NotefyTheme.ink)
+                            .font(StoneFont.bodyMedium())
+                            .foregroundStyle(Stoneink.textPrimary)
                     }
                     Spacer()
                     Button {
@@ -520,11 +484,11 @@ private struct Sidebar: View {
                     } label: {
                         Image(systemName: "slider.horizontal.3")
                             .font(.system(size: 13))
-                            .foregroundStyle(NotefyTheme.inkSoft)
-                            .padding(8)
-                            .background(NotefyTheme.glassFillStrong)
-                            .clipShape(RoundedRectangle(cornerRadius: 10, style: .continuous))
-                            .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous).stroke(NotefyTheme.glassBorder, lineWidth: 1))
+                            .foregroundStyle(Stoneink.textSecondary)
+                            .frame(width: 32, height: 32)
+                            .background(Stoneink.surfaceSlab)
+                            .clipShape(ThrownRect.sm)
+                            .depthSlab(ThrownRect.sm)
                     }
                     .buttonStyle(.plain)
                     .help("Settings")
@@ -533,11 +497,7 @@ private struct Sidebar: View {
             }
         }
         .padding(.top, collapsed ? 0 : 12)
-        .overlay(alignment: .top) {
-            if !collapsed {
-                Rectangle().fill(NotefyTheme.glassBorder).frame(height: 1)
-            }
-        }
+        .scoreLineTop2(hidden: collapsed)
     }
 
     private var userInitials: String {
@@ -548,5 +508,53 @@ private struct Sidebar: View {
             .map(String.init)
             .joined()
             .uppercased()
+    }
+}
+
+private struct ConditionalPress: ViewModifier {
+    let isActive: Bool
+    func body(content: Content) -> some View {
+        if isActive {
+            content.depthPress(ThrownRect.sm)
+        } else {
+            content
+        }
+    }
+}
+
+private extension View {
+    @ViewBuilder
+    func scoreLineTop2(hidden: Bool) -> some View {
+        if hidden {
+            self
+        } else {
+            self.overlay(alignment: .top) {
+                VStack(spacing: 0) {
+                    Rectangle().fill(Stoneink.score).frame(height: 1)
+                    Rectangle().fill(Color.stoneEdgeLight).frame(height: 1)
+                }
+            }
+        }
+    }
+}
+
+/// The grog overlay — porcelain tooth. A stable procedural noise field,
+/// multiplied at very low opacity. Applied to the bed and every slab;
+/// never to a translucent/blurred surface (there are none in this system).
+struct GrogOverlay: View {
+    var opacity: Double = Stoneink.grogOpacity
+    var body: some View {
+        Canvas { context, size in
+            var generator = SeededGenerator(seed: 11)
+            let count = Int(size.width * size.height / 7)
+            for _ in 0..<count {
+                let x = CGFloat.random(in: 0...size.width, using: &generator)
+                let y = CGFloat.random(in: 0...size.height, using: &generator)
+                let rect = CGRect(x: x, y: y, width: 1, height: 1)
+                context.fill(Path(rect), with: .color(.black))
+            }
+        }
+        .blendMode(.multiply)
+        .opacity(opacity)
     }
 }
