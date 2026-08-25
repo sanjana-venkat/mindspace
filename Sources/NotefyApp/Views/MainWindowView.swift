@@ -42,8 +42,8 @@ struct MainWindowView: View {
                             case .settings: SettingsView()
                             }
                         }
-                        .frame(maxWidth: .infinity)
-                        .frame(height: contentHeight)
+                        .frame(maxWidth: .infinity, alignment: .top)
+                        .frame(height: contentHeight, alignment: .top)
                         .padding(.top, topInset)
                     }
                     .padding(.horizontal, 24)

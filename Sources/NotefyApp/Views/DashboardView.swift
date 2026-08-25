@@ -152,16 +152,13 @@ struct DashboardView: View {
 
     private var rawPage: some View {
         GeometryReader { proxy in
-            // Capture column reads bigger than the notes column — it's the
-            // evidence; the thought is a short annotation beside it. The two
-            // minimums (notes column legibility, capture column usefulness)
-            // can't both be honored in a narrow window, so panelWidth yields
-            // first — leftWidth's minimum always wins, never overlapped.
+            // Notes column stays a fixed, legible width; the capture panel
+            // claims all remaining space and runs to the right edge — it's
+            // the evidence, the thought is a short annotation beside it.
             let columnGap: CGFloat = 28
             let minLeftWidth: CGFloat = 270
-            let preferredPanelWidth = min(760, max(520, proxy.size.width * 0.74))
-            let panelWidth = min(preferredPanelWidth, proxy.size.width - minLeftWidth - columnGap)
-            let leftWidth = max(minLeftWidth, proxy.size.width - panelWidth - columnGap)
+            let leftWidth = minLeftWidth
+            let panelWidth = max(420, proxy.size.width - leftWidth - columnGap)
             let captureWidth = panelWidth - 8
             let steps = Array(appState.steps.reversed())
 
