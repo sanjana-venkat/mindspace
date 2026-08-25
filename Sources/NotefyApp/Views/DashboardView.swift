@@ -29,7 +29,7 @@ struct DashboardView: View {
         // matching reduction in pageViewport's own top padding below, so the
         // note column's absolute position doesn't move when this changes —
         // only the tab strip's distance from the window top does.
-        .padding(.top, 20)
+        .padding(.top, 10)
         .background(Color.clear)
     }
 
