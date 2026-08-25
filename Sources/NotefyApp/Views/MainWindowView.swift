@@ -22,12 +22,19 @@ struct MainWindowView: View {
             } else {
                 GeometryReader { proxy in
                     // Extra top clearance: with the title bar hidden, the
-                    // traffic lights float directly over our own content, so
-                    // the sidebar and dashboard both need real room to clear them.
-                    let topInset: CGFloat = 76
-                    let contentHeight = proxy.size.height - topInset - 24
-                    HStack(spacing: Stoneink.sp5) {
-                        Sidebar(selection: $selection, collapsed: $sidebarCollapsed, proxyHeight: contentHeight)
+                    // traffic lights float directly over the content column
+                    // (its tab strip needs real room). The sidebar has its
+                    // own chrome and no tab strip to clear, so it only needs
+                    // enough padding to keep its logo out from under the
+                    // traffic lights — not the full inset the tabs need.
+                    let topInset: CGFloat = 52
+                    let sidebarTopInset: CGFloat = 20
+                    let bottomInset: CGFloat = 24
+                    let contentHeight = proxy.size.height - topInset - bottomInset
+                    let sidebarHeight = proxy.size.height - sidebarTopInset - bottomInset
+                    HStack(alignment: .top, spacing: Stoneink.sp5) {
+                        Sidebar(selection: $selection, collapsed: $sidebarCollapsed, proxyHeight: sidebarHeight)
+                            .padding(.top, sidebarTopInset)
                         Group {
                             switch selection {
                             case .dashboard: DashboardView()
@@ -37,10 +44,10 @@ struct MainWindowView: View {
                         }
                         .frame(maxWidth: .infinity)
                         .frame(height: contentHeight)
+                        .padding(.top, topInset)
                     }
                     .padding(.horizontal, 24)
-                    .padding(.top, topInset)
-                    .padding(.bottom, 24)
+                    .padding(.bottom, bottomInset)
                 }
             }
         }

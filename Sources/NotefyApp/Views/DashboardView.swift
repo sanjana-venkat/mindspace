@@ -25,7 +25,7 @@ struct DashboardView: View {
             .overlay(alignment: .bottom) { actionShelf }
         }
         .padding(.horizontal, 46)
-        .padding(.top, 20)
+        .padding(.top, 8)
         .background(Color.clear)
     }
 
@@ -160,7 +160,7 @@ struct DashboardView: View {
             let preferredPanelWidth = min(760, max(520, proxy.size.width * 0.74))
             let panelWidth = min(preferredPanelWidth, proxy.size.width - minLeftWidth - columnGap)
             let leftWidth = max(minLeftWidth, proxy.size.width - panelWidth - columnGap)
-            let captureWidth = panelWidth - 24
+            let captureWidth = panelWidth - 8
             let steps = Array(appState.steps.reversed())
 
             ZStack(alignment: .topTrailing) {
@@ -199,7 +199,7 @@ struct DashboardView: View {
 
                             if let first = steps.first {
                                 rawCaptureBlock(first)
-                                    .padding(.horizontal, 12)
+                                    .padding(.horizontal, 4)
                                     .frame(width: captureWidth, alignment: .leading)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                             } else {
@@ -215,7 +215,7 @@ struct DashboardView: View {
                                 rawThoughtBlock(step)
                                     .frame(width: leftWidth, alignment: .leading)
                                 rawCaptureBlock(step)
-                                    .padding(.horizontal, 12)
+                                    .padding(.horizontal, 4)
                                     .frame(width: captureWidth, alignment: .leading)
                                     .frame(maxWidth: .infinity, alignment: .trailing)
                             }
