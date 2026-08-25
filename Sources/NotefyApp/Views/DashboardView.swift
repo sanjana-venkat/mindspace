@@ -25,7 +25,11 @@ struct DashboardView: View {
             .overlay(alignment: .bottom) { actionShelf }
         }
         .padding(.horizontal, 46)
-        .padding(.top, 8)
+        // The extra clearance above the tab strip is cancelled out by the
+        // matching reduction in pageViewport's own top padding below, so the
+        // note column's absolute position doesn't move when this changes —
+        // only the tab strip's distance from the window top does.
+        .padding(.top, 20)
         .background(Color.clear)
     }
 
@@ -37,13 +41,11 @@ struct DashboardView: View {
             // the dashboard's outer page scroller.
             rawPage
                 .padding(.horizontal, 42)
-                .padding(.top, 12)
                 .padding(.bottom, 110)
         } else {
             ScrollView {
                 pageContent
                     .padding(.horizontal, 42)
-                    .padding(.top, 12)
                     .padding(.bottom, 110)
             }
         }
