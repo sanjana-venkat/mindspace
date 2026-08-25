@@ -151,36 +151,49 @@ struct DashboardView: View {
     }
 
     // No enclosing well: captures rest flat on the bed as their own small
-    // clay cards, not held inside one big panel. The note itself — title,
-    // tags — stays fixed at the top-left as the anchor the captures
-    // gather around, so the whole page reads as one blob of note rather
-    // than two boxed-off panels side by side.
+    // clay cards, not held inside one big panel. No left/right split
+    // either — the title sits at the top and everything else, one thought
+    // + capture pair at a time, stacks straight down beneath it. The
+    // paging scroll still snaps to exactly one pair at a time, so it
+    // reads as one blob of note you focus through rather than a wall of
+    // cards you skim.
     private var rawPage: some View {
         let steps = Array(appState.steps.reversed())
-        return HStack(alignment: .top, spacing: 28) {
+        return VStack(alignment: .leading, spacing: 22) {
             rawNoteHeader
-                .frame(width: 270, alignment: .leading)
 
             if steps.isEmpty {
                 emptyPaper
                     .padding(28)
-                    .frame(maxWidth: .infinity, minHeight: 420, alignment: .center)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
             } else {
-                ScrollView(.vertical) {
-                    LazyVStack(alignment: .leading, spacing: 30) {
-                        ForEach(steps) { step in
-                            VStack(alignment: .leading, spacing: 10) {
-                                rawThoughtBlock(step)
-                                rawCaptureBlock(step)
+                GeometryReader { proxy in
+                    ScrollView(.vertical) {
+                        LazyVStack(alignment: .leading, spacing: 0) {
+                            ForEach(steps) { step in
+                                // The capture scrolls internally if it's
+                                // taller than the page itself — nothing
+                                // gets clipped, it's just reachable by
+                                // scrolling that one card in place.
+                                ScrollView(.vertical) {
+                                    VStack(alignment: .leading, spacing: 12) {
+                                        rawThoughtBlock(step)
+                                        rawCaptureBlock(step)
+                                    }
+                                }
+                                .scrollIndicators(.hidden)
+                                .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
+                                .revealTransition()
                             }
                         }
+                        .scrollTargetLayout()
                     }
-                    .padding(.bottom, 48)
+                    .scrollTargetBehavior(.paging)
+                    .scrollIndicators(.hidden)
                 }
-                .scrollIndicators(.hidden)
             }
         }
-        .frame(maxWidth: .infinity, alignment: .topLeading)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
     }
 
     @ViewBuilder
