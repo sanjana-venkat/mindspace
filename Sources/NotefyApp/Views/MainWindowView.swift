@@ -24,7 +24,7 @@ struct MainWindowView: View {
                     // Extra top clearance: with the title bar hidden, the
                     // traffic lights float directly over our own content, so
                     // the sidebar and dashboard both need real room to clear them.
-                    let topInset: CGFloat = 44
+                    let topInset: CGFloat = 76
                     let contentHeight = proxy.size.height - topInset - 24
                     HStack(spacing: Stoneink.sp5) {
                         Sidebar(selection: $selection, collapsed: $sidebarCollapsed, proxyHeight: contentHeight)
