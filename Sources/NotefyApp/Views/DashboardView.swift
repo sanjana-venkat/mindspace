@@ -206,7 +206,14 @@ struct DashboardView: View {
                                 // clipped off the bottom, it's just reachable
                                 // by scrolling this one card instead.
                                 ScrollView(.vertical) {
+                                    // A ScrollView only clips to the width
+                                    // you give it — it doesn't hand that
+                                    // width down to content, which sizes to
+                                    // its own ideal (narrower) width unless
+                                    // told otherwise. Force it explicitly so
+                                    // the card actually fills the panel.
                                     rawCaptureBlock(first)
+                                        .frame(width: captureWidth - 8, alignment: .leading)
                                         .padding(.horizontal, 4)
                                 }
                                 .scrollIndicators(.hidden)
@@ -226,6 +233,7 @@ struct DashboardView: View {
                                     .frame(width: leftWidth, alignment: .leading)
                                 ScrollView(.vertical) {
                                     rawCaptureBlock(step)
+                                        .frame(width: captureWidth - 8, alignment: .leading)
                                         .padding(.horizontal, 4)
                                 }
                                 .scrollIndicators(.hidden)
