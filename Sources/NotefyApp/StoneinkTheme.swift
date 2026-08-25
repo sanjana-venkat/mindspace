@@ -230,6 +230,7 @@ enum StoneFont {
     static func title() -> Font { .custom("NewsreaderRoman-72pt", size: Stoneink.tTitle) }
     static func heading() -> Font { .custom("NewsreaderRoman-72pt", size: Stoneink.tHeading) }
     static func read() -> Font { .custom("NewsreaderRoman-Regular", size: Stoneink.tRead) }
+    static func readSmall() -> Font { .custom("NewsreaderRoman-Regular", size: Stoneink.tRead - 2) }
     static func readSemibold() -> Font { .custom("NewsreaderRoman-SemiBold", size: Stoneink.tSubhead) }
     static func readItalic() -> Font { .custom("NewsreaderItalic-Italic", size: Stoneink.tRead) }
 
@@ -394,8 +395,11 @@ struct TagCoil: View {
             .font(StoneFont.markMedium())
             .tracking(Stoneink.trMark * 11)
             .foregroundStyle(textColor)
+            .lineLimit(1)
+            .truncationMode(.tail)
             .padding(.horizontal, Stoneink.sp2)
             .frame(height: 22)
+            .frame(maxWidth: 200, alignment: .leading)
             .background(fill, in: Capsule())
     }
 }

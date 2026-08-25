@@ -25,7 +25,7 @@ struct DashboardView: View {
             .overlay(alignment: .bottom) { actionShelf }
         }
         .padding(.horizontal, 46)
-        .padding(.top, 80)
+        .padding(.top, 104)
         .background(Color.clear)
     }
 
@@ -149,9 +149,9 @@ struct DashboardView: View {
 
     private var rawPage: some View {
         GeometryReader { proxy in
-            let panelWidth = min(500, max(390, proxy.size.width * 0.54))
+            let panelWidth = min(640, max(460, proxy.size.width * 0.66))
             let columnGap: CGFloat = 34
-            let leftWidth = max(280, proxy.size.width - panelWidth - columnGap)
+            let leftWidth = max(220, proxy.size.width - panelWidth - columnGap)
             let captureWidth = panelWidth - 48
             let steps = Array(appState.steps.reversed())
 
@@ -176,6 +176,8 @@ struct DashboardView: View {
                 // One scroll stream owns paired rows. A note and its capture
                 // leave the viewport together, so the next pair is revealed
                 // as one coherent unit rather than as two drifting columns.
+                // Scroll-target snapping makes each pair settle into view
+                // like a held clay slab, rather than drifting to a stop.
                 ScrollView(.vertical) {
                     VStack(alignment: .leading, spacing: 28) {
                         ZStack(alignment: .topLeading) {
@@ -197,6 +199,12 @@ struct DashboardView: View {
                             }
                         }
                         .frame(width: proxy.size.width, alignment: .topLeading)
+                        .scrollTransition(.interactive, axis: .vertical) { content, phase in
+                            content
+                                .opacity(phase.isIdentity ? 1 : 0.78)
+                                .scaleEffect(phase.isIdentity ? 1 : 0.985)
+                                .offset(y: phase.isIdentity ? 0 : phase.value * 14)
+                        }
 
                         ForEach(Array(steps.dropFirst())) { step in
                             ZStack(alignment: .topLeading) {
@@ -211,14 +219,17 @@ struct DashboardView: View {
                             .scrollTransition(.interactive, axis: .vertical) { content, phase in
                                 content
                                     .opacity(phase.isIdentity ? 1 : 0.78)
-                                    .offset(y: phase.isIdentity ? 0 : phase.value * 10)
+                                    .scaleEffect(phase.isIdentity ? 1 : 0.985)
+                                    .offset(y: phase.isIdentity ? 0 : phase.value * 14)
                             }
                         }
                     }
+                    .scrollTargetLayout()
                     .frame(width: proxy.size.width, alignment: .topLeading)
                     .padding(.top, 24)
                     .padding(.bottom, 40)
                 }
+                .scrollTargetBehavior(.viewAligned)
                 .scrollIndicators(.automatic)
                 .frame(width: proxy.size.width, height: 620, alignment: .topLeading)
                 .clipShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
@@ -241,9 +252,9 @@ struct DashboardView: View {
                 // (the ink) appears in UI chrome, per the type rule. Set on
                 // the cobalt highlighter wash: ink lands on clay.
                 Text(annotation)
-                    .font(StoneFont.read())
+                    .font(StoneFont.readSmall())
                     .foregroundStyle(Stoneink.textPrimary)
-                    .lineSpacing(Stoneink.tRead * (Stoneink.lhRead - 1))
+                    .lineSpacing((Stoneink.tRead - 2) * (Stoneink.lhRead - 1))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 6)
