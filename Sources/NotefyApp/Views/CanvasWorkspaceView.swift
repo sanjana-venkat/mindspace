@@ -27,7 +27,6 @@ struct CanvasWorkspaceView: View {
     @State private var settingsOpen = false
     @State private var zoom: CGFloat = 0.84
     @State private var selectedIndex = 0
-    @State private var inkRipple = false
     @FocusState private var keyboardFocused: Bool
 
     private var notes: [CanvasNoteSnapshot] {
@@ -92,9 +91,6 @@ struct CanvasWorkspaceView: View {
                 .zIndex(5)
             }
 
-            InkRippleTransition(active: inkRipple)
-                .allowsHitTesting(false)
-                .zIndex(8)
         }
         .focusable()
         .focused($keyboardFocused)
@@ -135,7 +131,6 @@ struct CanvasWorkspaceView: View {
 
     private func openNote(_ snapshot: CanvasNoteSnapshot) {
         appState.openNote(snapshot.url)
-        playInkRipple()
         withAnimation(.spring(response: 0.52, dampingFraction: 0.86)) {
             route = .reading(snapshot.url)
         }
@@ -146,15 +141,9 @@ struct CanvasWorkspaceView: View {
         if case .folder(let id) = folderFilter { folderID = id } else { folderID = nil }
         let destination = appState.createNewNote(inFolder: folderID)
         appState.openNote(destination.url)
-        playInkRipple()
         withAnimation(.spring(response: 0.52, dampingFraction: 0.86)) {
             route = .reading(destination.url)
         }
-    }
-
-    private func playInkRipple() {
-        inkRipple = true
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.72) { inkRipple = false }
     }
 }
 
@@ -329,7 +318,6 @@ private struct CaptureReadingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var activeCaptureID: UUID?
     @State private var tab: ReaderTab = .raw
-    @State private var tabRipple = false
 
     private var activeStep: ExplorationStep? {
         appState.steps.first { $0.id == activeCaptureID } ?? appState.steps.last
@@ -342,7 +330,7 @@ private struct CaptureReadingView: View {
 
     var body: some View {
         VStack(spacing: 0) {
-            ReaderTabBar(selection: $tab, ripple: $tabRipple)
+            ReaderTabBar(selection: $tab)
                 .padding(.top, 78).padding(.bottom, 8)
 
             Group {
@@ -365,7 +353,6 @@ private struct CaptureReadingView: View {
             }
             .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: tab)
         }
-        .overlay { InkRippleTransition(active: tabRipple).allowsHitTesting(false) }
     }
 
     private var rawNoteColumn: some View {
@@ -439,7 +426,6 @@ private struct CaptureReadingView: View {
 
 private struct ReaderTabBar: View {
     @Binding var selection: ReaderTab
-    @Binding var ripple: Bool
     @Namespace private var inkSelection
 
     var body: some View {
@@ -447,9 +433,7 @@ private struct ReaderTabBar: View {
             ForEach(ReaderTab.allCases) { tab in
                 Button {
                     guard selection != tab else { return }
-                    ripple = true
                     withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) { selection = tab }
-                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { ripple = false }
                 } label: {
                     Text(tab.rawValue.uppercased())
                         .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.2)
@@ -488,7 +472,8 @@ private struct OrganizedEssayView: View {
                             .padding(.horizontal, 12).frame(height: 30)
                             .background(CanvasPalette.inkBlue.opacity(0.09), in: Capsule())
                         Spacer()
-                        organizeMenu
+                        OrganizationPicker()
+                            .environmentObject(appState)
                     }
 
                     Text(appState.noteTitle)
@@ -503,7 +488,8 @@ private struct OrganizedEssayView: View {
                                 .font(.custom("Newsreader", size: 22))
                             Text("Choose a structure and Noted will turn the raw note and captures into one readable page using your configured model.")
                                 .font(.custom("Newsreader", size: 17)).lineSpacing(7).opacity(0.58)
-                            organizeMenu
+                            OrganizationPicker()
+                                .environmentObject(appState)
                         }
                         .padding(.vertical, 45)
                     } else {
@@ -524,23 +510,6 @@ private struct OrganizedEssayView: View {
             }
             .scrollIndicators(.hidden)
         }
-    }
-
-    private var organizeMenu: some View {
-        Menu {
-            ForEach(OrganizationTemplate.allCases) { template in
-                Button { appState.organizeCurrentSession(as: template) } label: {
-                    Label(template.rawValue, systemImage: template.icon)
-                }
-            }
-        } label: {
-            Label(appState.organizedDraft.isEmpty ? "Organize" : "Reorganize", systemImage: "sparkles")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .padding(.horizontal, 14).frame(height: 38)
-                .foregroundStyle(CanvasPalette.paper)
-                .background(CanvasPalette.inkBlue, in: Capsule())
-        }
-        .menuStyle(.borderlessButton).fixedSize()
     }
 
     private var essayBlocks: [EssayBlock] {
@@ -575,6 +544,65 @@ private struct OrganizedEssayView: View {
         }
         flushParagraph()
         return blocks
+    }
+}
+
+private struct OrganizationPicker: View {
+    @EnvironmentObject private var appState: AppState
+    @State private var isOpen = false
+
+    var body: some View {
+        Button { isOpen.toggle() } label: {
+            Label(appState.organizedDraft.isEmpty ? "Organize" : "Reorganize", systemImage: "sparkles")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .padding(.horizontal, 14).frame(height: 38)
+                .foregroundStyle(CanvasPalette.paper)
+                .background(CanvasPalette.inkBlue, in: Capsule())
+                .overlay(alignment: .topTrailing) {
+                    Circle().fill(CanvasPalette.inkBlueLight).frame(width: 7).offset(x: 2, y: -2)
+                }
+        }
+        .buttonStyle(.plain)
+        .popover(isPresented: $isOpen, arrowEdge: .bottom) {
+            VStack(alignment: .leading, spacing: 5) {
+                HStack {
+                    Text("SHAPE THIS NOTE")
+                        .font(.system(size: 9, weight: .black, design: .monospaced)).tracking(1.4)
+                        .foregroundStyle(CanvasPalette.inkBlue.opacity(0.58))
+                    Spacer()
+                    Circle().fill(CanvasPalette.inkBlue.opacity(0.22)).frame(width: 8)
+                    Circle().fill(CanvasPalette.inkBlue.opacity(0.12)).frame(width: 4)
+                }
+                .padding(.horizontal, 10).padding(.bottom, 6)
+
+                ForEach(OrganizationTemplate.allCases) { template in
+                    Button {
+                        isOpen = false
+                        appState.organizeCurrentSession(as: template)
+                    } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: template.icon).frame(width: 18)
+                            Text(template.rawValue)
+                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            Spacer()
+                            if appState.organizedTemplate == template {
+                                Image(systemName: "checkmark").font(.system(size: 10, weight: .black))
+                            }
+                        }
+                        .foregroundStyle(appState.organizedTemplate == template ? CanvasPalette.paper : CanvasPalette.ink)
+                        .padding(.horizontal, 11).frame(height: 42)
+                        .background(appState.organizedTemplate == template ? CanvasPalette.inkBlue : .clear, in: RoundedRectangle(cornerRadius: 11))
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(12).frame(width: 248)
+            .background(CanvasPalette.paper)
+            .overlay(alignment: .bottomTrailing) {
+                CanvasInkBlob().fill(CanvasPalette.inkBlue.opacity(0.07)).frame(width: 90, height: 70).offset(x: 16, y: 16).clipped()
+                    .allowsHitTesting(false)
+            }
+        }
     }
 }
 
@@ -716,12 +744,52 @@ private struct CanvasFolderOverlay: View {
     @Binding var filter: CanvasFolderFilter
     @Binding var isOpen: Bool
     let notes: [CanvasNoteSnapshot]
+    @State private var creatingFolder = false
+    @State private var newFolderName = ""
+    @FocusState private var nameFocused: Bool
 
     var body: some View {
         ZStack(alignment: .topLeading) {
             Color.black.opacity(0.06).ignoresSafeArea().onTapGesture { withAnimation { isOpen = false } }
             VStack(alignment: .leading, spacing: 4) {
-                Text("FOLDERS").font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.5).opacity(0.48).padding(.bottom, 8)
+                HStack {
+                    Text("FOLDERS")
+                        .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.5).opacity(0.48)
+                    Spacer()
+                    Button {
+                        withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) { creatingFolder = true }
+                        DispatchQueue.main.async { nameFocused = true }
+                    } label: {
+                        Image(systemName: "plus")
+                            .font(.system(size: 12, weight: .bold))
+                            .frame(width: 28, height: 28)
+                            .background(CanvasPalette.inkBlue.opacity(0.10), in: Circle())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("Create folder")
+                }
+                .padding(.bottom, 8)
+
+                if creatingFolder {
+                    HStack(spacing: 8) {
+                        Image(systemName: "folder.fill").foregroundStyle(CanvasPalette.inkBlue)
+                        TextField("Folder name", text: $newFolderName)
+                            .textFieldStyle(.plain)
+                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .focused($nameFocused)
+                            .onSubmit(createFolder)
+                            .onExitCommand(perform: cancelFolder)
+                        Button(action: createFolder) {
+                            Image(systemName: "checkmark")
+                                .font(.system(size: 11, weight: .bold))
+                        }
+                        .buttonStyle(.plain)
+                        .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+                    }
+                    .padding(.horizontal, 12).frame(height: 42)
+                    .background(CanvasPalette.inkBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 11))
+                    .transition(.opacity.combined(with: .move(edge: .top)))
+                }
                 folderButton("All notes", count: notes.count, value: .all)
                 folderButton("Unfiled", count: notes.filter { $0.folderID == nil }.count, value: .unfiled)
                 if !appState.workspace.folders.isEmpty { Divider().opacity(0.18).padding(.vertical, 5) }
@@ -752,6 +820,21 @@ private struct CanvasFolderOverlay: View {
         }
         .buttonStyle(.plain)
         .background(filter == value ? CanvasPalette.inkBlue.opacity(0.11) : .clear, in: RoundedRectangle(cornerRadius: 11))
+    }
+
+    private func createFolder() {
+        let name = newFolderName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !name.isEmpty else { return }
+        let id = appState.createFolder(name: name)
+        filter = .folder(id)
+        newFolderName = ""
+        creatingFolder = false
+        withAnimation { isOpen = false }
+    }
+
+    private func cancelFolder() {
+        newFolderName = ""
+        withAnimation { creatingFolder = false }
     }
 }
 
@@ -833,27 +916,5 @@ private struct InkSplashCluster: View {
             Circle().fill(CanvasPalette.inkBlue.opacity(0.19)).frame(width: 12).offset(x: 182, y: -105)
             Capsule().fill(CanvasPalette.inkBlue.opacity(0.12)).frame(width: 44, height: 8).rotationEffect(.degrees(-28)).offset(x: 156, y: 128)
         }
-    }
-}
-
-private struct InkRippleTransition: View {
-    let active: Bool
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
-
-    var body: some View {
-        ZStack {
-            Circle()
-                .stroke(CanvasPalette.inkBlue.opacity(active ? 0 : 0.34), lineWidth: active ? 2 : 18)
-                .frame(width: active ? 920 : 24, height: active ? 920 : 24)
-            Circle()
-                .stroke(CanvasPalette.inkBlueLight.opacity(active ? 0 : 0.24), lineWidth: active ? 1 : 12)
-                .frame(width: active ? 670 : 16, height: active ? 670 : 16)
-            CanvasInkBlob()
-                .fill(CanvasPalette.inkBlue.opacity(active ? 0 : 0.12))
-                .frame(width: active ? 300 : 18, height: active ? 250 : 15)
-                .rotationEffect(.degrees(active ? 28 : 0))
-        }
-        .opacity(active ? 1 : 0)
-        .animation(reduceMotion ? .linear(duration: 0.12) : .easeOut(duration: 0.72), value: active)
     }
 }
