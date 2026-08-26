@@ -49,7 +49,7 @@ struct CanvasWorkspaceView: View {
 
     var body: some View {
         ZStack {
-            CanvasClayBackground()
+            CanvasClayBackground(focused: route != .canvas, zoom: zoom)
 
             Group {
                 switch route {
@@ -196,7 +196,11 @@ private struct CanvasToolbar: View {
                 if route == .canvas { withAnimation { foldersOpen.toggle() } } else { back() }
             } label: {
                 HStack(spacing: 9) {
-                    Image(systemName: route == .canvas ? "folder.fill" : "arrow.left")
+                    if route == .canvas {
+                        CanvasBrandIcon()
+                    } else {
+                        Image(systemName: "arrow.left")
+                    }
                     Text(route == .canvas ? folderTitle : "Canvas")
                         .font(.system(size: 13, weight: .semibold, design: .rounded))
                         .lineLimit(1)
@@ -344,10 +348,10 @@ private struct CanvasNoteCard: View {
             .font(.system(size: 9, weight: .black, design: .monospaced)).tracking(0.8).opacity(0.46)
         }
         .padding(24).frame(width: 300, height: 236)
-        .background(CanvasPalette.paper.opacity(0.94), in: RoundedRectangle(cornerRadius: 9))
-        .overlay(RoundedRectangle(cornerRadius: 9).stroke(selected ? CanvasPalette.inkBlue : CanvasPalette.ink.opacity(0.10), lineWidth: selected ? 2 : 1))
+        .background(CanvasPalette.paper, in: RoundedRectangle(cornerRadius: 18))
+        .overlay(RoundedRectangle(cornerRadius: 18).stroke(selected ? CanvasPalette.inkBlue : CanvasPalette.paperEdge, lineWidth: selected ? 2 : 1))
         .rotationEffect(.degrees(Double(abs(note.url.lastPathComponent.hashValue) % 3) - 1))
-        .shadow(color: CanvasPalette.ink.opacity(0.13), radius: 14, y: 8)
+        .shadow(color: CanvasPalette.warmShadow.opacity(selected ? 0.18 : 0.11), radius: selected ? 22 : 14, y: selected ? 12 : 8)
         .contentShape(Rectangle())
     }
 
@@ -900,7 +904,7 @@ private struct InkOpenTransition: View {
     var body: some View {
         Canvas(rendersAsynchronously: true) { context, size in
             if frame < coverFrameCount {
-                drawAdvancingInk(in: &context, size: size)
+                drawLandingSplashes(in: &context, size: size)
             } else {
                 drawDissolvingInk(in: &context, size: size)
             }
@@ -909,48 +913,79 @@ private struct InkOpenTransition: View {
         .accessibilityHidden(true)
     }
 
-    private func drawAdvancingInk(in context: inout GraphicsContext, size: CGSize) {
+    private func drawLandingSplashes(in context: inout GraphicsContext, size: CGSize) {
         let progress = CGFloat(frame + 1) / CGFloat(coverFrameCount)
-        let eased = 1 - pow(1 - progress, 2.1)
-        let edge = -size.width * 0.08 + eased * size.width * 1.18
-        let edgeNoise = max(14, 66 * (1 - progress * 0.55))
+        let columns = 5
+        let rows = 4
+        let cellWidth = size.width / CGFloat(columns)
+        let cellHeight = size.height / CGFloat(rows)
+        let maximumRadius = hypot(cellWidth, cellHeight) * 1.5
 
-        let segments = 18
-        let edgePoints = (0...segments).map { index in
-            let y = size.height * CGFloat(index) / CGFloat(segments)
-            let wave = sin(CGFloat(index) * 1.71 + progress * 7.4) * edgeNoise
-                + sin(CGFloat(index) * 0.47 - progress * 11.0) * edgeNoise * 0.48
-            return CGPoint(x: edge + wave, y: y)
+        for row in 0..<rows {
+            for column in 0..<columns {
+                let ordinal = row * columns + column
+                let stagger = CGFloat((ordinal * 7 + row * 3) % 11) / 95
+                let localProgress = max(0, min(1, (progress - stagger) / (1 - stagger)))
+                guard localProgress > 0 else { continue }
+
+                // Expo-out with a tiny impact overshoot: one splash, not a wipe.
+                let eased = 1 - pow(1 - localProgress, 2.7)
+                let impact = sin(localProgress * .pi) * 0.08
+                let radius = maximumRadius * (eased + impact)
+                let jitterX = CGFloat((ordinal * 37) % 35 - 17)
+                let jitterY = CGFloat((ordinal * 19) % 31 - 15)
+                let center = CGPoint(
+                    x: (CGFloat(column) + 0.5) * cellWidth + jitterX,
+                    y: (CGFloat(row) + 0.5) * cellHeight + jitterY
+                )
+
+                context.fill(
+                    organicSplat(center: center, radius: radius, seed: ordinal),
+                    with: .color(CanvasPalette.inkBlue)
+                )
+
+                let satelliteRadius = max(2, radius * 0.055)
+                let satelliteAngle = CGFloat((ordinal * 41) % 360) * .pi / 180
+                let satelliteCenter = CGPoint(
+                    x: center.x + cos(satelliteAngle) * radius * 0.86,
+                    y: center.y + sin(satelliteAngle) * radius * 0.70
+                )
+                let satellite = CGRect(
+                    x: satelliteCenter.x - satelliteRadius,
+                    y: satelliteCenter.y - satelliteRadius,
+                    width: satelliteRadius * 2,
+                    height: satelliteRadius * 1.45
+                )
+                context.fill(Path(ellipseIn: satellite), with: .color(CanvasPalette.inkBlue))
+            }
+        }
+    }
+
+    private func organicSplat(center: CGPoint, radius: CGFloat, seed: Int) -> Path {
+        let pointCount = 34
+        var points: [CGPoint] = []
+        points.reserveCapacity(pointCount)
+
+        for index in 0..<pointCount {
+            let angle = CGFloat(index) / CGFloat(pointCount) * 2 * .pi
+            let seedPhase = CGFloat(seed) * 0.73
+            let roughness = 0.88
+                + sin(angle * 3 + seedPhase) * 0.08
+                + sin(angle * 7 - seedPhase * 1.4) * 0.045
+            let xRadius = radius * roughness
+            let yRadius = radius * 0.82 * roughness
+            points.append(CGPoint(
+                x: center.x + cos(angle) * xRadius,
+                y: center.y + sin(angle) * yRadius
+            ))
         }
 
-        var wash = Path()
-        wash.move(to: .zero)
-        wash.addLine(to: edgePoints[0])
-        for index in 1..<edgePoints.count {
-            let previous = edgePoints[index - 1]
-            let next = edgePoints[index]
-            let midpointY = (previous.y + next.y) / 2
-            wash.addCurve(
-                to: next,
-                control1: CGPoint(x: previous.x, y: midpointY),
-                control2: CGPoint(x: next.x, y: midpointY)
-            )
-        }
-        wash.addLine(to: CGPoint(x: 0, y: size.height))
-        wash.closeSubpath()
-
-        context.fill(wash, with: .color(CanvasPalette.inkBlue))
-
-        // Small satellite drops make the front feel liquid instead of geometric.
-        for index in 0..<13 {
-            let seed = CGFloat(index)
-            let diameter = 6 + CGFloat((index * 17) % 23)
-            let x = edge + 22 + CGFloat((index * 43) % 118)
-            let y = size.height * (0.06 + CGFloat((index * 29) % 89) / 100)
-            let pulse = 0.68 + 0.32 * sin(progress * 18 + seed)
-            let rect = CGRect(x: x, y: y, width: diameter * pulse, height: diameter * pulse * 0.82)
-            context.fill(Path(ellipseIn: rect), with: .color(CanvasPalette.inkBlue.opacity(0.88)))
-        }
+        var path = Path()
+        guard let first = points.first else { return path }
+        path.move(to: first)
+        for point in points.dropFirst() { path.addLine(to: point) }
+        path.closeSubpath()
+        return path
     }
 
     private func drawDissolvingInk(in context: inout GraphicsContext, size: CGSize) {
@@ -982,13 +1017,10 @@ private struct InkOpenTransition: View {
                         y: (CGFloat(row) + 0.5) * cellHeight + jitterY
                     )
                     let radius = maximumRadius * bloom
-                    let ellipse = CGRect(
-                        x: center.x - radius,
-                        y: center.y - radius * 0.78,
-                        width: radius * 2,
-                        height: radius * 1.56
+                    layer.fill(
+                        organicSplat(center: center, radius: radius, seed: ordinal + 31),
+                        with: .color(.white)
                     )
-                    layer.fill(Path(ellipseIn: ellipse), with: .color(.white))
 
                     // Offset blooms roughen each opening like pigment feathering in water.
                     let fringeRadius = radius * 0.36
@@ -1006,17 +1038,36 @@ private struct InkOpenTransition: View {
 }
 
 private enum CanvasPalette {
-    static let clay = Color(hex: 0xD1A87F)
-    static let clayLight = Color(hex: 0xE8CAA4)
-    static let paper = Color(hex: 0xF4E8CF)
-    static let ink = Color(hex: 0x1B1816)
-    static let inkBlue = Color(hex: 0x243B68)
-    static let inkBlueDeep = Color(hex: 0x172A50)
-    static let inkBlueLight = Color(hex: 0x4D6692)
+    static let clay = Color(hex: 0xFBE4D6)
+    static let clayLight = Color(hex: 0xFDF2EA)
+    static let clayMid = Color(hex: 0xF7D4C1)
+    static let clayLow = Color(hex: 0xF1C3AB)
+    static let paper = Color(hex: 0xFFFBF7)
+    static let paperDim = Color(hex: 0xFCF2EA)
+    static let paperEdge = Color(hex: 0xF3DFD1)
+    static let ink = Color(hex: 0x17142B)
+    static let inkBlue = Color(hex: 0x2A2456)
+    static let inkBlueDeep = Color(hex: 0x1F1A42)
+    static let inkBlueLight = Color(hex: 0x5A5568)
+    static let warmShadow = Color(hex: 0x7A4A2E)
+}
+
+private enum NotedInkAssets {
+    static let wordmark = load("noted-wordmark")
+    static let mark = load("noted-mark")
+    static let splatters = (1...6).compactMap { load(String(format: "splat-%02d", $0)) }
+
+    private static func load(_ name: String) -> NSImage? {
+        let moduleURL = Bundle.module.url(forResource: name, withExtension: "svg", subdirectory: "NotedInk")
+            ?? Bundle.module.url(forResource: name, withExtension: "svg")
+        guard let moduleURL else { return nil }
+        return NSImage(contentsOf: moduleURL)
+    }
 }
 
 private struct CanvasBrandMark: View {
     private var bundledLogo: NSImage? {
+        if let wordmark = NotedInkAssets.wordmark { return wordmark }
         if let named = NSImage(named: "NotedLogo") { return named }
         guard let url = Bundle.main.url(forResource: "NotedLogo", withExtension: "png") else { return nil }
         return NSImage(contentsOf: url)
@@ -1031,8 +1082,25 @@ private struct CanvasBrandMark: View {
                     .font(.custom("Instrument Serif", size: 25, relativeTo: .title))
             }
         }
-        .frame(height: 25)
+        .frame(width: 112, height: 42)
         .accessibilityLabel("Noted")
+    }
+}
+
+private struct CanvasBrandIcon: View {
+    var body: some View {
+        Group {
+            if let mark = NotedInkAssets.mark {
+                Image(nsImage: mark)
+                    .resizable()
+                    .renderingMode(.template)
+                    .foregroundStyle(CanvasPalette.ink)
+            } else {
+                Image(systemName: "folder.fill")
+            }
+        }
+        .frame(width: 18, height: 18)
+        .accessibilityHidden(true)
     }
 }
 
@@ -1049,39 +1117,69 @@ private struct CanvasInkBlob: Shape {
 }
 
 private struct CanvasClayBackground: View {
-    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let focused: Bool
+    let zoom: CGFloat
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: reduceMotion ? 1 : 1 / 30)) { timeline in
-            let time = timeline.date.timeIntervalSinceReferenceDate
-            let breathe = reduceMotion ? 1 : 1 + sin(time * 0.42) * 0.018
-            let drift = reduceMotion ? 0 : sin(time * 0.31) * 7
+        GeometryReader { proxy in
             ZStack {
                 LinearGradient(colors: [CanvasPalette.clayLight, CanvasPalette.clay], startPoint: .topLeading, endPoint: .bottomTrailing)
-                InkSplashCluster(scale: breathe)
-                    .frame(width: 470, height: 390).rotationEffect(.degrees(-18)).offset(x: -485 + drift, y: -285)
-                InkSplashCluster(scale: 0.82 / breathe)
-                    .frame(width: 390, height: 320).rotationEffect(.degrees(27)).offset(x: 510 - drift, y: -270)
-                InkSplashCluster(scale: 1.05 * breathe)
-                    .frame(width: 500, height: 390).rotationEffect(.degrees(11)).offset(x: 450, y: 350 + drift)
+
+                CanvasInkBlob()
+                    .fill(CanvasPalette.clayMid.opacity(0.72))
+                    .frame(width: proxy.size.width * 0.42, height: proxy.size.height * 0.50)
+                    .rotationEffect(.degrees(-16))
+                    .position(x: proxy.size.width * 0.04, y: proxy.size.height * 0.04)
+                    .blur(radius: 10)
+                CanvasInkBlob()
+                    .fill(CanvasPalette.clayLow.opacity(0.48))
+                    .frame(width: proxy.size.width * 0.34, height: proxy.size.height * 0.44)
+                    .rotationEffect(.degrees(24))
+                    .position(x: proxy.size.width * 0.98, y: proxy.size.height * 0.12)
+                    .blur(radius: 12)
+
+                AuthoredInkField(size: proxy.size, zoom: zoom)
+                    .opacity(focused ? 0.35 : 1)
+                    .animation(.easeOut(duration: 0.44), value: focused)
             }
         }
         .ignoresSafeArea()
     }
 }
 
-private struct InkSplashCluster: View {
-    let scale: CGFloat
+private struct AuthoredInkField: View {
+    let size: CGSize
+    let zoom: CGFloat
+
+    private let placements: [(x: CGFloat, y: CGFloat, size: CGFloat, opacity: Double, rotation: Double)] = [
+        (-0.02, 0.04, 0.42, 0.13, -8),
+        (0.77, 0.12, 0.31, 0.09, 24),
+        (0.27, 0.72, 0.48, 0.11, -32),
+        (0.93, 0.64, 0.28, 0.07, 12),
+        (0.03, 0.96, 0.36, 0.09, 48),
+        (0.76, 1.02, 0.44, 0.06, 140),
+    ]
 
     var body: some View {
         ZStack {
-            CanvasInkBlob()
-                .fill(CanvasPalette.inkBlue.opacity(0.17))
-                .scaleEffect(scale)
-            Circle().fill(CanvasPalette.inkBlue.opacity(0.22)).frame(width: 17).offset(x: -185, y: 115)
-            Circle().fill(CanvasPalette.inkBlue.opacity(0.15)).frame(width: 9).offset(x: -160, y: 145)
-            Circle().fill(CanvasPalette.inkBlue.opacity(0.19)).frame(width: 12).offset(x: 182, y: -105)
-            Capsule().fill(CanvasPalette.inkBlue.opacity(0.12)).frame(width: 44, height: 8).rotationEffect(.degrees(-28)).offset(x: 156, y: 128)
+            ForEach(Array(NotedInkAssets.splatters.enumerated()), id: \.offset) { index, splatter in
+                let placement = placements[index % placements.count]
+                Image(nsImage: splatter)
+                    .resizable()
+                    .renderingMode(.template)
+                    .foregroundStyle(CanvasPalette.ink)
+                    .frame(
+                        width: max(size.width, size.height) * placement.size,
+                        height: max(size.width, size.height) * placement.size
+                    )
+                    .rotationEffect(.degrees(placement.rotation))
+                    .opacity(placement.opacity)
+                    .scaleEffect(0.96 + zoom * 0.05)
+                    .position(x: size.width * placement.x, y: size.height * placement.y)
+            }
         }
+        .frame(width: size.width, height: size.height)
+        .clipped()
+        .allowsHitTesting(false)
     }
 }

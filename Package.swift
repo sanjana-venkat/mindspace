@@ -30,7 +30,8 @@ let package = Package(
                 "NotefyCore",
                 .product(name: "WhisperKit", package: "WhisperKit")
             ],
-            path: "Sources/NotefyApp"
+            path: "Sources/NotefyApp",
+            resources: [.process("Resources")]
         ),
         .testTarget(
             name: "NotefyCoreTests",
