@@ -13,7 +13,10 @@ import SwiftUI
 // sits below all content and never responds to hover, scroll, or
 // focus. The layout is frozen — see noted-correction-and-light-mode.md §0.
 //
-// Ported from noted-correction-and-light-mode.md §1, §2, §4.
+// Ported from noted-correction-and-light-mode.md §1, §2, §4 — with one
+// deliberate departure: §1's warm brown-black ground was replaced by a
+// blue-black ink at Sanjana's direction after seeing both side by side.
+// See the note on `GroundPalette.ink`. Everything else follows the doc.
 // ============================================================
 
 /// Ink is the default. This is a surface choice, not an accessibility
@@ -72,14 +75,25 @@ struct GroundPalette {
     /// the palette has always allowed oxide.
     let destructive: Color
 
-    /// Warm ink. Hue ~35°, never 240°, never neutral grey — warmth is the
-    /// only thing separating this from stock dark mode. Sampling check:
-    /// the red channel is the highest of the three (0x17 > 0x14 > 0x0F).
+    /// Blue-black ink, not warm black.
+    ///
+    /// NOTE: this deliberately overrides the correction spec's §1, which
+    /// calls for a warm brown-black at hue ~35° and fails the build if the
+    /// blue channel leads. Sanjana asked for the opposite after seeing both:
+    /// the ground is ink, and ink is blue. Hue ~232°, blue dominant by
+    /// design. Do not "fix" this back to #17140F on the strength of §1 —
+    /// the decision post-dates the document.
+    ///
+    /// Still never a neutral grey and never pure black: the red and green
+    /// channels stay close together and well below the blue, which is what
+    /// keeps it reading as diluted ink rather than as a blue-tinted UI. The
+    /// paper stays warm cream, so the contrast across the whole app is a
+    /// cool ground under warm paper.
     static let ink = GroundPalette(
         mode: .ink,
-        ground: Color(hex: 0x17140F),
-        groundLift: Color(hex: 0x211D16),
-        groundEdge: Color(hex: 0x0F0D09),
+        ground: Color(hex: 0x161B33),
+        groundLift: Color(hex: 0x212747),
+        groundEdge: Color(hex: 0x0D1022),
         onGround: Color(hex: 0xF7F3EA),
         onGround72: Color(hex: 0xF7F3EA, opacity: 0.72),
         onGround42: Color(hex: 0xF7F3EA, opacity: 0.42),
@@ -89,7 +103,7 @@ struct GroundPalette {
         bloom: Color(hex: 0x2C43E8, opacity: 0.18),
         splatCobalt: Color(hex: 0x2C43E8, opacity: 0.14),
         splatPaper: Color(hex: 0xF7F3EA, opacity: 0.08),
-        vignette: Color(hex: 0x0F0D09, opacity: 0.55),
+        vignette: Color(hex: 0x0D1022, opacity: 0.55),
         destructive: Color(hex: 0xDE9077)
     )
 
@@ -369,12 +383,13 @@ struct GroundBackdrop: View {
         ZStack {
             ground.ground
 
-            // Two localized fields, NOT a full-canvas wash. The distinction
-            // matters more than the opacity does: a cobalt gradient spread
-            // across the whole ground pushes the blue channel above the red
-            // everywhere and the ink stops being warm — which is the one
-            // thing separating this from stock dark mode. Most of the ground
-            // must sample as bare ink, with the bloom felt at two regions.
+            // Two localized fields, NOT a full-canvas wash. Now that the
+            // ground is itself blue, a cobalt gradient spread across all of
+            // it would simply raise the whole canvas a step and read as one
+            // flat lighter slab — the bloom has to be felt in places to be
+            // felt at all. Most of the ground stays bare ink; two regions
+            // lift. On clay the same two fields are nearly invisible, which
+            // is expected and correct.
             GeometryReader { proxy in
                 let w = proxy.size.width
                 let h = proxy.size.height
@@ -418,9 +433,9 @@ struct GroundBackdrop: View {
 /// than it ever did on clay.
 ///
 /// On clay the specks are ink multiplied in. On ink they are paper specks
-/// laid on top: black multiply over near-black is invisible. Kept sparse
-/// either way, since dense specks average into a grey cast and take the
-/// warmth of the ink with them.
+/// laid on top: a black multiply over a near-black ground is invisible.
+/// Kept sparse either way — dense paper specks average into a grey cast and
+/// desaturate the blue out of the ink underneath them.
 struct GroundGrain: View {
     @Environment(\.ground) private var ground
 
@@ -444,8 +459,9 @@ struct GroundGrain: View {
 }
 
 /// The corners fall away so the slab reads as an object with edges rather
-/// than a flat fill. Warm in both modes — a neutral or blue-black vignette
-/// is the fastest way to lose the warmth the ground depends on.
+/// than a flat fill. Each mode's vignette is a darker mix of its OWN ground,
+/// never a neutral: a grey vignette over the ink drains the blue at exactly
+/// the edges where the slab is meant to read as a solid object.
 struct GroundVignette: View {
     @Environment(\.ground) private var ground
 
