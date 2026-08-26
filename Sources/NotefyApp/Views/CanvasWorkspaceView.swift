@@ -21,12 +21,14 @@ private enum ReaderTab: String, CaseIterable, Identifiable {
 
 struct CanvasWorkspaceView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var route: CanvasRoute = .canvas
     @State private var folderFilter: CanvasFolderFilter = .all
     @State private var foldersOpen = false
     @State private var settingsOpen = false
     @State private var zoom: CGFloat = 0.84
     @State private var selectedIndex = 0
+    @State private var inkTransitionFrame: Int?
     @FocusState private var keyboardFocused: Bool
 
     private var notes: [CanvasNoteSnapshot] {
@@ -62,7 +64,7 @@ struct CanvasWorkspaceView: View {
                 case .reading:
                     CaptureReadingView()
                         .environmentObject(appState)
-                        .transition(.opacity.combined(with: .scale(scale: 0.985)))
+                        .transition(.opacity)
                 }
             }
 
@@ -89,6 +91,13 @@ struct CanvasWorkspaceView: View {
                 .environmentObject(appState)
                 .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .topLeading)))
                 .zIndex(5)
+            }
+
+            if let inkTransitionFrame {
+                InkOpenTransition(frame: inkTransitionFrame)
+                    .ignoresSafeArea()
+                    .allowsHitTesting(true)
+                    .zIndex(20)
             }
 
         }
@@ -130,19 +139,44 @@ struct CanvasWorkspaceView: View {
     }
 
     private func openNote(_ snapshot: CanvasNoteSnapshot) {
-        appState.openNote(snapshot.url)
-        withAnimation(.spring(response: 0.52, dampingFraction: 0.86)) {
-            route = .reading(snapshot.url)
-        }
+        transitionToReading(snapshot.url)
     }
 
     private func createNote() {
         let folderID: UUID?
         if case .folder(let id) = folderFilter { folderID = id } else { folderID = nil }
         let destination = appState.createNewNote(inFolder: folderID)
-        appState.openNote(destination.url)
-        withAnimation(.spring(response: 0.52, dampingFraction: 0.86)) {
-            route = .reading(destination.url)
+        transitionToReading(destination.url)
+    }
+
+    private func transitionToReading(_ url: URL) {
+        guard inkTransitionFrame == nil else { return }
+
+        guard !reduceMotion else {
+            appState.openNote(url)
+            withAnimation(.easeInOut(duration: 0.16)) { route = .reading(url) }
+            return
+        }
+
+        Task { @MainActor in
+            let coverFrames = 16
+            let revealFrames = 20
+
+            for frame in 0..<coverFrames {
+                inkTransitionFrame = frame
+                try? await Task.sleep(for: .milliseconds(28))
+            }
+
+            appState.openNote(url)
+            route = .reading(url)
+
+            for frame in coverFrames..<(coverFrames + revealFrames) {
+                inkTransitionFrame = frame
+                try? await Task.sleep(for: .milliseconds(28))
+            }
+
+            inkTransitionFrame = nil
+            keyboardFocused = true
         }
     }
 }
@@ -178,6 +212,18 @@ private struct CanvasToolbar: View {
             CanvasBrandMark()
             Spacer()
 
+            if route == .canvas {
+                Button(action: createNote) {
+                    Label("New note", systemImage: "square.and.pencil")
+                        .font(.system(size: 12, weight: .bold, design: .rounded))
+                        .padding(.horizontal, 15).frame(height: 42)
+                        .foregroundStyle(CanvasPalette.paper)
+                        .background(CanvasPalette.inkBlue, in: Capsule())
+                }
+                .buttonStyle(.plain)
+                .accessibilityLabel("New note")
+            }
+
             HStack(spacing: 8) {
                 if route == .canvas {
                     Button { zoom = max(0.50, zoom - 0.10) } label: { Image(systemName: "minus") }
@@ -185,8 +231,6 @@ private struct CanvasToolbar: View {
                         .font(.system(size: 10, weight: .bold, design: .monospaced)).frame(width: 38)
                     Button { zoom = min(1.30, zoom + 0.10) } label: { Image(systemName: "plus") }
                     Divider().frame(height: 18).opacity(0.25)
-                    Button(action: createNote) { Image(systemName: "square.and.pencil") }
-                        .accessibilityLabel("New note")
                 }
                 Button { settingsOpen = true } label: { Image(systemName: "gearshape") }
                     .accessibilityLabel("Settings")
@@ -323,16 +367,27 @@ private struct CaptureReadingView: View {
         appState.steps.first { $0.id == activeCaptureID } ?? appState.steps.last
     }
 
-    private var captureAnnotation: String {
-        guard let step = activeStep else { return "" }
-        return appState.stepAnnotations[step.id]?.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+    private var activeNoteText: String {
+        guard let step = activeStep else { return appState.rawDraft }
+        return appState.stepAnnotations[step.id] ?? ""
+    }
+
+    private var activeNoteBinding: Binding<String> {
+        Binding(
+            get: { activeNoteText },
+            set: { value in
+                if let step = activeStep {
+                    appState.stepAnnotations[step.id] = value
+                } else {
+                    appState.rawDraft = value
+                }
+                appState.scheduleActiveNoteAutosave()
+            }
+        )
     }
 
     var body: some View {
-        VStack(spacing: 0) {
-            ReaderTabBar(selection: $tab)
-                .padding(.top, 78).padding(.bottom, 8)
-
+        ZStack(alignment: .top) {
             Group {
                 switch tab {
                 case .raw:
@@ -341,6 +396,7 @@ private struct CaptureReadingView: View {
                             rawNoteColumn
                                 .frame(width: proxy.size.width / 3)
                             captureColumn
+                                .padding(.top, 68)
                                 .frame(width: proxy.size.width * 2 / 3)
                         }
                     }
@@ -348,10 +404,15 @@ private struct CaptureReadingView: View {
                 case .organized:
                     OrganizedEssayView()
                         .environmentObject(appState)
+                        .padding(.top, 68)
                         .transition(.opacity.combined(with: .scale(scale: 0.99)))
                 }
             }
             .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: tab)
+
+            ReaderTabBar(selection: $tab)
+                .padding(.top, 78)
+                .zIndex(2)
         }
     }
 
@@ -365,31 +426,21 @@ private struct CaptureReadingView: View {
                 .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
 
             ZStack(alignment: .topLeading) {
-                if appState.rawDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                if activeNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("Write the note you want to keep beside these captures…")
                         .font(.custom("Newsreader", size: 16)).italic().opacity(0.42)
                         .padding(.top, 7).padding(.leading, 5).allowsHitTesting(false)
                 }
-                TextEditor(text: $appState.rawDraft)
+                TextEditor(text: activeNoteBinding)
+                    .id(activeCaptureID)
                     .font(.custom("Newsreader", size: 17, relativeTo: .body))
                     .lineSpacing(7).scrollContentBackground(.hidden)
                     .background(.clear)
-                    .onChange(of: appState.rawDraft) { appState.scheduleActiveNoteAutosave() }
             }
-            .frame(maxHeight: 280)
-
-            if !captureAnnotation.isEmpty {
-                VStack(alignment: .leading, spacing: 7) {
-                    Text("ON THIS CAPTURE").font(.system(size: 9, weight: .black, design: .monospaced)).tracking(1.2).opacity(0.42)
-                    Text(captureAnnotation).font(.custom("Newsreader", size: 15)).italic().lineLimit(4)
-                }
-                .id(activeCaptureID)
-                .transition(.opacity)
-            }
-
-            Spacer(minLength: 12)
+            .frame(maxHeight: .infinity)
+            .animation(reduceMotion ? .linear(duration: 0.10) : .easeInOut(duration: 0.24), value: activeCaptureID)
         }
-        .padding(.horizontal, 38).padding(.vertical, 32)
+        .padding(.horizontal, 38).padding(.top, 108).padding(.bottom, 32)
         .background(CanvasPalette.paper.opacity(0.32))
     }
 
@@ -835,6 +886,122 @@ private struct CanvasFolderOverlay: View {
     private func cancelFolder() {
         newFolderName = ""
         withAnimation { creatingFolder = false }
+    }
+}
+
+/// A code-drawn counterpart to a stepped PNG ink sprite: the mask advances in
+/// deliberate frames, covers the canvas, then breaks apart to reveal the note.
+private struct InkOpenTransition: View {
+    let frame: Int
+
+    private let coverFrameCount = 16
+    private let revealFrameCount = 20
+
+    var body: some View {
+        Canvas(rendersAsynchronously: true) { context, size in
+            if frame < coverFrameCount {
+                drawAdvancingInk(in: &context, size: size)
+            } else {
+                drawDissolvingInk(in: &context, size: size)
+            }
+        }
+        .background(Color.clear)
+        .accessibilityHidden(true)
+    }
+
+    private func drawAdvancingInk(in context: inout GraphicsContext, size: CGSize) {
+        let progress = CGFloat(frame + 1) / CGFloat(coverFrameCount)
+        let eased = 1 - pow(1 - progress, 2.1)
+        let edge = -size.width * 0.08 + eased * size.width * 1.18
+        let edgeNoise = max(14, 66 * (1 - progress * 0.55))
+
+        let segments = 18
+        let edgePoints = (0...segments).map { index in
+            let y = size.height * CGFloat(index) / CGFloat(segments)
+            let wave = sin(CGFloat(index) * 1.71 + progress * 7.4) * edgeNoise
+                + sin(CGFloat(index) * 0.47 - progress * 11.0) * edgeNoise * 0.48
+            return CGPoint(x: edge + wave, y: y)
+        }
+
+        var wash = Path()
+        wash.move(to: .zero)
+        wash.addLine(to: edgePoints[0])
+        for index in 1..<edgePoints.count {
+            let previous = edgePoints[index - 1]
+            let next = edgePoints[index]
+            let midpointY = (previous.y + next.y) / 2
+            wash.addCurve(
+                to: next,
+                control1: CGPoint(x: previous.x, y: midpointY),
+                control2: CGPoint(x: next.x, y: midpointY)
+            )
+        }
+        wash.addLine(to: CGPoint(x: 0, y: size.height))
+        wash.closeSubpath()
+
+        context.fill(wash, with: .color(CanvasPalette.inkBlue))
+
+        // Small satellite drops make the front feel liquid instead of geometric.
+        for index in 0..<13 {
+            let seed = CGFloat(index)
+            let diameter = 6 + CGFloat((index * 17) % 23)
+            let x = edge + 22 + CGFloat((index * 43) % 118)
+            let y = size.height * (0.06 + CGFloat((index * 29) % 89) / 100)
+            let pulse = 0.68 + 0.32 * sin(progress * 18 + seed)
+            let rect = CGRect(x: x, y: y, width: diameter * pulse, height: diameter * pulse * 0.82)
+            context.fill(Path(ellipseIn: rect), with: .color(CanvasPalette.inkBlue.opacity(0.88)))
+        }
+    }
+
+    private func drawDissolvingInk(in context: inout GraphicsContext, size: CGSize) {
+        let revealIndex = frame - coverFrameCount + 1
+        let progress = min(1, CGFloat(revealIndex) / CGFloat(revealFrameCount))
+
+        context.drawLayer { layer in
+            layer.fill(Path(CGRect(origin: .zero, size: size)), with: .color(CanvasPalette.inkBlue))
+            layer.blendMode = .destinationOut
+
+            let columns = 6
+            let rows = 5
+            let cellWidth = size.width / CGFloat(columns)
+            let cellHeight = size.height / CGFloat(rows)
+            let maximumRadius = hypot(cellWidth, cellHeight) * 1.48
+
+            for row in 0..<rows {
+                for column in 0..<columns {
+                    let ordinal = row * columns + column
+                    let stagger = CGFloat((ordinal * 7 + row * 3) % 13) / 90
+                    let localProgress = max(0, min(1, (progress - stagger) / (1 - stagger)))
+                    let bloom = 1 - pow(1 - localProgress, 2.4)
+                    guard bloom > 0 else { continue }
+
+                    let jitterX = CGFloat((ordinal * 37) % 31 - 15)
+                    let jitterY = CGFloat((ordinal * 19) % 27 - 13)
+                    let center = CGPoint(
+                        x: (CGFloat(column) + 0.5) * cellWidth + jitterX,
+                        y: (CGFloat(row) + 0.5) * cellHeight + jitterY
+                    )
+                    let radius = maximumRadius * bloom
+                    let ellipse = CGRect(
+                        x: center.x - radius,
+                        y: center.y - radius * 0.78,
+                        width: radius * 2,
+                        height: radius * 1.56
+                    )
+                    layer.fill(Path(ellipseIn: ellipse), with: .color(.white))
+
+                    // Offset blooms roughen each opening like pigment feathering in water.
+                    let fringeRadius = radius * 0.36
+                    let fringe = CGRect(
+                        x: center.x + radius * 0.62 - fringeRadius,
+                        y: center.y - radius * 0.48 - fringeRadius,
+                        width: fringeRadius * 2,
+                        height: fringeRadius * 1.4
+                    )
+                    layer.fill(Path(ellipseIn: fringe), with: .color(.white.opacity(0.92)))
+                }
+            }
+        }
     }
 }
 
