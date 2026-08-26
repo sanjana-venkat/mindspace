@@ -13,6 +13,12 @@ private enum CanvasFolderFilter: Hashable {
     case folder(UUID)
 }
 
+private enum ReaderTab: String, CaseIterable, Identifiable {
+    case raw = "Raw"
+    case organized = "Organized"
+    var id: String { rawValue }
+}
+
 struct CanvasWorkspaceView: View {
     @EnvironmentObject private var appState: AppState
     @State private var route: CanvasRoute = .canvas
@@ -21,6 +27,7 @@ struct CanvasWorkspaceView: View {
     @State private var settingsOpen = false
     @State private var zoom: CGFloat = 0.84
     @State private var selectedIndex = 0
+    @State private var inkRipple = false
     @FocusState private var keyboardFocused: Bool
 
     private var notes: [CanvasNoteSnapshot] {
@@ -53,7 +60,7 @@ struct CanvasWorkspaceView: View {
                         openNote: openNote
                     )
                 case .reading:
-                    CaptureReadingView(back: { withAnimation(.spring(response: 0.48, dampingFraction: 0.86)) { route = .canvas } })
+                    CaptureReadingView()
                         .environmentObject(appState)
                         .transition(.opacity.combined(with: .scale(scale: 0.985)))
                 }
@@ -83,6 +90,10 @@ struct CanvasWorkspaceView: View {
                 .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .topLeading)))
                 .zIndex(5)
             }
+
+            InkRippleTransition(active: inkRipple)
+                .allowsHitTesting(false)
+                .zIndex(8)
         }
         .focusable()
         .focused($keyboardFocused)
@@ -90,10 +101,10 @@ struct CanvasWorkspaceView: View {
             appState.refreshHistory()
             keyboardFocused = true
         }
-        .onKeyPress(.leftArrow) { moveSelection(-1); return .handled }
-        .onKeyPress(.rightArrow) { moveSelection(1); return .handled }
-        .onKeyPress(.upArrow) { moveSelection(-canvasColumnCount); return .handled }
-        .onKeyPress(.downArrow) { moveSelection(canvasColumnCount); return .handled }
+        .onKeyPress(.leftArrow) { guard route == .canvas else { return .ignored }; moveSelection(-1); return .handled }
+        .onKeyPress(.rightArrow) { guard route == .canvas else { return .ignored }; moveSelection(1); return .handled }
+        .onKeyPress(.upArrow) { guard route == .canvas else { return .ignored }; moveSelection(-canvasColumnCount); return .handled }
+        .onKeyPress(.downArrow) { guard route == .canvas else { return .ignored }; moveSelection(canvasColumnCount); return .handled }
         .onKeyPress(.escape) {
             if route != .canvas { withAnimation { route = .canvas } }
             return .handled
@@ -116,6 +127,7 @@ struct CanvasWorkspaceView: View {
 
     private func openNote(_ snapshot: CanvasNoteSnapshot) {
         appState.openNote(snapshot.url)
+        playInkRipple()
         withAnimation(.spring(response: 0.52, dampingFraction: 0.86)) {
             route = .reading(snapshot.url)
         }
@@ -126,9 +138,15 @@ struct CanvasWorkspaceView: View {
         if case .folder(let id) = folderFilter { folderID = id } else { folderID = nil }
         let destination = appState.createNewNote(inFolder: folderID)
         appState.openNote(destination.url)
+        playInkRipple()
         withAnimation(.spring(response: 0.52, dampingFraction: 0.86)) {
             route = .reading(destination.url)
         }
+    }
+
+    private func playInkRipple() {
+        inkRipple = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.72) { inkRipple = false }
     }
 }
 
@@ -194,26 +212,35 @@ private struct ChronologicalCanvas: View {
     private let columns = Array(repeating: GridItem(.fixed(300), spacing: 30), count: 3)
 
     var body: some View {
-        ScrollView([.horizontal, .vertical]) {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 30) {
-                ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
-                    CanvasNoteCard(note: note, selected: index == selectedIndex)
-                        .onTapGesture {
-                            selectedIndex = index
-                            openNote(note)
-                        }
+        ScrollViewReader { reader in
+            ScrollView([.horizontal, .vertical]) {
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 30) {
+                    ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
+                        CanvasNoteCard(note: note, selected: index == selectedIndex)
+                            .id(note.id)
+                            .onTapGesture {
+                                selectedIndex = index
+                                openNote(note)
+                            }
+                    }
+                }
+                .padding(.horizontal, 100).padding(.vertical, 126)
+                .scaleEffect(zoom, anchor: .topLeading)
+                .frame(minWidth: 1120, minHeight: 780, alignment: .topLeading)
+            }
+            .scrollIndicators(.hidden)
+            .onChange(of: selectedIndex) {
+                guard notes.indices.contains(selectedIndex) else { return }
+                withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+                    reader.scrollTo(notes[selectedIndex].id, anchor: .center)
                 }
             }
-            .padding(.horizontal, 100).padding(.vertical, 126)
-            .scaleEffect(zoom, anchor: .topLeading)
-            .frame(minWidth: 1120, minHeight: 780, alignment: .topLeading)
+            .gesture(
+                MagnifyGesture().onChanged { value in
+                    zoom = min(max(zoom * value.magnification, 0.50), 1.30)
+                }
+            )
         }
-        .scrollIndicators(.hidden)
-        .gesture(
-            MagnifyGesture().onChanged { value in
-                zoom = min(max(zoom * value.magnification, 0.50), 1.30)
-            }
-        )
         .overlay {
             if notes.isEmpty {
                 ContentUnavailableView(
@@ -257,14 +284,14 @@ private struct CanvasNoteCard: View {
         }
         .padding(24).frame(width: 300, height: 236)
         .background(CanvasPalette.paper.opacity(0.94), in: RoundedRectangle(cornerRadius: 9))
-        .overlay(RoundedRectangle(cornerRadius: 9).stroke(selected ? CanvasPalette.ink : CanvasPalette.ink.opacity(0.10), lineWidth: selected ? 2 : 1))
+        .overlay(RoundedRectangle(cornerRadius: 9).stroke(selected ? CanvasPalette.inkBlue : CanvasPalette.ink.opacity(0.10), lineWidth: selected ? 2 : 1))
         .rotationEffect(.degrees(Double(abs(note.url.lastPathComponent.hashValue) % 3) - 1))
         .shadow(color: CanvasPalette.ink.opacity(0.13), radius: 14, y: 8)
         .contentShape(Rectangle())
     }
 
     private var accent: Color {
-        let choices = [CanvasPalette.rose, CanvasPalette.blue, CanvasPalette.ochre]
+        let choices = [CanvasPalette.inkBlue, CanvasPalette.inkBlue.opacity(0.72), CanvasPalette.inkBlue.opacity(0.48)]
         return choices[abs(note.url.lastPathComponent.hashValue) % choices.count]
     }
 }
@@ -273,7 +300,8 @@ private struct CaptureReadingView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var activeCaptureID: UUID?
-    let back: () -> Void
+    @State private var tab: ReaderTab = .raw
+    @State private var tabRipple = false
 
     private var activeStep: ExplorationStep? {
         appState.steps.first { $0.id == activeCaptureID } ?? appState.steps.last
@@ -285,18 +313,34 @@ private struct CaptureReadingView: View {
     }
 
     var body: some View {
-        GeometryReader { proxy in
-            HStack(spacing: 0) {
-                organizedNoteColumn
-                    .frame(width: proxy.size.width / 3)
-                captureColumn
-                    .frame(width: proxy.size.width * 2 / 3)
+        VStack(spacing: 0) {
+            ReaderTabBar(selection: $tab, ripple: $tabRipple)
+                .padding(.top, 78).padding(.bottom, 8)
+
+            Group {
+                switch tab {
+                case .raw:
+                    GeometryReader { proxy in
+                        HStack(spacing: 0) {
+                            rawNoteColumn
+                                .frame(width: proxy.size.width / 3)
+                            captureColumn
+                                .frame(width: proxy.size.width * 2 / 3)
+                        }
+                    }
+                    .transition(.opacity)
+                case .organized:
+                    OrganizedEssayView()
+                        .environmentObject(appState)
+                        .transition(.opacity.combined(with: .scale(scale: 0.99)))
+                }
             }
+            .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: tab)
         }
-        .padding(.top, 72)
+        .overlay { InkRippleTransition(active: tabRipple).allowsHitTesting(false) }
     }
 
-    private var organizedNoteColumn: some View {
+    private var rawNoteColumn: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(appState.activeNoteURL.map { appState.folderPath(for: appState.folderID(for: $0)) }.flatMap { $0.isEmpty ? nil : $0.uppercased() } ?? "NOTE")
                 .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.5).opacity(0.48)
@@ -305,24 +349,18 @@ private struct CaptureReadingView: View {
                 .font(.custom("Newsreader Display", size: 40, relativeTo: .largeTitle))
                 .onSubmit(appState.saveActiveNote)
 
-            Group {
-                if appState.isOrganizing {
-                    VStack(alignment: .leading, spacing: 12) {
-                        ProgressView().controlSize(.small)
-                        Text(appState.recordingStatus ?? "Organizing your captures…")
-                            .font(.custom("Newsreader", size: 16)).opacity(0.62)
-                    }
-                } else if !appState.organizedDraft.isEmpty {
-                    Text(organizedPreview)
-                        .font(.custom("Newsreader", size: 16, relativeTo: .body))
-                        .lineSpacing(6).lineLimit(14)
-                        .contentTransition(.opacity)
-                } else {
-                    Text("Your organized note will live here. Choose a structure below and Noted will synthesize the captures with your configured model.")
-                        .font(.custom("Newsreader", size: 16, relativeTo: .body)).lineSpacing(6).opacity(0.62)
+            ZStack(alignment: .topLeading) {
+                if appState.rawDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Write the note you want to keep beside these captures…")
+                        .font(.custom("Newsreader", size: 16)).italic().opacity(0.42)
+                        .padding(.top, 7).padding(.leading, 5).allowsHitTesting(false)
                 }
+                TextEditor(text: $appState.rawDraft)
+                    .font(.custom("Newsreader", size: 17, relativeTo: .body))
+                    .lineSpacing(7).scrollContentBackground(.hidden)
+                    .background(.clear)
             }
-            .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.32), value: appState.organizedDraft)
+            .frame(maxHeight: 280)
 
             if !captureAnnotation.isEmpty {
                 VStack(alignment: .leading, spacing: 7) {
@@ -334,25 +372,16 @@ private struct CaptureReadingView: View {
             }
 
             Spacer(minLength: 12)
-            HStack(spacing: 10) {
-                Menu {
-                    ForEach(OrganizationTemplate.allCases) { template in
-                        Button {
-                            appState.organizeCurrentSession(as: template)
-                        } label: { Label(template.rawValue, systemImage: template.icon) }
-                    }
-                } label: {
-                    Label(appState.organizedDraft.isEmpty ? "Organize" : "Reorganize", systemImage: "sparkles")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .padding(.horizontal, 14).frame(height: 39)
-                        .foregroundStyle(CanvasPalette.paper)
-                        .background(CanvasPalette.ink, in: Capsule())
-                }
-                .menuStyle(.borderlessButton).fixedSize()
-                if let status = appState.recordingStatus, !appState.isOrganizing {
-                    Text(status).font(.system(size: 10, design: .rounded)).lineLimit(2).opacity(0.48)
-                }
+            Button {
+                appState.saveActiveNote()
+            } label: {
+                Label("Save note", systemImage: "checkmark")
+                    .font(.system(size: 12, weight: .bold, design: .rounded))
+                    .padding(.horizontal, 14).frame(height: 38)
+                    .foregroundStyle(CanvasPalette.paper)
+                    .background(CanvasPalette.inkBlue, in: Capsule())
             }
+            .buttonStyle(.plain)
         }
         .padding(.horizontal, 38).padding(.vertical, 32)
         .background(CanvasPalette.paper.opacity(0.32))
@@ -387,17 +416,217 @@ private struct CaptureReadingView: View {
             }
         }
     }
+}
 
-    private var organizedPreview: String {
-        let paragraphs = appState.organizedDraft
-            .components(separatedBy: .newlines)
-            .map {
-                $0.replacingOccurrences(of: #"^\s{0,3}(#{1,6}|[-*]>?|\d+\.)\s*"#, with: "", options: .regularExpression)
-                    .replacingOccurrences(of: #"[`*_]"#, with: "", options: .regularExpression)
-                    .trimmingCharacters(in: .whitespacesAndNewlines)
+private struct ReaderTabBar: View {
+    @Binding var selection: ReaderTab
+    @Binding var ripple: Bool
+    @Namespace private var inkSelection
+
+    var body: some View {
+        HStack(spacing: 5) {
+            ForEach(ReaderTab.allCases) { tab in
+                Button {
+                    guard selection != tab else { return }
+                    ripple = true
+                    withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) { selection = tab }
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) { ripple = false }
+                } label: {
+                    Text(tab.rawValue.uppercased())
+                        .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.2)
+                        .foregroundStyle(selection == tab ? CanvasPalette.paper : CanvasPalette.ink.opacity(0.54))
+                        .padding(.horizontal, 19).frame(height: 34)
+                        .background {
+                            if selection == tab {
+                                Capsule().fill(CanvasPalette.inkBlue)
+                                    .matchedGeometryEffect(id: "ink-tab", in: inkSelection)
+                                    .overlay(alignment: .trailing) {
+                                        Circle().fill(CanvasPalette.inkBlue.opacity(0.55)).frame(width: 8).offset(x: 4, y: -9)
+                                    }
+                            }
+                        }
+                }
+                .buttonStyle(.plain)
             }
-            .filter { !$0.isEmpty && !$0.localizedCaseInsensitiveContains("Sources") }
-        return String(paragraphs.prefix(9).joined(separator: "\n\n").prefix(900))
+        }
+        .padding(4)
+        .background(CanvasPalette.paper.opacity(0.72), in: Capsule())
+        .overlay(Capsule().stroke(CanvasPalette.inkBlue.opacity(0.13)))
+    }
+}
+
+private struct OrganizedEssayView: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 22) {
+                    HStack {
+                        Label(appState.organizedTemplate.rawValue, systemImage: appState.organizedTemplate.icon)
+                            .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1)
+                            .foregroundStyle(CanvasPalette.inkBlue)
+                            .padding(.horizontal, 12).frame(height: 30)
+                            .background(CanvasPalette.inkBlue.opacity(0.09), in: Capsule())
+                        Spacer()
+                        organizeMenu
+                    }
+
+                    Text(appState.noteTitle)
+                        .font(.custom("Newsreader Display", size: 46, relativeTo: .largeTitle))
+
+                    if appState.isOrganizing {
+                        InkWritingLoader(status: appState.recordingStatus ?? "Organizing your captures…")
+                            .frame(maxWidth: .infinity).padding(.vertical, 70)
+                    } else if appState.organizedDraft.isEmpty {
+                        VStack(alignment: .leading, spacing: 14) {
+                            Text("This note has not been organized yet.")
+                                .font(.custom("Newsreader", size: 22))
+                            Text("Choose a structure and Noted will turn the raw note and captures into one readable page using your configured model.")
+                                .font(.custom("Newsreader", size: 17)).lineSpacing(7).opacity(0.58)
+                            organizeMenu
+                        }
+                        .padding(.vertical, 45)
+                    } else {
+                        LazyVStack(alignment: .leading, spacing: 18) {
+                            ForEach(Array(essayBlocks.enumerated()), id: \.offset) { _, block in
+                                EssayBlockView(block: block)
+                            }
+                        }
+                        .textSelection(.enabled)
+                    }
+                }
+                .padding(.horizontal, 58).padding(.vertical, 48)
+                .frame(maxWidth: 820, minHeight: proxy.size.height - 48, alignment: .topLeading)
+                .background(CanvasPalette.paper.opacity(0.94), in: RoundedRectangle(cornerRadius: 12))
+                .overlay(RoundedRectangle(cornerRadius: 12).stroke(CanvasPalette.inkBlue.opacity(0.10)))
+                .shadow(color: CanvasPalette.ink.opacity(0.11), radius: 18, y: 10)
+                .padding(.horizontal, max(32, (proxy.size.width - 820) / 2)).padding(.vertical, 28)
+            }
+            .scrollIndicators(.hidden)
+        }
+    }
+
+    private var organizeMenu: some View {
+        Menu {
+            ForEach(OrganizationTemplate.allCases) { template in
+                Button { appState.organizeCurrentSession(as: template) } label: {
+                    Label(template.rawValue, systemImage: template.icon)
+                }
+            }
+        } label: {
+            Label(appState.organizedDraft.isEmpty ? "Organize" : "Reorganize", systemImage: "sparkles")
+                .font(.system(size: 12, weight: .bold, design: .rounded))
+                .padding(.horizontal, 14).frame(height: 38)
+                .foregroundStyle(CanvasPalette.paper)
+                .background(CanvasPalette.inkBlue, in: Capsule())
+        }
+        .menuStyle(.borderlessButton).fixedSize()
+    }
+
+    private var essayBlocks: [EssayBlock] {
+        var blocks: [EssayBlock] = []
+        var paragraph: [String] = []
+
+        func flushParagraph() {
+            guard !paragraph.isEmpty else { return }
+            blocks.append(.paragraph(paragraph.joined(separator: " ")))
+            paragraph.removeAll()
+        }
+
+        for rawLine in appState.organizedDraft.components(separatedBy: .newlines) {
+            let line = rawLine.trimmingCharacters(in: .whitespaces)
+            if line.isEmpty {
+                flushParagraph()
+            } else if line.hasPrefix("## ") {
+                flushParagraph()
+                blocks.append(.heading(String(line.dropFirst(3))))
+            } else if line.hasPrefix("# ") {
+                // The page already owns the note title, so avoid repeating the model title.
+                flushParagraph()
+            } else if line.hasPrefix("- [ ] ") || line.hasPrefix("- [x] ") {
+                flushParagraph()
+                blocks.append(.checklist(String(line.dropFirst(6)), line.hasPrefix("- [x]")))
+            } else if line.hasPrefix("- ") || line.hasPrefix("* ") {
+                flushParagraph()
+                blocks.append(.bullet(String(line.dropFirst(2))))
+            } else {
+                paragraph.append(line)
+            }
+        }
+        flushParagraph()
+        return blocks
+    }
+}
+
+private enum EssayBlock: Hashable {
+    case heading(String)
+    case paragraph(String)
+    case bullet(String)
+    case checklist(String, Bool)
+}
+
+private struct EssayBlockView: View {
+    let block: EssayBlock
+
+    var body: some View {
+        switch block {
+        case .heading(let text):
+            Text(inlineMarkdown(text))
+                .font(.custom("Newsreader Display", size: 28, relativeTo: .title2))
+                .padding(.top, 14)
+        case .paragraph(let text):
+            Text(inlineMarkdown(text))
+                .font(.custom("Newsreader", size: 18, relativeTo: .body))
+                .lineSpacing(9)
+        case .bullet(let text):
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Circle().fill(CanvasPalette.inkBlue).frame(width: 6, height: 6)
+                Text(inlineMarkdown(text))
+                    .font(.custom("Newsreader", size: 18, relativeTo: .body)).lineSpacing(8)
+            }
+        case .checklist(let text, let checked):
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                Image(systemName: checked ? "checkmark.square.fill" : "square")
+                    .foregroundStyle(CanvasPalette.inkBlue)
+                Text(inlineMarkdown(text))
+                    .font(.custom("Newsreader", size: 18, relativeTo: .body)).lineSpacing(8)
+            }
+        }
+    }
+
+    private func inlineMarkdown(_ text: String) -> AttributedString {
+        (try? AttributedString(markdown: text)) ?? AttributedString(text)
+    }
+}
+
+private struct InkWritingLoader: View {
+    let status: String
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        TimelineView(.animation(minimumInterval: reduceMotion ? 1 : 1 / 30)) { timeline in
+            let t = timeline.date.timeIntervalSinceReferenceDate
+            let progress = reduceMotion ? 0.7 : (sin(t * 2.4) + 1) / 2
+            VStack(spacing: 18) {
+                ZStack {
+                    Text("noted")
+                        .font(.custom("Instrument Serif", size: 42, relativeTo: .largeTitle))
+                        .foregroundStyle(CanvasPalette.inkBlue)
+                    Image(systemName: "pencil.tip")
+                        .font(.system(size: 17, weight: .semibold))
+                        .foregroundStyle(CanvasPalette.inkBlue)
+                        .rotationEffect(.degrees(-38))
+                        .offset(x: CGFloat(progress) * 74 - 37, y: 30)
+                    Capsule()
+                        .fill(CanvasPalette.inkBlue.opacity(0.75))
+                        .frame(width: CGFloat(progress) * 92 + 18, height: 3)
+                        .offset(y: 31)
+                }
+                .frame(height: 62)
+                Text(status).font(.system(size: 11, weight: .semibold, design: .rounded)).opacity(0.48)
+            }
+        }
     }
 }
 
@@ -430,7 +659,7 @@ private struct LiveCaptureCard: View {
                 }
                 if let url = step.url, let destination = URL(string: url) {
                     Link(destination.host() ?? url, destination: destination)
-                        .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(CanvasPalette.blue)
+                        .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(CanvasPalette.inkBlue)
                 }
             }
             Spacer(minLength: 0)
@@ -443,7 +672,7 @@ private struct LiveCaptureCard: View {
         .padding(30).frame(maxWidth: .infinity).frame(height: height)
         .background(CanvasPalette.paper.opacity(0.93), in: RoundedRectangle(cornerRadius: 12))
         .overlay(alignment: .topTrailing) {
-            CanvasInkBlob().fill(CanvasPalette.ink.opacity(0.09)).frame(width: 170, height: 140).offset(x: 30, y: -22).clipped()
+            CanvasInkBlob().fill(CanvasPalette.inkBlue.opacity(0.10)).frame(width: 170, height: 140).offset(x: 30, y: -22).clipped()
         }
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(CanvasPalette.ink.opacity(0.11)))
         .shadow(color: CanvasPalette.ink.opacity(0.12), radius: 18, y: 10)
@@ -500,7 +729,7 @@ private struct CanvasFolderOverlay: View {
             .padding(.horizontal, 12).frame(height: 40)
         }
         .buttonStyle(.plain)
-        .background(filter == value ? CanvasPalette.ink.opacity(0.07) : .clear, in: RoundedRectangle(cornerRadius: 11))
+        .background(filter == value ? CanvasPalette.inkBlue.opacity(0.11) : .clear, in: RoundedRectangle(cornerRadius: 11))
     }
 }
 
@@ -509,9 +738,9 @@ private enum CanvasPalette {
     static let clayLight = Color(hex: 0xE8CAA4)
     static let paper = Color(hex: 0xF4E8CF)
     static let ink = Color(hex: 0x1B1816)
-    static let rose = Color(hex: 0xB05A4F)
-    static let blue = Color(hex: 0x40616B)
-    static let ochre = Color(hex: 0xB07A34)
+    static let inkBlue = Color(hex: 0x243B68)
+    static let inkBlueDeep = Color(hex: 0x172A50)
+    static let inkBlueLight = Color(hex: 0x4D6692)
 }
 
 private struct CanvasBrandMark: View {
@@ -548,16 +777,61 @@ private struct CanvasInkBlob: Shape {
 }
 
 private struct CanvasClayBackground: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
     var body: some View {
-        ZStack {
-            LinearGradient(colors: [CanvasPalette.clayLight, CanvasPalette.clay], startPoint: .topLeading, endPoint: .bottomTrailing)
-            CanvasInkBlob().fill(CanvasPalette.ink.opacity(0.14)).frame(width: 430, height: 350).rotationEffect(.degrees(-18)).offset(x: -480, y: -285)
-            CanvasInkBlob().fill(CanvasPalette.rose.opacity(0.17)).frame(width: 350, height: 285).rotationEffect(.degrees(29)).offset(x: 500, y: -265)
-            CanvasInkBlob().fill(CanvasPalette.blue.opacity(0.15)).frame(width: 480, height: 360).rotationEffect(.degrees(12)).offset(x: 445, y: 345)
-            Circle().fill(CanvasPalette.ink.opacity(0.16)).frame(width: 13).offset(x: -330, y: 285)
-            Circle().fill(CanvasPalette.ink.opacity(0.10)).frame(width: 7).offset(x: -300, y: 307)
-            Circle().fill(CanvasPalette.rose.opacity(0.18)).frame(width: 17).offset(x: 350, y: -72)
+        TimelineView(.animation(minimumInterval: reduceMotion ? 1 : 1 / 30)) { timeline in
+            let time = timeline.date.timeIntervalSinceReferenceDate
+            let breathe = reduceMotion ? 1 : 1 + sin(time * 0.42) * 0.018
+            let drift = reduceMotion ? 0 : sin(time * 0.31) * 7
+            ZStack {
+                LinearGradient(colors: [CanvasPalette.clayLight, CanvasPalette.clay], startPoint: .topLeading, endPoint: .bottomTrailing)
+                InkSplashCluster(scale: breathe)
+                    .frame(width: 470, height: 390).rotationEffect(.degrees(-18)).offset(x: -485 + drift, y: -285)
+                InkSplashCluster(scale: 0.82 / breathe)
+                    .frame(width: 390, height: 320).rotationEffect(.degrees(27)).offset(x: 510 - drift, y: -270)
+                InkSplashCluster(scale: 1.05 * breathe)
+                    .frame(width: 500, height: 390).rotationEffect(.degrees(11)).offset(x: 450, y: 350 + drift)
+            }
         }
         .ignoresSafeArea()
+    }
+}
+
+private struct InkSplashCluster: View {
+    let scale: CGFloat
+
+    var body: some View {
+        ZStack {
+            CanvasInkBlob()
+                .fill(CanvasPalette.inkBlue.opacity(0.17))
+                .scaleEffect(scale)
+            Circle().fill(CanvasPalette.inkBlue.opacity(0.22)).frame(width: 17).offset(x: -185, y: 115)
+            Circle().fill(CanvasPalette.inkBlue.opacity(0.15)).frame(width: 9).offset(x: -160, y: 145)
+            Circle().fill(CanvasPalette.inkBlue.opacity(0.19)).frame(width: 12).offset(x: 182, y: -105)
+            Capsule().fill(CanvasPalette.inkBlue.opacity(0.12)).frame(width: 44, height: 8).rotationEffect(.degrees(-28)).offset(x: 156, y: 128)
+        }
+    }
+}
+
+private struct InkRippleTransition: View {
+    let active: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        ZStack {
+            Circle()
+                .stroke(CanvasPalette.inkBlue.opacity(active ? 0 : 0.34), lineWidth: active ? 2 : 18)
+                .frame(width: active ? 920 : 24, height: active ? 920 : 24)
+            Circle()
+                .stroke(CanvasPalette.inkBlueLight.opacity(active ? 0 : 0.24), lineWidth: active ? 1 : 12)
+                .frame(width: active ? 670 : 16, height: active ? 670 : 16)
+            CanvasInkBlob()
+                .fill(CanvasPalette.inkBlue.opacity(active ? 0 : 0.12))
+                .frame(width: active ? 300 : 18, height: active ? 250 : 15)
+                .rotationEffect(.degrees(active ? 28 : 0))
+        }
+        .opacity(active ? 1 : 0)
+        .animation(reduceMotion ? .linear(duration: 0.12) : .easeOut(duration: 0.72), value: active)
     }
 }
