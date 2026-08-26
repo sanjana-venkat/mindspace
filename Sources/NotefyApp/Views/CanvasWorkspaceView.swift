@@ -347,7 +347,7 @@ private struct CaptureReadingView: View {
             TextField("Untitled note", text: $appState.noteTitle)
                 .textFieldStyle(.plain)
                 .font(.custom("Newsreader Display", size: 40, relativeTo: .largeTitle))
-                .onSubmit(appState.saveActiveNote)
+                .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
 
             ZStack(alignment: .topLeading) {
                 if appState.rawDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -359,6 +359,7 @@ private struct CaptureReadingView: View {
                     .font(.custom("Newsreader", size: 17, relativeTo: .body))
                     .lineSpacing(7).scrollContentBackground(.hidden)
                     .background(.clear)
+                    .onChange(of: appState.rawDraft) { appState.scheduleActiveNoteAutosave() }
             }
             .frame(maxHeight: 280)
 
@@ -372,16 +373,6 @@ private struct CaptureReadingView: View {
             }
 
             Spacer(minLength: 12)
-            Button {
-                appState.saveActiveNote()
-            } label: {
-                Label("Save note", systemImage: "checkmark")
-                    .font(.system(size: 12, weight: .bold, design: .rounded))
-                    .padding(.horizontal, 14).frame(height: 38)
-                    .foregroundStyle(CanvasPalette.paper)
-                    .background(CanvasPalette.inkBlue, in: Capsule())
-            }
-            .buttonStyle(.plain)
         }
         .padding(.horizontal, 38).padding(.vertical, 32)
         .background(CanvasPalette.paper.opacity(0.32))
@@ -684,7 +675,10 @@ private struct LiveCaptureCard: View {
     private var annotationBinding: Binding<String> {
         Binding(
             get: { appState.stepAnnotations[step.id] ?? "" },
-            set: { appState.stepAnnotations[step.id] = $0 }
+            set: {
+                appState.stepAnnotations[step.id] = $0
+                appState.scheduleActiveNoteAutosave()
+            }
         )
     }
 }

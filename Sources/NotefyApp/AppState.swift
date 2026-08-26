@@ -261,6 +261,7 @@ final class AppState: ObservableObject {
     private var visionClient: VisionClient
     private var isChangingRecordingState = false
     private var cancellables = Set<AnyCancellable>()
+    private var autosaveTask: Task<Void, Never>?
     private let regionSelection = RegionSelectionController()
     private let captureReview = CaptureReviewController()
     private let recordingNotepad = RecordingNotepadController()
@@ -609,6 +610,17 @@ final class AppState: ObservableObject {
     func saveActiveNote() {
         persistCurrentRawNote()
         recordingStatus = "Saved to \(activeNoteTitle)"
+    }
+
+    /// Quiet, debounced persistence for the canvas editor. Editing should feel like
+    /// writing on paper, not submitting a form, so this deliberately has no toast.
+    func scheduleActiveNoteAutosave() {
+        autosaveTask?.cancel()
+        autosaveTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 450_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.persistCurrentRawNote()
+        }
     }
 
     private func movePendingCaptureToNewNote(_ step: ExplorationStep) {
