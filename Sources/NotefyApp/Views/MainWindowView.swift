@@ -25,35 +25,7 @@ struct MainWindowView: View {
                     onFinished: appState.finishPermissionOnboarding
                 )
             } else {
-                GeometryReader { proxy in
-                    // Extra top clearance: with the title bar hidden, the
-                    // traffic lights float directly over the content column
-                    // (its tab strip needs real room). The sidebar has its
-                    // own chrome and no tab strip to clear, so it only needs
-                    // enough padding to keep its logo out from under the
-                    // traffic lights — not the full inset the tabs need.
-                    let topInset: CGFloat = 26
-                    let sidebarTopInset: CGFloat = 20
-                    let bottomInset: CGFloat = 24
-                    let contentHeight = proxy.size.height - topInset - bottomInset
-                    let sidebarHeight = proxy.size.height - sidebarTopInset - bottomInset
-                    HStack(alignment: .top, spacing: Stoneink.sp5) {
-                        Sidebar(selection: $selection, collapsed: $sidebarCollapsed, proxyHeight: sidebarHeight)
-                            .padding(.top, sidebarTopInset)
-                        Group {
-                            switch selection {
-                            case .dashboard: DashboardView()
-                            case .history: HistoryView(openNote: { selection = .dashboard })
-                            case .settings: SettingsView()
-                            }
-                        }
-                        .frame(maxWidth: .infinity, alignment: .top)
-                        .frame(height: contentHeight, alignment: .top)
-                        .padding(.top, topInset)
-                    }
-                    .padding(.horizontal, 24)
-                    .padding(.bottom, bottomInset)
-                }
+                CanvasWorkspaceView()
             }
         }
         .frame(minWidth: 980, minHeight: 680)
@@ -67,13 +39,12 @@ struct MainWindowView: View {
         // The ground: base fill, ambient bloom, grain, then a felt-not-seen
         // vignette above. Only this stack changes between modes — the panels
         // resting on it are byte-identical either way.
-        .background(GroundBackdrop())
-        .overlay(GroundVignette())
+        .background(Stoneink.surfaceBed)
         // Pinned to light in BOTH modes. This is not a dark theme: the paper
         // panels have to resolve as paper whatever the Mac is set to, and the
         // ground is chosen here, never by the system appearance.
         .preferredColorScheme(.light)
-        .environment(\.ground, GroundPalette.of(groundMode))
+        .environment(\.ground, GroundPalette.clay)
     }
 }
 

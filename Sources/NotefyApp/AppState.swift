@@ -96,6 +96,22 @@ struct NoteDestination: Identifiable, Hashable {
     var id: URL { url }
 }
 
+/// Read-only presentation data for the chronological canvas. The canvas never owns
+/// note content: it projects the existing markdown + JSON sidecar store so capture,
+/// organization, and model behavior continue to have one source of truth.
+struct CanvasNoteSnapshot: Identifiable, Hashable {
+    let url: URL
+    let title: String
+    let excerpt: String
+    let createdAt: Date
+    let folderID: UUID?
+    let folderName: String
+    let captureCount: Int
+    let hasOrganizedNote: Bool
+
+    var id: URL { url }
+}
+
 enum ThoughtNodeType: String, Codable {
     case question, observation, insight, concern, hypothesis, evidence, solution, conclusion
 }
@@ -364,6 +380,55 @@ final class AppState: ObservableObject {
     var allNoteDestinationsByRecency: [NoteDestination] {
         realNoteFiles.map { NoteDestination(url: $0, title: title(for: $0)) }
             .sorted { lastOpened($0.url) > lastOpened($1.url) }
+    }
+
+    /// Oldest first: this is the stable reading order used by the bounded canvas.
+    /// Opening a note never changes its position.
+    var canvasNoteSnapshots: [CanvasNoteSnapshot] {
+        realNoteFiles.map { url in
+            let document = loadDocument(for: url)
+            let resource = try? url.resourceValues(forKeys: [.creationDateKey, .contentModificationDateKey])
+            let createdAt = resource?.creationDate ?? resource?.contentModificationDate ?? .distantPast
+            let folderID = folderID(for: url)
+            let organized = document?.organized.trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+            let firstCapture = document?.steps.reversed().first
+            let captureText = firstCapture?.selectedText
+                ?? firstCapture?.pageText
+                ?? firstCapture?.windowTitle
+                ?? ""
+            let rawFile = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+            let excerptSource = organized.isEmpty ? (captureText.isEmpty ? rawFile : captureText) : organized
+            return CanvasNoteSnapshot(
+                url: url,
+                title: document?.title ?? title(for: url),
+                excerpt: canvasExcerpt(from: excerptSource),
+                createdAt: createdAt,
+                folderID: folderID,
+                folderName: folderPath(for: folderID),
+                captureCount: document?.steps.count ?? 0,
+                hasOrganizedNote: !organized.isEmpty
+            )
+        }
+        .sorted {
+            if $0.createdAt == $1.createdAt {
+                return $0.url.lastPathComponent < $1.url.lastPathComponent
+            }
+            return $0.createdAt < $1.createdAt
+        }
+    }
+
+    private func canvasExcerpt(from markdown: String) -> String {
+        let cleaned = markdown
+            .components(separatedBy: .newlines)
+            .map { line in
+                line.replacingOccurrences(of: #"^\s{0,3}(#{1,6}|[-*]>?|\d+\.)\s*"#, with: "", options: .regularExpression)
+                    .replacingOccurrences(of: #"[`*_\[\]()]"#, with: "", options: .regularExpression)
+                    .trimmingCharacters(in: .whitespacesAndNewlines)
+            }
+            .filter { !$0.isEmpty && !$0.hasPrefix("!") }
+            .dropFirst()
+            .joined(separator: " ")
+        return cleaned.isEmpty ? "A new note waiting for its first capture." : String(cleaned.prefix(210))
     }
 
     var pinnedNoteDestinations: [NoteDestination] {
