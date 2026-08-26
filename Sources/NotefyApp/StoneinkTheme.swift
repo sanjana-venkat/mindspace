@@ -359,9 +359,14 @@ struct StoneinkMark: View {
 
 enum StoneButtonVariant {
     case ink, stamp, bare, oxide
+    /// Sits directly on the ground: hairline border, no filled slab. Used
+    /// where a filled clay button would read as a floating sticker on ink.
+    case ghost
 }
 
 struct StoneButton: View {
+    @Environment(\.ground) private var ground
+
     let title: String
     var systemImage: String?
     var variant: StoneButtonVariant = .stamp
@@ -389,6 +394,9 @@ struct StoneButton: View {
                     ThrownRect.sm.stroke(Stoneink.oxide600, lineWidth: 1)
                 } else if variant == .stamp {
                     ThrownRect.sm.stroke(Stoneink.borderFirm, lineWidth: 1)
+                } else if variant == .ghost {
+                    ThrownRect.sm.stroke(hovering ? ground.onGround42 : ground.onGround16,
+                                         lineWidth: 1)
                 }
             }
             .offset(y: pressing ? 1 : 0)
@@ -408,6 +416,10 @@ struct StoneButton: View {
         case .stamp: return hovering ? Stoneink.surfaceLeaf : Stoneink.surfaceSlab
         case .bare: return hovering ? Stoneink.surfaceSlab : .clear
         case .oxide: return .clear
+        // Opaque, not transparent: the shelf floats over capture mats as
+        // they scroll past, and a see-through ghost with a ground-coloured
+        // label disappears the moment a mat slides underneath it.
+        case .ghost: return hovering ? ground.groundLift : ground.ground
         }
     }
 
@@ -417,15 +429,24 @@ struct StoneButton: View {
         case .stamp: return Stoneink.textPrimary
         case .bare: return Stoneink.textSecondary
         case .oxide: return Stoneink.oxide600
+        case .ghost: return ground.onGround
         }
     }
 }
 
 /// A rolled coil of clay pressed onto the card — tag chip.
+///
+/// One ghost-pill treatment, two substrate mixes. On paper it keeps the
+/// cobalt wash it has always had; on the ink ground a filled pill would
+/// compete with the sidebar for the eye, so it becomes a hairline outline
+/// with a paper label. Geometry is identical in every case.
 struct TagCoil: View {
+    @Environment(\.ground) private var ground
+
     let text: String
-    var fill: Color = Stoneink.cobalt050
-    var textColor: Color = Stoneink.cobalt700
+    /// True when the pill sits on a paper panel, where the substrate is the
+    /// same in both modes and the ground must not be consulted.
+    var onPaper: Bool = false
 
     var body: some View {
         Text(text.uppercased())
@@ -438,5 +459,72 @@ struct TagCoil: View {
             .frame(height: 22)
             .frame(maxWidth: 200, alignment: .leading)
             .background(fill, in: Capsule())
+            .overlay {
+                if let stroke { Capsule().stroke(stroke, lineWidth: 1) }
+            }
+    }
+
+    private var fill: Color {
+        if onPaper { return Stoneink.cobalt050 }
+        return ground.isInk ? .clear : Stoneink.cobalt050
+    }
+
+    private var stroke: Color? {
+        if onPaper { return nil }
+        return ground.isInk ? ground.onGround16 : nil
+    }
+
+    private var textColor: Color {
+        if onPaper { return Stoneink.cobalt700 }
+        return ground.isInk ? ground.onGround72 : Stoneink.cobalt700
+    }
+}
+
+// MARK: - Ground-aware depth
+//
+// The clay depth model is lit from above by a warm key: a light lip on top,
+// a dark one below. On the ink ground that model inverts — light values
+// there come from the paper, not from a highlight — so these two wrappers
+// pick the right treatment instead of the call sites branching.
+
+/// A well cut into whatever is underneath: the segmented track, inset
+/// wells. Inner shadow on clay, a hairline lip on ink. Never an outline.
+struct TrackWell<S: Shape>: ViewModifier {
+    @Environment(\.ground) private var ground
+    var shape: S
+
+    func body(content: Content) -> some View {
+        if ground.isInk {
+            content
+                .overlay { shape.stroke(Color.black.opacity(0.35), lineWidth: 1) }
+                .overlay {
+                    // The lip of the well catching light along its lower edge.
+                    shape.stroke(ground.onGround16, lineWidth: 1)
+                        .offset(y: 1)
+                        .clipShape(shape)
+                }
+        } else {
+            content.depthPress(shape)
+        }
+    }
+}
+
+extension TrackWell where S == Capsule {
+    init() { self.init(shape: Capsule()) }
+}
+
+/// A slab seated in a well — the active segment. It is paper in both modes,
+/// so it keeps its clay lip on clay; on ink it stays flat, because value
+/// alone already separates paper from ink and the moment one of these grows
+/// a cast shadow the ground stops reading as a slab.
+struct SegmentSlab: ViewModifier {
+    @Environment(\.ground) private var ground
+
+    func body(content: Content) -> some View {
+        if ground.isInk {
+            content
+        } else {
+            content.depthSlab(Capsule())
+        }
     }
 }

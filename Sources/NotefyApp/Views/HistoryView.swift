@@ -10,6 +10,7 @@ private enum LibraryTab: String, CaseIterable, Identifiable {
 /// into folders. Opening a note switches back to the live dashboard editor.
 struct HistoryView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.ground) private var ground
     @State private var tab: LibraryTab = .recent
     @State private var expandedFolders: Set<UUID> = []
 
@@ -20,10 +21,11 @@ struct HistoryView: View {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("THE ARCHIVE")
-                        .font(NotefyFont.label).tracking(1.3).foregroundStyle(NotefyTheme.inkSoft)
+                        .font(NotefyFont.label).tracking(1.3)
+                        .foregroundStyle(ground.onGround42)
                     Text("Your library")
                         .font(NotefyFont.pageTitle)
-                        .foregroundStyle(NotefyTheme.ink)
+                        .foregroundStyle(ground.onGround)
                 }
                 Spacer()
                 tabPicker
@@ -46,16 +48,16 @@ struct HistoryView: View {
                 } label: {
                     Text(item.rawValue.uppercased())
                         .font(NotefyFont.label).tracking(0.8)
-                        .foregroundStyle(tab == item ? NotefyTheme.ink : NotefyTheme.inkFaint)
+                        .foregroundStyle(tab == item ? Stoneink.textPrimary : ground.onGround42)
                         .padding(.horizontal, 14)
                         .padding(.vertical, 8)
-                        .background(tab == item ? NotefyTheme.cardPaper : Color.clear, in: Capsule())
+                        .background(tab == item ? Stoneink.surfaceSlab : Color.clear, in: Capsule())
                 }
                 .buttonStyle(.plain)
             }
         }
         .padding(4)
-        .background(NotefyTheme.sandDeep, in: Capsule())
+        .background(ground.isInk ? ground.groundLift : Stoneink.surfacePress, in: Capsule())
     }
 
     // MARK: - Recent (default landing view: sorted by last-opened)
@@ -85,7 +87,7 @@ struct HistoryView: View {
                 if !unfiled.isEmpty {
                     Text("UNFILED")
                         .font(NotefyFont.label).tracking(1.2)
-                        .foregroundStyle(NotefyTheme.inkSoft)
+                        .foregroundStyle(ground.onGround42)
                         .padding(.top, 12)
                         .padding(.bottom, 4)
                     ForEach(unfiled) { destination in
@@ -112,12 +114,12 @@ struct HistoryView: View {
                     HStack(spacing: 8) {
                         Image(systemName: expandedFolders.contains(folder.id) ? "chevron.down" : "chevron.right")
                             .font(.system(size: 9, weight: .bold))
-                            .foregroundStyle(NotefyTheme.inkFaint)
+                            .foregroundStyle(ground.onGround42)
                         Image(systemName: "folder.fill")
-                            .foregroundStyle(NotefyTheme.inkSoft)
+                            .foregroundStyle(ground.onGround72)
                         Text(folder.name)
                             .font(NotefyFont.heading)
-                            .foregroundStyle(NotefyTheme.ink)
+                            .foregroundStyle(ground.onGround)
                         Spacer()
                     }
                     .padding(.leading, CGFloat(depth) * 18)
@@ -167,7 +169,7 @@ struct HistoryView: View {
                 Spacer()
             }
             .padding(13)
-            .background(isActive ? NotefyTheme.pebbleTan.opacity(0.28) : NotefyTheme.cardPaper.opacity(0.6))
+            .background(isActive ? Stoneink.surfaceLeaf : Stoneink.surfaceSlab)
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
         .buttonStyle(.plain)
@@ -193,7 +195,7 @@ struct HistoryView: View {
             .frame(width: 100, height: 80)
             Text("No notes yet.")
                 .font(NotefyFont.body)
-                .foregroundStyle(NotefyTheme.inkSoft)
+                .foregroundStyle(ground.onGround72)
         }
         .padding(42)
     }

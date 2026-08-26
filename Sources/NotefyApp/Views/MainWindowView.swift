@@ -11,6 +11,11 @@ struct MainWindowView: View {
     @EnvironmentObject private var appState: AppState
     @State private var selection: NotefySection = .dashboard
     @State private var sidebarCollapsed = false
+    /// `data-ground` on the app shell. Ink is the default, and there is no
+    /// system-preference auto-switch — this is a surface choice.
+    @AppStorage(GroundStorage.key) private var groundRaw = GroundMode.ink.rawValue
+
+    private var groundMode: GroundMode { GroundMode(rawValue: groundRaw) ?? .ink }
 
     var body: some View {
         Group {
@@ -59,32 +64,16 @@ struct MainWindowView: View {
         // bloom behind the working area so the canvas isn't a dead slab,
         // then the grain (below) and a felt-not-seen vignette (above) so
         // the corners stop competing with the panels resting on it.
-        .background {
-            ZStack {
-                Stoneink.surfaceBed
-                GeometryReader { proxy in
-                    RadialGradient(
-                        colors: [Stoneink.surfaceLeaf.opacity(0.22), Stoneink.surfaceLeaf.opacity(0)],
-                        center: UnitPoint(x: 0.62, y: 0.38),
-                        startRadius: 0,
-                        endRadius: max(proxy.size.width, proxy.size.height) * 0.7
-                    )
-                }
-            }
-        }
-        .overlay(GrogOverlay().allowsHitTesting(false))
-        .overlay {
-            GeometryReader { proxy in
-                RadialGradient(
-                    colors: [Color.clear, Stoneink.bedDeep.opacity(0.14)],
-                    center: .center,
-                    startRadius: min(proxy.size.width, proxy.size.height) * 0.35,
-                    endRadius: max(proxy.size.width, proxy.size.height) * 0.75
-                )
-            }
-            .allowsHitTesting(false)
-        }
+        // The ground: base fill, ambient bloom, grain, then a felt-not-seen
+        // vignette above. Only this stack changes between modes — the panels
+        // resting on it are byte-identical either way.
+        .background(GroundBackdrop())
+        .overlay(GroundVignette())
+        // Pinned to light in BOTH modes. This is not a dark theme: the paper
+        // panels have to resolve as paper whatever the Mac is set to, and the
+        // ground is chosen here, never by the system appearance.
         .preferredColorScheme(.light)
+        .environment(\.ground, GroundPalette.of(groundMode))
     }
 }
 
@@ -106,6 +95,7 @@ private struct Sidebar: View {
     @State private var newFolderParent: UUID?
     @State private var newFolderName = ""
     @State private var searchQuery = ""
+    @FocusState private var searchFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 20) {
@@ -312,12 +302,21 @@ private struct Sidebar: View {
             TextField("Search notes", text: $searchQuery)
                 .textFieldStyle(.plain)
                 .font(StoneFont.body())
+                .focused($searchFocused)
         }
         .padding(.horizontal, 12)
         .frame(height: 36)
         .background(Stoneink.surfacePress)
         .clipShape(ThrownRect.press)
         .depthPress(ThrownRect.press)
+        // The field sits on paper, so it takes the paper mix of cobalt in
+        // both modes. Quiet: 1px at 45%, no glow, no ring offset — the well
+        // never inflates on focus.
+        .overlay {
+            if searchFocused {
+                ThrownRect.press.stroke(Stoneink.cobalt600.opacity(0.45), lineWidth: 1)
+            }
+        }
     }
 
     private func sectionLabel(_ title: String) -> some View {

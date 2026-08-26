@@ -3,18 +3,22 @@ import NotefyCore
 
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.ground) private var ground
     @State private var saved = false
+    @AppStorage(GroundStorage.key) private var groundRaw = GroundMode.ink.rawValue
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("THE WORKBENCH")
-                        .font(NotefyFont.label).tracking(1.3).foregroundStyle(NotefyTheme.inkSoft)
+                        .font(NotefyFont.label).tracking(1.3)
+                        .foregroundStyle(ground.onGround42)
                     Text("Settings")
                         .font(NotefyFont.pageTitle)
-                        .foregroundStyle(NotefyTheme.ink)
+                        .foregroundStyle(ground.onGround)
                 }
+                groundSection
                 permissionSection
                 providerSection(
                     title: "Voice Transcription",
@@ -59,12 +63,38 @@ struct SettingsView: View {
 
                 Text("Settings are stored at \(appState.settingsURL.path)")
                     .font(NotefyFont.caption)
-                    .foregroundStyle(NotefyTheme.textSecondary)
+                    .foregroundStyle(ground.onGround72)
             }
             .padding(24)
         }
         .background(Color.clear)
         .onAppear { appState.checkVisionStatus() }
+    }
+
+    /// The one control for `data-ground`. It lives here rather than on the
+    /// canvas because the canvas layout is frozen — and because this is a
+    /// surface choice made once, not a control you reach for while working.
+    /// Ink is the default, and neither mode follows the system appearance.
+    private var groundSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("GROUND")
+                .font(StoneFont.markMedium())
+                .tracking(Stoneink.trMark * 11)
+                .foregroundStyle(ground.onGround42)
+
+            Picker("", selection: $groundRaw) {
+                ForEach(GroundMode.allCases) { mode in
+                    Text(mode.label).tag(mode.rawValue)
+                }
+            }
+            .pickerStyle(.segmented)
+            .labelsHidden()
+            .fixedSize()
+
+            Text("Same object, different light. The panels stay paper either way — only the ground swaps.")
+                .font(StoneFont.body())
+                .foregroundStyle(ground.onGround72)
+        }
     }
 
     private var permissionSection: some View {

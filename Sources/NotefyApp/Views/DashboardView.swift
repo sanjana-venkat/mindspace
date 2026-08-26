@@ -2,6 +2,11 @@ import AppKit
 import SwiftUI
 import NotefyCore
 
+/// The width of the strip the note header, thought blocks, and capture
+/// cards occupy. The splatter's content-safe column is derived from it, so
+/// the two can never drift apart.
+private let rawContentColumn: CGFloat = 780
+
 private enum NoteViewMode: String, CaseIterable, Identifiable {
     case raw = "Raw"
     case organized = "Organized"
@@ -10,6 +15,7 @@ private enum NoteViewMode: String, CaseIterable, Identifiable {
 
 struct DashboardView: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.ground) private var ground
     @State private var mode: NoteViewMode = .raw
     @State private var showOrganizationChoices = false
     @State private var isSelecting = false
@@ -57,9 +63,11 @@ struct DashboardView: View {
             tabButton(title: "Organized", mode: .organized)
         }
         .padding(3)
-        .background(Stoneink.surfacePress)
+        // Cut INTO the ground rather than floating on it. Same geometry in
+        // both modes; only the fill and the lip change.
+        .background(ground.isInk ? ground.groundLift : Stoneink.surfacePress)
         .clipShape(Capsule())
-        .depthPress(Capsule())
+        .modifier(TrackWell())
         .frame(maxWidth: .infinity, alignment: .center)
         .padding(.bottom, 22)
         .zIndex(3)
@@ -73,13 +81,16 @@ struct DashboardView: View {
             mode = candidate
         } label: {
             Text(title)
+                // The active segment is the only paper in the control, so
+                // its label is ink on paper in both modes. Inactive labels
+                // sit directly on the ground and follow it.
                 .font(StoneFont.bodyMedium())
-                .foregroundStyle(isActive ? Stoneink.textPrimary : Stoneink.textMuted)
+                .foregroundStyle(isActive ? Stoneink.textPrimary : ground.onGround42)
                 .padding(.horizontal, 16)
                 .padding(.vertical, 8)
                 .background {
                     if isActive {
-                        Capsule().fill(Stoneink.surfaceSlab).depthSlab(Capsule())
+                        Capsule().fill(Stoneink.surfaceSlab).modifier(SegmentSlab())
                     }
                 }
         }
@@ -95,14 +106,14 @@ struct DashboardView: View {
                 TextField("Name this note", text: $appState.noteTitle, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(StoneFont.title())
-                    .foregroundStyle(Stoneink.textPrimary)
+                    .foregroundStyle(ground.onGround)
                     .lineLimit(1...2)
                     .onSubmit { appState.saveActiveNote() }
 
                 Text(metaText)
                     .font(StoneFont.mark())
                     .tracking(Stoneink.trMark * 11)
-                    .foregroundStyle(Stoneink.textMuted)
+                    .foregroundStyle(ground.onGround42)
                     .padding(.top, 9)
                     .padding(.bottom, 30)
 
@@ -123,7 +134,7 @@ struct DashboardView: View {
                 TextField("Name this note", text: $appState.noteTitle, axis: .vertical)
                     .textFieldStyle(.plain)
                     .font(StoneFont.title())
-                    .foregroundStyle(Stoneink.textPrimary)
+                    .foregroundStyle(ground.onGround)
                     .lineSpacing(2)
                     .onSubmit { appState.saveActiveNote() }
                     .fixedSize(horizontal: false, vertical: true)
@@ -131,7 +142,7 @@ struct DashboardView: View {
                 Text(metaText)
                     .font(StoneFont.mark())
                     .tracking(Stoneink.trMark * 11)
-                    .foregroundStyle(Stoneink.textMuted)
+                    .foregroundStyle(ground.onGround42)
                     .padding(.top, 9)
             }
 
@@ -187,7 +198,7 @@ struct DashboardView: View {
                                         rawThoughtBlock(step)
                                         rawCaptureBlock(step)
                                     }
-                                    .frame(width: 780, alignment: .leading)
+                                    .frame(width: rawContentColumn, alignment: .leading)
                                 }
                                 .scrollIndicators(.hidden)
                                 .frame(width: proxy.size.width, height: proxy.size.height, alignment: .top)
@@ -205,7 +216,10 @@ struct DashboardView: View {
         // The splatter lives below every panel and text node, on the
         // canvas only — never in the sidebar. Placed at fixed anchors,
         // never randomized, so the mark set is identical on every load.
-        .background(InkSplatterField())
+        // `rawContentColumn` is the strip the header, thoughts, and capture
+        // cards occupy; no mark may intersect it or its 48px margin, so on
+        // a narrow window the marks simply don't render.
+        .background(GroundSplatterField(contentColumnWidth: rawContentColumn))
     }
 
     @ViewBuilder
@@ -216,19 +230,23 @@ struct DashboardView: View {
                 Text("MY THOUGHT")
                     .font(StoneFont.mark())
                     .tracking(Stoneink.trMark * 11)
-                    .foregroundStyle(Stoneink.textMuted)
+                    .foregroundStyle(ground.onGround42)
                 // The user's own words — this is the one place Newsreader
                 // (the ink) appears in UI chrome, per the type rule. Set on
                 // the cobalt highlighter wash: ink lands on clay.
                 Text(annotation)
                     .font(StoneFont.readSmall())
-                    .foregroundStyle(Stoneink.textPrimary)
+                    // Full strength. The wash is what carries the mark; the
+                    // text must never strain against it.
+                    .foregroundStyle(ground.onGround)
                     .lineSpacing((Stoneink.tRead - 2) * (Stoneink.lhRead - 1))
                     .textSelection(.enabled)
                     .fixedSize(horizontal: false, vertical: true)
                     .padding(.horizontal, 6)
                     .padding(.vertical, 3)
-                    .background(Stoneink.cobalt100, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
+                    // A highlighter mark, not a surface: no glow, no drop
+                    // shadow, no outer stroke. Tight even radius only.
+                    .background(ground.wash, in: RoundedRectangle(cornerRadius: 3, style: .continuous))
             }
             .padding(.top, 8)
         }
@@ -271,12 +289,12 @@ struct DashboardView: View {
                     ProgressView().controlSize(.small)
                     Text("Setting the page in order…")
                         .font(StoneFont.body())
-                        .foregroundStyle(Stoneink.textSecondary)
+                        .foregroundStyle(ground.onGround72)
                 }
             } else if appState.organizedDraft.isEmpty {
                 Text("Choose Bullet List, Essay, or Diagram from Organize below.")
                     .font(StoneFont.body())
-                    .foregroundStyle(Stoneink.textSecondary)
+                    .foregroundStyle(ground.onGround72)
             } else if appState.organizedTemplate == .diagram {
                 OrganizedDiagramView(
                     steps: Array(appState.steps.reversed()),
@@ -296,15 +314,27 @@ struct DashboardView: View {
     // Organized is the AI's own read of the note — text only. Raw screenshots
     // stay in Raw; showing the capture stream again here was a redundant
     // second copy of the same evidence, not a second view of it.
+    /// §3.5, option A. Organized is a long-form reading surface, and light
+    /// text on a dark ground is the hardest readability case in the app —
+    /// so the essay sits on a paper sheet, ink on paper, exactly like the
+    /// sidebar. The ground shows only as a margin around it, and readability
+    /// is then solved for free in both modes. No splatter here: this is a
+    /// reading surface.
     private var organizedSplitPage: some View {
         VStack(alignment: .leading, spacing: 18) {
             Text("A considered view of what you captured, and why it matters.")
                 .font(StoneFont.body())
                 .foregroundStyle(Stoneink.textSecondary)
-            FlowTags(tags: sourceTags)
+            FlowTags(tags: sourceTags, onPaper: true)
             OrganizedMarkdownView(markdown: appState.organizedDraft)
         }
         .frame(maxWidth: 760, alignment: .leading)
+        .padding(36)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Stoneink.surfaceLeaf)
+        .overlay(GrogOverlay().allowsHitTesting(false))
+        .clipShape(ThrownRect.lg)
+        .depthSlab(ThrownRect.lg)
     }
 
     private var sourceTags: [String] {
@@ -318,11 +348,15 @@ struct DashboardView: View {
     /// wrap to a new line when the column runs out of width.
     private struct FlowTags: View {
         let tags: [String]
+        /// Source pills on the organized sheet land on paper; the note
+        /// header's tags land on the ground. Same ghost treatment either
+        /// way — only the pigment is mixed for the substrate.
+        var onPaper: Bool = false
 
         var body: some View {
             FlowLayout(spacing: 8) {
                 ForEach(tags, id: \.self) { tag in
-                    TagCoil(text: tag)
+                    TagCoil(text: tag, onPaper: onPaper)
                 }
             }
         }
@@ -332,28 +366,31 @@ struct DashboardView: View {
     /// system's own rule: one splatter, maximum, per screen.
     private var emptyPaper: some View {
         VStack(spacing: 18) {
-            StoneinkMark(tint: Stoneink.cobalt100)
+            // The wash strength is for a highlighter behind text; at 96pt
+            // it reads as a blue blob dropped in the middle of the canvas.
+            // The bloom mix is the ambient one, which is what this is.
+            StoneinkMark(tint: ground.bloom)
                 .frame(width: 96, height: 96)
 
             VStack(spacing: 8) {
                 Text("Nothing kept yet")
                     .font(StoneFont.title())
-                    .foregroundStyle(Stoneink.textPrimary)
+                    .foregroundStyle(ground.onGround)
                 Text("Capture anything on screen and it lands here.")
                     .font(StoneFont.body())
-                    .foregroundStyle(Stoneink.textSecondary)
+                    .foregroundStyle(ground.onGround72)
                     .multilineTextAlignment(.center)
                     .frame(maxWidth: 280)
 
                 Text("⌘⇧N")
                     .font(StoneFont.markMedium())
                     .tracking(Stoneink.trMark * 11)
-                    .foregroundStyle(Stoneink.textMuted)
+                    .foregroundStyle(ground.onGround72)
                     .padding(.horizontal, 10)
                     .frame(height: 24)
-                    .background(Stoneink.surfacePress)
+                    .background(ground.isInk ? ground.groundLift : Stoneink.surfacePress)
                     .clipShape(ThrownRect.press)
-                    .depthPress(ThrownRect.press)
+                    .modifier(TrackWell(shape: ThrownRect.press))
                     .padding(.top, 6)
             }
         }
@@ -393,7 +430,7 @@ struct DashboardView: View {
                     organizationChoices
                 }
                 HStack(spacing: 8) {
-                    StoneButton(title: isSelecting ? "Done" : "Select", systemImage: isSelecting ? "checkmark" : "checkmark.circle", variant: .stamp) {
+                    StoneButton(title: isSelecting ? "Done" : "Select", systemImage: isSelecting ? "checkmark" : "checkmark.circle", variant: .ghost) {
                         isSelecting.toggle()
                     }
                     StoneButton(title: "Organize", systemImage: showOrganizationChoices ? "xmark" : "arrow.up", variant: .ink) {
@@ -410,7 +447,8 @@ struct DashboardView: View {
                     StoneButton(title: "Template", systemImage: "square.grid.2x2", variant: .ink) {
                         showOrganizationChoices.toggle()
                     }
-                    StoneButton(title: "Raw", systemImage: "arrow.left", variant: .stamp) {
+                    // Ghost, not a filled slab — one solid cobalt per screen.
+                    StoneButton(title: "Raw", systemImage: "arrow.left", variant: .ghost) {
                         mode = .raw
                     }
                 }
@@ -422,7 +460,7 @@ struct DashboardView: View {
         HStack(spacing: 10) {
             Text("\(appState.selectedStepIDs.count) selected")
                 .font(StoneFont.mark()).tracking(Stoneink.trMark * 11)
-                .foregroundStyle(Stoneink.textSecondary)
+                .foregroundStyle(ground.onGround72)
 
             Button {
                 showMovePicker = true
@@ -431,7 +469,7 @@ struct DashboardView: View {
                     .font(StoneFont.bodyMedium())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Stoneink.textPrimary)
+            .foregroundStyle(ground.onGround)
             .popover(isPresented: $showMovePicker, arrowEdge: .bottom) {
                 NoteSearchPicker(
                     title: "Move to",
@@ -448,7 +486,7 @@ struct DashboardView: View {
                     .font(StoneFont.bodyMedium())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Stoneink.textPrimary)
+            .foregroundStyle(ground.onGround)
             .popover(isPresented: $showForwardPicker, arrowEdge: .bottom) {
                 NoteSearchPicker(
                     title: "Forward to",
@@ -465,14 +503,14 @@ struct DashboardView: View {
                     .font(StoneFont.bodyMedium())
             }
             .buttonStyle(.plain)
-            .foregroundStyle(Stoneink.oxide600)
+            .foregroundStyle(ground.destructive)
 
             Button {
                 appState.clearStepSelection()
             } label: {
                 Text("Cancel")
                     .font(StoneFont.bodyMedium())
-                    .foregroundStyle(Stoneink.textMuted)
+                    .foregroundStyle(ground.onGround42)
             }
             .buttonStyle(.plain)
         }
@@ -565,8 +603,10 @@ private struct OrganizedMarkdownView: View {
             .padding(.vertical, 3)
         } else if trimmed.hasPrefix("- ") {
             HStack(alignment: .top, spacing: 10) {
+                // Cobalt, not a neutral and not a second pigment. The sheet
+                // is paper in both modes, so this is the paper mix.
                 Circle()
-                    .fill(Stoneink.oxide600)
+                    .fill(Stoneink.cobalt600)
                     .frame(width: 5, height: 5)
                     .padding(.top, 9)
                 inlineMarkdown(String(trimmed.dropFirst(2)))
@@ -900,9 +940,15 @@ private struct CaptureStamp: View {
                     .lineLimit(4)
             }
             if displayText != sourceDescription {
+                // Wrap to a second line rather than clipping. A truncated
+                // URL is the one caption that has to stay readable.
                 Text(sourceDescription)
                     .font(StoneFont.mark())
                     .foregroundStyle(Stoneink.textMuted)
+                    .lineLimit(2)
+                    .truncationMode(.middle)
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: .infinity, alignment: .leading)
             }
         }
     }
