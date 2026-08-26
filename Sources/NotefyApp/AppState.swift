@@ -410,12 +410,49 @@ final class AppState: ObservableObject {
                 hasOrganizedNote: !organized.isEmpty
             )
         }
-        .sorted {
-            if $0.createdAt == $1.createdAt {
-                return $0.url.lastPathComponent < $1.url.lastPathComponent
+        .sorted { lhs, rhs in
+            let leftPosition = workspace.noteMeta[lhs.url.lastPathComponent]?.canvasPosition
+            let rightPosition = workspace.noteMeta[rhs.url.lastPathComponent]?.canvasPosition
+            switch (leftPosition, rightPosition) {
+            case let (left?, right?) where left != right: return left < right
+            case (_?, nil): return true
+            case (nil, _?): return false
+            default:
+                if lhs.createdAt == rhs.createdAt {
+                    return lhs.url.lastPathComponent < rhs.url.lastPathComponent
+                }
+                return lhs.createdAt < rhs.createdAt
             }
-            return $0.createdAt < $1.createdAt
         }
+    }
+
+    func moveCanvasNote(_ sourceURL: URL, to targetURL: URL) {
+        var ordered = canvasNoteSnapshots.map(\.url)
+        guard let sourceIndex = ordered.firstIndex(of: sourceURL),
+              let targetIndex = ordered.firstIndex(of: targetURL),
+              sourceIndex != targetIndex else { return }
+        let source = ordered.remove(at: sourceIndex)
+        ordered.insert(source, at: targetIndex)
+        persistCanvasOrder(ordered)
+    }
+
+    func swapCanvasNotes(_ firstURL: URL, _ secondURL: URL) {
+        var ordered = canvasNoteSnapshots.map(\.url)
+        guard let firstIndex = ordered.firstIndex(of: firstURL),
+              let secondIndex = ordered.firstIndex(of: secondURL),
+              firstIndex != secondIndex else { return }
+        ordered.swapAt(firstIndex, secondIndex)
+        persistCanvasOrder(ordered)
+    }
+
+    private func persistCanvasOrder(_ ordered: [URL]) {
+        for (index, url) in ordered.enumerated() {
+            var meta = workspace.noteMeta[url.lastPathComponent] ?? NoteMeta()
+            meta.canvasPosition = index
+            workspace.noteMeta[url.lastPathComponent] = meta
+        }
+        saveWorkspace()
+        objectWillChange.send()
     }
 
     private func canvasExcerpt(from markdown: String) -> String {

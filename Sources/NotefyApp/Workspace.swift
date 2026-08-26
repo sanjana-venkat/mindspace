@@ -22,6 +22,8 @@ struct NoteMeta: Codable {
     var folderID: UUID?
     var pinned: Bool = false
     var lastOpenedAt: Date = Date()
+    /// Optional so existing workspace files decode without migration.
+    var canvasPosition: Int?
 }
 
 struct Workspace: Codable {

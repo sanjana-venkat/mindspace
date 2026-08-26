@@ -57,6 +57,7 @@ struct CanvasWorkspaceView: View {
                         notes: notes,
                         zoom: $zoom,
                         selectedIndex: $selectedIndex,
+                        moveNote: appState.moveCanvasNote,
                         openNote: openNote
                     )
                 case .reading:
@@ -122,7 +123,14 @@ struct CanvasWorkspaceView: View {
 
     private func moveSelection(_ delta: Int) {
         guard route == .canvas, !notes.isEmpty else { return }
-        selectedIndex = min(max(selectedIndex + delta, 0), notes.count - 1)
+        let targetIndex = min(max(selectedIndex + delta, 0), notes.count - 1)
+        guard targetIndex != selectedIndex else { return }
+        let selectedURL = notes[selectedIndex].url
+        let targetURL = notes[targetIndex].url
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.80)) {
+            appState.swapCanvasNotes(selectedURL, targetURL)
+            selectedIndex = targetIndex
+        }
     }
 
     private func openNote(_ snapshot: CanvasNoteSnapshot) {
@@ -207,6 +215,7 @@ private struct ChronologicalCanvas: View {
     let notes: [CanvasNoteSnapshot]
     @Binding var zoom: CGFloat
     @Binding var selectedIndex: Int
+    let moveNote: (URL, URL) -> Void
     let openNote: (CanvasNoteSnapshot) -> Void
 
     private let columns = Array(repeating: GridItem(.fixed(300), spacing: 30), count: 3)
@@ -218,9 +227,28 @@ private struct ChronologicalCanvas: View {
                     ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
                         CanvasNoteCard(note: note, selected: index == selectedIndex)
                             .id(note.id)
-                            .onTapGesture {
+                            .onTapGesture(count: 2) {
                                 selectedIndex = index
                                 openNote(note)
+                            }
+                            .onTapGesture(count: 1) {
+                                withAnimation(.easeOut(duration: 0.16)) { selectedIndex = index }
+                            }
+                            .draggable(note.url.absoluteString) {
+                                CanvasNoteCard(note: note, selected: true)
+                                    .opacity(0.88)
+                            }
+                            .dropDestination(for: String.self) { items, _ in
+                                guard let value = items.first,
+                                      let sourceURL = URL(string: value),
+                                      sourceURL != note.url else { return false }
+                                withAnimation(.spring(response: 0.46, dampingFraction: 0.78)) {
+                                    moveNote(sourceURL, note.url)
+                                }
+                                selectedIndex = index
+                                return true
+                            } isTargeted: { targeted in
+                                if targeted { selectedIndex = index }
                             }
                     }
                 }
