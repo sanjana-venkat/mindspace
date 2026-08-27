@@ -29,6 +29,7 @@ struct CanvasWorkspaceView: View {
     @State private var zoom: CGFloat = 0.84
     @State private var selectedIndex = 0
     @State private var inkTransitionFrame: Int?
+    @State private var inkTransitionOrigin: CGPoint?
     @FocusState private var keyboardFocused: Bool
 
     private var notes: [CanvasNoteSnapshot] {
@@ -94,7 +95,7 @@ struct CanvasWorkspaceView: View {
             }
 
             if let inkTransitionFrame {
-                InkOpenTransition(frame: inkTransitionFrame)
+                InkOpenTransition(frame: inkTransitionFrame, origin: inkTransitionOrigin)
                     .ignoresSafeArea()
                     .allowsHitTesting(true)
                     .zIndex(20)
@@ -138,19 +139,20 @@ struct CanvasWorkspaceView: View {
         }
     }
 
-    private func openNote(_ snapshot: CanvasNoteSnapshot) {
-        transitionToReading(snapshot.url)
+    private func openNote(_ snapshot: CanvasNoteSnapshot, from origin: CGPoint) {
+        transitionToReading(snapshot.url, from: origin)
     }
 
     private func createNote() {
         let folderID: UUID?
         if case .folder(let id) = folderFilter { folderID = id } else { folderID = nil }
         let destination = appState.createNewNote(inFolder: folderID)
-        transitionToReading(destination.url)
+        transitionToReading(destination.url, from: nil)
     }
 
-    private func transitionToReading(_ url: URL) {
+    private func transitionToReading(_ url: URL, from origin: CGPoint?) {
         guard inkTransitionFrame == nil else { return }
+        inkTransitionOrigin = origin
 
         guard !reduceMotion else {
             appState.openNote(url)
@@ -176,6 +178,7 @@ struct CanvasWorkspaceView: View {
             }
 
             inkTransitionFrame = nil
+            inkTransitionOrigin = nil
             keyboardFocused = true
         }
     }
@@ -253,7 +256,7 @@ private struct ChronologicalCanvas: View {
     @Binding var zoom: CGFloat
     @Binding var selectedIndex: Int
     let moveNote: (URL, URL) -> Void
-    let openNote: (CanvasNoteSnapshot) -> Void
+    let openNote: (CanvasNoteSnapshot, CGPoint) -> Void
 
     private let columns = Array(repeating: GridItem(.fixed(300), spacing: 30), count: 3)
 
@@ -264,9 +267,9 @@ private struct ChronologicalCanvas: View {
                     ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
                         CanvasNoteCard(note: note, selected: index == selectedIndex)
                             .id(note.id)
-                            .onTapGesture(count: 2) {
+                            .onTapGesture(count: 2, coordinateSpace: .global) { location in
                                 selectedIndex = index
-                                openNote(note)
+                                openNote(note, location)
                             }
                             .onTapGesture(count: 1) {
                                 withAnimation(.easeOut(duration: 0.16)) { selectedIndex = index }
@@ -328,7 +331,6 @@ private struct CanvasNoteCard: View {
             HStack {
                 Text(note.createdAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()).uppercased())
                 Spacer()
-                Circle().fill(accent).frame(width: 9, height: 9)
             }
             .font(.system(size: 9, weight: .black, design: .monospaced)).tracking(0.7).opacity(0.52)
             Spacer(minLength: 18)
@@ -355,10 +357,6 @@ private struct CanvasNoteCard: View {
         .contentShape(Rectangle())
     }
 
-    private var accent: Color {
-        let choices = [CanvasPalette.inkBlue, CanvasPalette.inkBlue.opacity(0.72), CanvasPalette.inkBlue.opacity(0.48)]
-        return choices[abs(note.url.lastPathComponent.hashValue) % choices.count]
-    }
 }
 
 private struct CaptureReadingView: View {
@@ -400,7 +398,7 @@ private struct CaptureReadingView: View {
                             rawNoteColumn
                                 .frame(width: proxy.size.width / 3)
                             captureColumn
-                                .padding(.top, 68)
+                                .padding(.top, 146)
                                 .frame(width: proxy.size.width * 2 / 3)
                         }
                     }
@@ -408,7 +406,7 @@ private struct CaptureReadingView: View {
                 case .organized:
                     OrganizedEssayView()
                         .environmentObject(appState)
-                        .padding(.top, 68)
+                        .padding(.top, 146)
                         .transition(.opacity.combined(with: .scale(scale: 0.99)))
                 }
             }
@@ -496,11 +494,9 @@ private struct ReaderTabBar: View {
                         .padding(.horizontal, 19).frame(height: 34)
                         .background {
                             if selection == tab {
-                                Capsule().fill(CanvasPalette.inkBlue)
+                                InkPillShape(variation: tab == .raw ? 0 : 1)
+                                    .fill(CanvasPalette.inkBlue)
                                     .matchedGeometryEffect(id: "ink-tab", in: inkSelection)
-                                    .overlay(alignment: .trailing) {
-                                        Circle().fill(CanvasPalette.inkBlue.opacity(0.55)).frame(width: 8).offset(x: 4, y: -9)
-                                    }
                             }
                         }
                 }
@@ -508,8 +504,9 @@ private struct ReaderTabBar: View {
             }
         }
         .padding(4)
-        .background(CanvasPalette.paper.opacity(0.72), in: Capsule())
-        .overlay(Capsule().stroke(CanvasPalette.inkBlue.opacity(0.13)))
+        .background(CanvasPalette.paper.opacity(0.88), in: InkPillShape(variation: 2))
+        .overlay(InkPillShape(variation: 2).stroke(CanvasPalette.inkBlue.opacity(0.13)))
+        .shadow(color: CanvasPalette.clay.opacity(0.95), radius: 16, y: 5)
     }
 }
 
@@ -525,7 +522,7 @@ private struct OrganizedEssayView: View {
                             .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1)
                             .foregroundStyle(CanvasPalette.inkBlue)
                             .padding(.horizontal, 12).frame(height: 30)
-                            .background(CanvasPalette.inkBlue.opacity(0.09), in: Capsule())
+                            .background(CanvasPalette.inkBlue.opacity(0.09), in: InkPillShape(variation: 1))
                         Spacer()
                         OrganizationPicker()
                             .environmentObject(appState)
@@ -612,10 +609,7 @@ private struct OrganizationPicker: View {
                 .font(.system(size: 12, weight: .bold, design: .rounded))
                 .padding(.horizontal, 14).frame(height: 38)
                 .foregroundStyle(CanvasPalette.paper)
-                .background(CanvasPalette.inkBlue, in: Capsule())
-                .overlay(alignment: .topTrailing) {
-                    Circle().fill(CanvasPalette.inkBlueLight).frame(width: 7).offset(x: 2, y: -2)
-                }
+                .background(CanvasPalette.inkBlue, in: InkPillShape(variation: 0))
         }
         .buttonStyle(.plain)
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
@@ -928,6 +922,7 @@ private struct CanvasFolderOverlay: View {
 /// deliberate frames, covers the canvas, then breaks apart to reveal the note.
 private struct InkOpenTransition: View {
     let frame: Int
+    let origin: CGPoint?
 
     private let coverFrameCount = 16
     private let revealFrameCount = 20
@@ -946,49 +941,43 @@ private struct InkOpenTransition: View {
 
     private func drawLandingSplashes(in context: inout GraphicsContext, size: CGSize) {
         let progress = CGFloat(frame + 1) / CGFloat(coverFrameCount)
-        let columns = 5
-        let rows = 4
-        let cellWidth = size.width / CGFloat(columns)
-        let cellHeight = size.height / CGFloat(rows)
-        let maximumRadius = hypot(cellWidth, cellHeight) * 1.5
+        let center = CGPoint(
+            x: min(max(origin?.x ?? size.width / 2, 0), size.width),
+            y: min(max(origin?.y ?? size.height / 2, 0), size.height)
+        )
+        let farthestX = max(center.x, size.width - center.x)
+        let farthestY = max(center.y, size.height - center.y)
+        let maximumRadius = hypot(farthestX, farthestY) * 1.22
 
-        for row in 0..<rows {
-            for column in 0..<columns {
-                let ordinal = row * columns + column
-                let stagger = CGFloat((ordinal * 7 + row * 3) % 11) / 95
-                let localProgress = max(0, min(1, (progress - stagger) / (1 - stagger)))
-                guard localProgress > 0 else { continue }
+        // One continuous bloom grows from the chosen card. A broad ease-out
+        // gives it the fluid acceleration of pigment dispersing in water.
+        let eased = 1 - pow(1 - progress, 2.55)
+        let impact = sin(progress * .pi) * 0.045
+        let radius = maximumRadius * (eased + impact)
+        context.fill(
+            organicSplat(center: center, radius: radius, seed: 17),
+            with: .color(CanvasPalette.inkBlue)
+        )
 
-                // Expo-out with a tiny impact overshoot: one splash, not a wipe.
-                let eased = 1 - pow(1 - localProgress, 2.7)
-                let impact = sin(localProgress * .pi) * 0.08
-                let radius = maximumRadius * (eased + impact)
-                let jitterX = CGFloat((ordinal * 37) % 35 - 17)
-                let jitterY = CGFloat((ordinal * 19) % 31 - 15)
-                let center = CGPoint(
-                    x: (CGFloat(column) + 0.5) * cellWidth + jitterX,
-                    y: (CGFloat(row) + 0.5) * cellHeight + jitterY
-                )
-
-                context.fill(
-                    organicSplat(center: center, radius: radius, seed: ordinal),
-                    with: .color(CanvasPalette.inkBlue)
-                )
-
-                let satelliteRadius = max(2, radius * 0.055)
-                let satelliteAngle = CGFloat((ordinal * 41) % 360) * .pi / 180
-                let satelliteCenter = CGPoint(
-                    x: center.x + cos(satelliteAngle) * radius * 0.86,
-                    y: center.y + sin(satelliteAngle) * radius * 0.70
-                )
-                let satellite = CGRect(
-                    x: satelliteCenter.x - satelliteRadius,
-                    y: satelliteCenter.y - satelliteRadius,
-                    width: satelliteRadius * 2,
-                    height: satelliteRadius * 1.45
-                )
-                context.fill(Path(ellipseIn: satellite), with: .color(CanvasPalette.inkBlue))
-            }
+        // Small droplets stay tied to the same radial wavefront, avoiding a
+        // second, unrelated animation while keeping the edge organically wet.
+        for index in 0..<5 where progress > CGFloat(index) * 0.035 {
+            let angle = CGFloat(index) * 1.27 - 0.6
+            let distance = radius * (0.70 + CGFloat(index % 2) * 0.11)
+            let dropletRadius = max(2, radius * (0.018 + CGFloat(index % 3) * 0.004))
+            let dropletCenter = CGPoint(
+                x: center.x + cos(angle) * distance,
+                y: center.y + sin(angle) * distance * 0.82
+            )
+            context.fill(
+                Path(ellipseIn: CGRect(
+                    x: dropletCenter.x - dropletRadius,
+                    y: dropletCenter.y - dropletRadius,
+                    width: dropletRadius * 2,
+                    height: dropletRadius * 1.55
+                )),
+                with: .color(CanvasPalette.inkBlue)
+            )
         }
     }
 
@@ -1089,7 +1078,6 @@ private enum CanvasPalette {
 }
 
 private enum NotedInkAssets {
-    static let wordmark = load("noted-wordmark")
     static let mark = load("noted-mark")
 
     private static func load(_ name: String) -> NSImage? {
@@ -1101,22 +1089,11 @@ private enum NotedInkAssets {
 }
 
 private struct CanvasBrandMark: View {
-    private var bundledLogo: NSImage? {
-        if let wordmark = NotedInkAssets.wordmark { return wordmark }
-        if let named = NSImage(named: "NotedLogo") { return named }
-        guard let url = Bundle.main.url(forResource: "NotedLogo", withExtension: "png") else { return nil }
-        return NSImage(contentsOf: url)
-    }
-
     var body: some View {
-        Group {
-            if let bundledLogo {
-                Image(nsImage: bundledLogo).resizable().scaledToFit()
-            } else {
-                Text("noted")
-                    .font(.custom("Instrument Serif", size: 25, relativeTo: .title))
-            }
-        }
+        Text("noted")
+            .font(.custom("Syne", size: 29, relativeTo: .title).weight(.semibold))
+            .tracking(-1.4)
+            .foregroundStyle(CanvasPalette.ink)
         .frame(width: 112, height: 42)
         .accessibilityLabel("Noted")
     }
@@ -1147,6 +1124,52 @@ private struct CanvasInkBlob: Shape {
         path.addCurve(to: CGPoint(x: rect.minX + rect.width * 0.94, y: rect.minY + rect.height * 0.32), control1: CGPoint(x: rect.minX + rect.width * 0.66, y: rect.minY + rect.height * 0.08), control2: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.03))
         path.addCurve(to: CGPoint(x: rect.minX + rect.width * 0.64, y: rect.minY + rect.height * 0.94), control1: CGPoint(x: rect.maxX, y: rect.minY + rect.height * 0.68), control2: CGPoint(x: rect.minX + rect.width * 0.89, y: rect.maxY))
         path.addCurve(to: CGPoint(x: rect.minX + rect.width * 0.07, y: rect.minY + rect.height * 0.45), control1: CGPoint(x: rect.minX + rect.width * 0.25, y: rect.maxY), control2: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.75))
+        return path
+    }
+}
+
+/// A softly irregular control silhouette: legible as a button, but with the
+/// slight edge tension of ink settling into paper instead of a perfect capsule.
+private struct InkPillShape: Shape {
+    let variation: Int
+
+    func path(in rect: CGRect) -> Path {
+        let v = variation % 3
+        let topInset = v == 1 ? rect.height * 0.055 : rect.height * 0.025
+        let bottomInset = v == 2 ? rect.height * 0.045 : rect.height * 0.015
+        var path = Path()
+        path.move(to: CGPoint(x: rect.minX + rect.height * 0.52, y: rect.minY + topInset))
+        path.addCurve(
+            to: CGPoint(x: rect.maxX - rect.height * 0.43, y: rect.minY + (v == 0 ? rect.height * 0.015 : rect.height * 0.07)),
+            control1: CGPoint(x: rect.minX + rect.width * 0.30, y: rect.minY - rect.height * 0.025),
+            control2: CGPoint(x: rect.maxX - rect.width * 0.25, y: rect.minY + rect.height * 0.075)
+        )
+        path.addCurve(
+            to: CGPoint(x: rect.maxX - rect.height * 0.05, y: rect.midY + rect.height * 0.05),
+            control1: CGPoint(x: rect.maxX - rect.height * 0.12, y: rect.minY + rect.height * 0.05),
+            control2: CGPoint(x: rect.maxX + rect.height * 0.015, y: rect.midY - rect.height * 0.18)
+        )
+        path.addCurve(
+            to: CGPoint(x: rect.maxX - rect.height * 0.50, y: rect.maxY - bottomInset),
+            control1: CGPoint(x: rect.maxX, y: rect.maxY - rect.height * 0.15),
+            control2: CGPoint(x: rect.maxX - rect.height * 0.20, y: rect.maxY)
+        )
+        path.addCurve(
+            to: CGPoint(x: rect.minX + rect.height * 0.42, y: rect.maxY - rect.height * 0.035),
+            control1: CGPoint(x: rect.maxX - rect.width * 0.30, y: rect.maxY + rect.height * 0.02),
+            control2: CGPoint(x: rect.minX + rect.width * 0.25, y: rect.maxY - rect.height * 0.06)
+        )
+        path.addCurve(
+            to: CGPoint(x: rect.minX + rect.height * 0.04, y: rect.midY - rect.height * 0.02),
+            control1: CGPoint(x: rect.minX + rect.height * 0.14, y: rect.maxY - rect.height * 0.07),
+            control2: CGPoint(x: rect.minX - rect.height * 0.015, y: rect.midY + rect.height * 0.20)
+        )
+        path.addCurve(
+            to: CGPoint(x: rect.minX + rect.height * 0.52, y: rect.minY + topInset),
+            control1: CGPoint(x: rect.minX, y: rect.minY + rect.height * 0.16),
+            control2: CGPoint(x: rect.minX + rect.height * 0.21, y: rect.minY + rect.height * 0.04)
+        )
+        path.closeSubpath()
         return path
     }
 }

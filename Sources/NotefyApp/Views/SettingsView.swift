@@ -4,12 +4,14 @@ import NotefyCore
 struct SettingsView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.ground) private var ground
+    @Environment(\.dismiss) private var dismiss
     @State private var saved = false
     @AppStorage(GroundStorage.key) private var groundRaw = GroundMode.ink.rawValue
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 24) {
+        ZStack(alignment: .topTrailing) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("THE WORKBENCH")
                         .font(NotefyFont.label).tracking(1.3)
@@ -64,8 +66,24 @@ struct SettingsView: View {
                 Text("Settings are stored at \(appState.settingsURL.path)")
                     .font(NotefyFont.caption)
                     .foregroundStyle(ground.onGround72)
+                }
+                .padding(24)
+                .padding(.top, 34)
             }
-            .padding(24)
+            .scrollIndicators(.visible)
+
+            Button { dismiss() } label: {
+                Image(systemName: "xmark")
+                    .font(.system(size: 13, weight: .bold))
+                    .frame(width: 34, height: 34)
+                    .background(NotefyTheme.cardPaper, in: Circle())
+                    .overlay(Circle().stroke(NotefyTheme.ink.opacity(0.14)))
+                    .shadow(color: NotefyTheme.ink.opacity(0.10), radius: 8, y: 3)
+            }
+            .buttonStyle(.plain)
+            .keyboardShortcut(.cancelAction)
+            .help("Close settings")
+            .padding(18)
         }
         .background(Color.clear)
         .onAppear { appState.checkVisionStatus() }
