@@ -194,58 +194,62 @@ private struct CanvasToolbar: View {
     let back: () -> Void
 
     var body: some View {
-        HStack(spacing: 12) {
-            Button {
-                if route == .canvas { withAnimation { foldersOpen.toggle() } } else { back() }
-            } label: {
-                HStack(spacing: 9) {
-                    if route == .canvas {
-                        CanvasBrandIcon()
-                    } else {
-                        Image(systemName: "arrow.left")
+        ZStack {
+            HStack(spacing: 12) {
+                Button {
+                    if route == .canvas { withAnimation { foldersOpen.toggle() } } else { back() }
+                } label: {
+                    HStack(spacing: 9) {
+                        if route == .canvas {
+                            CanvasBrandIcon()
+                        } else {
+                            Image(systemName: "arrow.left")
+                        }
+                        Text(route == .canvas ? folderTitle : "Canvas")
+                            .font(.system(size: 13, weight: .semibold, design: .rounded))
+                            .lineLimit(1)
+                        if route == .canvas { Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)) }
                     }
-                    Text(route == .canvas ? folderTitle : "Canvas")
-                        .font(.system(size: 13, weight: .semibold, design: .rounded))
-                        .lineLimit(1)
-                    if route == .canvas { Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)) }
+                    .padding(.horizontal, 15).frame(height: 42)
+                    .background(CanvasPalette.paper.opacity(0.72), in: Capsule())
+                    .overlay(Capsule().stroke(CanvasPalette.ink.opacity(0.10)))
                 }
-                .padding(.horizontal, 15).frame(height: 42)
+                .buttonStyle(.plain)
+
+                Spacer()
+
+                if route == .canvas {
+                    Button(action: createNote) {
+                        Label("New note", systemImage: "square.and.pencil")
+                            .font(.system(size: 12, weight: .bold, design: .rounded))
+                            .padding(.horizontal, 15).frame(height: 42)
+                            .foregroundStyle(CanvasPalette.paper)
+                            .background(CanvasPalette.inkBlue, in: Capsule())
+                    }
+                    .buttonStyle(.plain)
+                    .accessibilityLabel("New note")
+                }
+
+                HStack(spacing: 8) {
+                    if route == .canvas {
+                        Button { zoom = max(0.50, zoom - 0.10) } label: { Image(systemName: "minus") }
+                        Text("\(Int(zoom * 100))%")
+                            .font(.system(size: 10, weight: .bold, design: .monospaced)).frame(width: 38)
+                        Button { zoom = min(1.30, zoom + 0.10) } label: { Image(systemName: "plus") }
+                        Divider().frame(height: 18).opacity(0.25)
+                    }
+                    Button { settingsOpen = true } label: { Image(systemName: "gearshape") }
+                        .accessibilityLabel("Settings")
+                }
+                .buttonStyle(.plain)
+                .padding(.horizontal, 13).frame(height: 42)
                 .background(CanvasPalette.paper.opacity(0.72), in: Capsule())
                 .overlay(Capsule().stroke(CanvasPalette.ink.opacity(0.10)))
             }
-            .buttonStyle(.plain)
 
-            Spacer()
+            // The mark owns the window's actual center; side controls no
+            // longer shift it according to their unequal widths.
             CanvasBrandMark()
-            Spacer()
-
-            if route == .canvas {
-                Button(action: createNote) {
-                    Label("New note", systemImage: "square.and.pencil")
-                        .font(.system(size: 12, weight: .bold, design: .rounded))
-                        .padding(.horizontal, 15).frame(height: 42)
-                        .foregroundStyle(CanvasPalette.paper)
-                        .background(CanvasPalette.inkBlue, in: Capsule())
-                }
-                .buttonStyle(.plain)
-                .accessibilityLabel("New note")
-            }
-
-            HStack(spacing: 8) {
-                if route == .canvas {
-                    Button { zoom = max(0.50, zoom - 0.10) } label: { Image(systemName: "minus") }
-                    Text("\(Int(zoom * 100))%")
-                        .font(.system(size: 10, weight: .bold, design: .monospaced)).frame(width: 38)
-                    Button { zoom = min(1.30, zoom + 0.10) } label: { Image(systemName: "plus") }
-                    Divider().frame(height: 18).opacity(0.25)
-                }
-                Button { settingsOpen = true } label: { Image(systemName: "gearshape") }
-                    .accessibilityLabel("Settings")
-            }
-            .buttonStyle(.plain)
-            .padding(.horizontal, 13).frame(height: 42)
-            .background(CanvasPalette.paper.opacity(0.72), in: Capsule())
-            .overlay(Capsule().stroke(CanvasPalette.ink.opacity(0.10)))
         }
         .padding(.horizontal, 24).padding(.top, 20)
     }
@@ -335,10 +339,10 @@ private struct CanvasNoteCard: View {
             .font(.system(size: 9, weight: .black, design: .monospaced)).tracking(0.7).opacity(0.52)
             Spacer(minLength: 18)
             Text(note.title)
-                .font(.custom("NewsreaderRoman-72pt", size: 29, relativeTo: .title))
+                .font(CanvasTypography.cardTitle)
                 .lineLimit(2)
             Text(note.excerpt)
-                .font(.custom("NewsreaderRoman-Regular", size: 15, relativeTo: .body))
+                .font(CanvasTypography.cardBody)
                 .lineSpacing(4).opacity(0.67).lineLimit(3).padding(.top, 10)
             Spacer(minLength: 16)
             HStack {
@@ -424,18 +428,18 @@ private struct CaptureReadingView: View {
                 .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.5).opacity(0.48)
             TextField("Untitled note", text: $appState.noteTitle)
                 .textFieldStyle(.plain)
-                .font(.custom("NewsreaderRoman-72pt", size: 40, relativeTo: .largeTitle))
+                .font(CanvasTypography.noteTitle)
                 .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
 
             ZStack(alignment: .topLeading) {
                 if activeNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("Write the note you want to keep beside these captures…")
-                        .font(.custom("NewsreaderRoman-Regular", size: 16)).italic().opacity(0.42)
+                        .font(CanvasTypography.noteBody).italic().opacity(0.42)
                         .padding(.top, 7).padding(.leading, 5).allowsHitTesting(false)
                 }
                 TextEditor(text: activeNoteBinding)
                     .id(activeCaptureID)
-                    .font(.custom("NewsreaderRoman-Regular", size: 17, relativeTo: .body))
+                    .font(CanvasTypography.noteBody)
                     .lineSpacing(7).scrollContentBackground(.hidden)
                     .background(.clear)
             }
@@ -491,7 +495,7 @@ private struct ReaderTabBar: View {
                     Text(tab.rawValue.uppercased())
                         .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.2)
                         .foregroundStyle(selection == tab ? CanvasPalette.paper : CanvasPalette.ink.opacity(0.54))
-                        .padding(.horizontal, 19).frame(height: 34)
+                        .frame(width: 96, height: 34)
                         .background {
                             if selection == tab {
                                 InkPillShape(variation: tab == .raw ? 0 : 1)
@@ -507,6 +511,7 @@ private struct ReaderTabBar: View {
         .background(CanvasPalette.paper.opacity(0.88), in: InkPillShape(variation: 2))
         .overlay(InkPillShape(variation: 2).stroke(CanvasPalette.inkBlue.opacity(0.13)))
         .shadow(color: CanvasPalette.clay.opacity(0.95), radius: 16, y: 5)
+        .frame(maxWidth: .infinity, alignment: .center)
     }
 }
 
@@ -529,7 +534,7 @@ private struct OrganizedEssayView: View {
                     }
 
                     Text(appState.noteTitle)
-                        .font(.custom("NewsreaderRoman-72pt", size: 46, relativeTo: .largeTitle))
+                        .font(CanvasTypography.essayTitle)
 
                     if appState.isOrganizing {
                         InkWritingLoader(status: appState.recordingStatus ?? "Organizing your captures…")
@@ -537,9 +542,9 @@ private struct OrganizedEssayView: View {
                     } else if appState.organizedDraft.isEmpty {
                         VStack(alignment: .leading, spacing: 14) {
                             Text("This note has not been organized yet.")
-                                .font(.custom("NewsreaderRoman-Regular", size: 22))
+                                .font(CanvasTypography.emptyTitle)
                             Text("Choose a structure and Noted will turn the raw note and captures into one readable page using your configured model.")
-                                .font(.custom("NewsreaderRoman-Regular", size: 17)).lineSpacing(7).opacity(0.58)
+                                .font(CanvasTypography.noteBody).lineSpacing(7).opacity(0.58)
                             OrganizationPicker()
                                 .environmentObject(appState)
                         }
@@ -669,24 +674,24 @@ private struct EssayBlockView: View {
         switch block {
         case .heading(let text):
             Text(inlineMarkdown(text))
-                .font(.custom("NewsreaderRoman-72pt", size: 28, relativeTo: .title2))
+                .font(CanvasTypography.essayHeading)
                 .padding(.top, 14)
         case .paragraph(let text):
             Text(inlineMarkdown(text))
-                .font(.custom("NewsreaderRoman-Regular", size: 18, relativeTo: .body))
+                .font(CanvasTypography.essayBody)
                 .lineSpacing(9)
         case .bullet(let text):
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Circle().fill(CanvasPalette.inkBlue).frame(width: 6, height: 6)
                 Text(inlineMarkdown(text))
-                    .font(.custom("NewsreaderRoman-Regular", size: 18, relativeTo: .body)).lineSpacing(8)
+                    .font(CanvasTypography.essayBody).lineSpacing(8)
             }
         case .checklist(let text, let checked):
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Image(systemName: checked ? "checkmark.square.fill" : "square")
                     .foregroundStyle(CanvasPalette.inkBlue)
                 Text(inlineMarkdown(text))
-                    .font(.custom("NewsreaderRoman-Regular", size: 18, relativeTo: .body)).lineSpacing(8)
+                    .font(CanvasTypography.essayBody).lineSpacing(8)
             }
         }
     }
@@ -707,7 +712,7 @@ private struct InkWritingLoader: View {
             VStack(spacing: 18) {
                 ZStack {
                     Text("noted")
-                        .font(.custom("Instrument Serif", size: 42, relativeTo: .largeTitle))
+                        .font(CanvasTypography.loaderWordmark)
                         .foregroundStyle(CanvasPalette.inkBlue)
                     Image(systemName: "pencil.tip")
                         .font(.system(size: 17, weight: .semibold))
@@ -760,7 +765,7 @@ private struct LiveCaptureCard: View {
                 // capture and they get the same room the screenshot would.
                 ScrollView {
                     Text(text)
-                        .font(.custom("NewsreaderRoman-Regular", size: 16, relativeTo: .body))
+                        .font(CanvasTypography.noteBody)
                         .lineSpacing(6)
                         .frame(maxWidth: .infinity, alignment: .leading)
                 }
@@ -1077,6 +1082,22 @@ private enum CanvasPalette {
     static let warmShadow = Color(hex: 0x7A4A2E)
 }
 
+/// One typographic voice across the product mark and the user's writing.
+/// Avenir Next is crisp and contemporary, while its rounded geometry still
+/// belongs with the soft clay and fluid ink shapes.
+private enum CanvasTypography {
+    static let wordmark = Font.custom("Avenir Next", size: 30, relativeTo: .title).weight(.heavy)
+    static let loaderWordmark = Font.custom("Avenir Next", size: 42, relativeTo: .largeTitle).weight(.heavy)
+    static let cardTitle = Font.custom("Avenir Next", size: 27, relativeTo: .title).weight(.medium)
+    static let cardBody = Font.custom("Avenir Next", size: 14.5, relativeTo: .body)
+    static let noteTitle = Font.custom("Avenir Next", size: 39, relativeTo: .largeTitle).weight(.medium)
+    static let noteBody = Font.custom("Avenir Next", size: 17, relativeTo: .body)
+    static let essayTitle = Font.custom("Avenir Next", size: 43, relativeTo: .largeTitle).weight(.medium)
+    static let essayHeading = Font.custom("Avenir Next", size: 26, relativeTo: .title2).weight(.semibold)
+    static let essayBody = Font.custom("Avenir Next", size: 17.5, relativeTo: .body)
+    static let emptyTitle = Font.custom("Avenir Next", size: 21, relativeTo: .title3).weight(.medium)
+}
+
 private enum NotedInkAssets {
     static let mark = load("noted-mark")
 
@@ -1091,11 +1112,11 @@ private enum NotedInkAssets {
 private struct CanvasBrandMark: View {
     var body: some View {
         Text("noted")
-            .font(.custom("Syne", size: 29, relativeTo: .title).weight(.semibold))
-            .tracking(-1.4)
+            .font(CanvasTypography.wordmark)
+            .tracking(-1.8)
             .foregroundStyle(CanvasPalette.ink)
-        .frame(width: 112, height: 42)
-        .accessibilityLabel("Noted")
+            .frame(width: 112, height: 42)
+            .accessibilityLabel("Noted")
     }
 }
 
