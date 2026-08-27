@@ -271,13 +271,31 @@ enum StoneFont {
     static func readSemibold() -> Font { .custom("NewsreaderRoman-SemiBold", size: Stoneink.tSubhead) }
     static func readItalic() -> Font { .custom("NewsreaderItalic-Italic", size: Stoneink.tRead) }
 
-    static func subhead() -> Font { .custom("IBMPlexSansRoman-SemiBold", size: Stoneink.tSubhead) }
-    static func body() -> Font { .custom("IBMPlexSansRoman-Regular", size: Stoneink.tBody) }
-    static func bodyMedium() -> Font { .custom("IBMPlexSansRoman-Medium", size: Stoneink.tBody) }
-    static func label() -> Font { .custom("IBMPlexSansRoman-Medium", size: Stoneink.tLabel) }
+    // ---- Chrome: Geist, and Geist Mono for the marks ----
+    //
+    // Newsreader keeps everything the reader actually reads. The chrome
+    // moved off IBM Plex Sans because Plex has loud letterforms — the
+    // flared `a`, the squared-off curves, the tall distinctive `g` — and
+    // at 13-15pt next to a literary serif they read as a second voice
+    // competing with it rather than as furniture around it. Geist is a
+    // neutral grotesque with even spacing and a large x-height: it holds
+    // up at small sizes on macOS and gets out of Newsreader's way.
+    //
+    // Geist Mono is drawn as the companion to Geist and shares its
+    // skeleton, so the tracked-out mono marks stop reading as a THIRD
+    // typeface. Mixing Plex Mono with Geist would put the seam back.
+    //
+    // These are PostScript names, not family names. `Font.custom` fails
+    // SILENTLY to San Francisco when a name doesn't resolve, so a typo
+    // here looks like a design choice rather than a bug — which is
+    // exactly how "Newsreader Display" survived in the canvas view.
+    static func subhead() -> Font { .custom("Geist-SemiBold", size: Stoneink.tSubhead) }
+    static func body() -> Font { .custom("Geist-Regular", size: Stoneink.tBody) }
+    static func bodyMedium() -> Font { .custom("Geist-Medium", size: Stoneink.tBody) }
+    static func label() -> Font { .custom("Geist-Medium", size: Stoneink.tLabel) }
 
-    static func mark() -> Font { .custom("IBMPlexMono-Regular", size: Stoneink.tMark) }
-    static func markMedium() -> Font { .custom("IBMPlexMono-Medium", size: Stoneink.tMark) }
+    static func mark() -> Font { .custom("GeistMono-Regular", size: Stoneink.tMark) }
+    static func markMedium() -> Font { .custom("GeistMono-Medium", size: Stoneink.tMark) }
 }
 
 // MARK: - The mark

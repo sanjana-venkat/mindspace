@@ -119,7 +119,7 @@ struct CanvasWorkspaceView: View {
             SettingsView()
                 .environmentObject(appState)
                 .environment(\.ground, GroundPalette.clay)
-                .frame(minWidth: 760, minHeight: 620)
+                .frame(width: 880, height: 680)
                 .background(Stoneink.surfaceBed)
         }
     }
@@ -333,10 +333,10 @@ private struct CanvasNoteCard: View {
             .font(.system(size: 9, weight: .black, design: .monospaced)).tracking(0.7).opacity(0.52)
             Spacer(minLength: 18)
             Text(note.title)
-                .font(.custom("Newsreader Display", size: 29, relativeTo: .title))
+                .font(.custom("NewsreaderRoman-72pt", size: 29, relativeTo: .title))
                 .lineLimit(2)
             Text(note.excerpt)
-                .font(.custom("Newsreader", size: 15, relativeTo: .body))
+                .font(.custom("NewsreaderRoman-Regular", size: 15, relativeTo: .body))
                 .lineSpacing(4).opacity(0.67).lineLimit(3).padding(.top, 10)
             Spacer(minLength: 16)
             HStack {
@@ -426,18 +426,18 @@ private struct CaptureReadingView: View {
                 .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.5).opacity(0.48)
             TextField("Untitled note", text: $appState.noteTitle)
                 .textFieldStyle(.plain)
-                .font(.custom("Newsreader Display", size: 40, relativeTo: .largeTitle))
+                .font(.custom("NewsreaderRoman-72pt", size: 40, relativeTo: .largeTitle))
                 .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
 
             ZStack(alignment: .topLeading) {
                 if activeNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("Write the note you want to keep beside these captures…")
-                        .font(.custom("Newsreader", size: 16)).italic().opacity(0.42)
+                        .font(.custom("NewsreaderRoman-Regular", size: 16)).italic().opacity(0.42)
                         .padding(.top, 7).padding(.leading, 5).allowsHitTesting(false)
                 }
                 TextEditor(text: activeNoteBinding)
                     .id(activeCaptureID)
-                    .font(.custom("Newsreader", size: 17, relativeTo: .body))
+                    .font(.custom("NewsreaderRoman-Regular", size: 17, relativeTo: .body))
                     .lineSpacing(7).scrollContentBackground(.hidden)
                     .background(.clear)
             }
@@ -532,7 +532,7 @@ private struct OrganizedEssayView: View {
                     }
 
                     Text(appState.noteTitle)
-                        .font(.custom("Newsreader Display", size: 46, relativeTo: .largeTitle))
+                        .font(.custom("NewsreaderRoman-72pt", size: 46, relativeTo: .largeTitle))
 
                     if appState.isOrganizing {
                         InkWritingLoader(status: appState.recordingStatus ?? "Organizing your captures…")
@@ -540,9 +540,9 @@ private struct OrganizedEssayView: View {
                     } else if appState.organizedDraft.isEmpty {
                         VStack(alignment: .leading, spacing: 14) {
                             Text("This note has not been organized yet.")
-                                .font(.custom("Newsreader", size: 22))
+                                .font(.custom("NewsreaderRoman-Regular", size: 22))
                             Text("Choose a structure and Noted will turn the raw note and captures into one readable page using your configured model.")
-                                .font(.custom("Newsreader", size: 17)).lineSpacing(7).opacity(0.58)
+                                .font(.custom("NewsreaderRoman-Regular", size: 17)).lineSpacing(7).opacity(0.58)
                             OrganizationPicker()
                                 .environmentObject(appState)
                         }
@@ -675,24 +675,24 @@ private struct EssayBlockView: View {
         switch block {
         case .heading(let text):
             Text(inlineMarkdown(text))
-                .font(.custom("Newsreader Display", size: 28, relativeTo: .title2))
+                .font(.custom("NewsreaderRoman-72pt", size: 28, relativeTo: .title2))
                 .padding(.top, 14)
         case .paragraph(let text):
             Text(inlineMarkdown(text))
-                .font(.custom("Newsreader", size: 18, relativeTo: .body))
+                .font(.custom("NewsreaderRoman-Regular", size: 18, relativeTo: .body))
                 .lineSpacing(9)
         case .bullet(let text):
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Circle().fill(CanvasPalette.inkBlue).frame(width: 6, height: 6)
                 Text(inlineMarkdown(text))
-                    .font(.custom("Newsreader", size: 18, relativeTo: .body)).lineSpacing(8)
+                    .font(.custom("NewsreaderRoman-Regular", size: 18, relativeTo: .body)).lineSpacing(8)
             }
         case .checklist(let text, let checked):
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Image(systemName: checked ? "checkmark.square.fill" : "square")
                     .foregroundStyle(CanvasPalette.inkBlue)
                 Text(inlineMarkdown(text))
-                    .font(.custom("Newsreader", size: 18, relativeTo: .body)).lineSpacing(8)
+                    .font(.custom("NewsreaderRoman-Regular", size: 18, relativeTo: .body)).lineSpacing(8)
             }
         }
     }
@@ -733,65 +733,96 @@ private struct InkWritingLoader: View {
 }
 
 private struct LiveCaptureCard: View {
-    @EnvironmentObject private var appState: AppState
     let step: ExplorationStep
     let height: CGFloat
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        // The card IS the capture. Everything else is a caption around it:
+        // one mono line above, one below. The thought field is deliberately
+        // absent — a note belongs beside its capture, not inside it, and
+        // while it lived here it pushed the screenshot down to under half
+        // the card.
+        VStack(alignment: .leading, spacing: 12) {
             HStack {
                 Text("\(kindLabel) · \(step.timestamp.formatted(date: .omitted, time: .shortened))".uppercased())
                 Spacer()
                 Image(systemName: kindIcon)
             }
-            .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.1).opacity(0.48)
+            .font(.custom("GeistMono-Medium", size: 10)).tracking(1.1).opacity(0.48)
 
             if let path = step.screenshotPath, let image = NSImage(contentsOfFile: path) {
+                // Fills the card. `scaledToFit` against an unbounded frame
+                // grows the image until one axis meets the container, so the
+                // whole capture stays visible — scaledToFill would fill too,
+                // but by cropping the screenshot, which loses the thing the
+                // user actually kept.
                 Image(nsImage: image)
-                    .resizable().scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: height * 0.46)
+                    .resizable()
+                    .scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
+            } else if let text = primaryText, !text.isEmpty {
+                // A text or voice capture has no image, so the words are the
+                // capture and they get the same room the screenshot would.
+                ScrollView {
+                    Text(text)
+                        .font(.custom("NewsreaderRoman-Regular", size: 16, relativeTo: .body))
+                        .lineSpacing(6)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .scrollIndicators(.hidden)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
-            VStack(alignment: .leading, spacing: 12) {
-                Text(step.windowTitle.isEmpty ? step.appName : step.windowTitle)
-                    .font(.custom("Newsreader Display", size: 30, relativeTo: .title)).lineLimit(2)
-                if let text = primaryText, !text.isEmpty {
-                    Text(text).font(.custom("Newsreader", size: 17, relativeTo: .body)).lineSpacing(6).lineLimit(8).opacity(0.70)
-                }
+            HStack(spacing: 8) {
                 if let url = step.url, let destination = URL(string: url) {
-                    Link(destination.host() ?? url, destination: destination)
-                        .font(.system(size: 10, weight: .bold, design: .monospaced)).foregroundStyle(CanvasPalette.inkBlue)
+                    Link(sourceLabel, destination: destination)
+                        .font(.custom("GeistMono-Medium", size: 10)).tracking(0.9)
+                        .foregroundStyle(CanvasPalette.inkBlue)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                } else {
+                    Text(sourceLabel)
+                        .font(.custom("GeistMono-Regular", size: 10)).tracking(0.9)
+                        .opacity(0.55)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
+                }
+                Spacer(minLength: 8)
+                // When the capture came from a page, the source label is
+                // already that page's host — printing it again as a link
+                // just says the same word twice. Link the full URL instead,
+                // and only when it adds something.
+                if let url = step.url, let destination = URL(string: url),
+                   let host = destination.host(), host.uppercased() != sourceLabel {
+                    Link(host, destination: destination)
+                        .font(.custom("GeistMono-Medium", size: 10))
+                        .foregroundStyle(CanvasPalette.inkBlue)
+                        .lineLimit(1)
+                        .truncationMode(.middle)
                 }
             }
-            Spacer(minLength: 0)
-            TextField("Add your thought about this capture…", text: annotationBinding)
-                .textFieldStyle(.plain)
-                .font(.custom("Newsreader", size: 15)).italic()
-                .padding(12).background(CanvasPalette.ink.opacity(0.045), in: RoundedRectangle(cornerRadius: 8))
-                .onSubmit(appState.saveActiveNote)
         }
-        .padding(30).frame(maxWidth: .infinity).frame(height: height)
+        .padding(24).frame(maxWidth: .infinity).frame(height: height)
         .background(CanvasPalette.paper.opacity(0.93), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(alignment: .topTrailing) {
-            CanvasInkBlob().fill(CanvasPalette.inkBlue.opacity(0.10)).frame(width: 170, height: 140).offset(x: 30, y: -22).clipped()
-        }
         .overlay(RoundedRectangle(cornerRadius: 12).stroke(CanvasPalette.ink.opacity(0.11)))
         .shadow(color: CanvasPalette.ink.opacity(0.12), radius: 18, y: 10)
     }
 
     private var primaryText: String? { step.selectedText ?? step.pageText }
+
+    /// "Notefy" is the app capturing, not the thing captured — showing it
+    /// as the card's headline told the user nothing. Same mapping the
+    /// dashboard and the capture-review panel already use.
+    private var sourceLabel: String {
+        if let host = step.url.flatMap(URL.init(string:))?.host, !host.isEmpty { return host.uppercased() }
+        if step.appName == "Audio" { return "COMPUTER AUDIO" }
+        if ["Notefy", "Noted", "notefy-app"].contains(step.appName) { return "SCREEN REGION" }
+        let title = step.windowTitle.isEmpty ? step.appName : step.windowTitle
+        return title.uppercased()
+    }
     private var kindLabel: String { step.screenshotPath != nil ? "Capture" : (step.appName.localizedCaseInsensitiveContains("audio") ? "Voice" : "Text") }
     private var kindIcon: String { step.screenshotPath != nil ? "photo" : (step.appName.localizedCaseInsensitiveContains("audio") ? "waveform" : "text.alignleft") }
-    private var annotationBinding: Binding<String> {
-        Binding(
-            get: { appState.stepAnnotations[step.id] ?? "" },
-            set: {
-                appState.stepAnnotations[step.id] = $0
-                appState.scheduleActiveNoteAutosave()
-            }
-        )
-    }
 }
 
 private struct CanvasFolderOverlay: View {
@@ -981,9 +1012,14 @@ private struct InkOpenTransition: View {
         }
 
         var path = Path()
-        guard let first = points.first else { return path }
-        path.move(to: first)
-        for point in points.dropFirst() { path.addLine(to: point) }
+        guard let first = points.first, let last = points.last else { return path }
+        path.move(to: CGPoint(x: (last.x + first.x) / 2, y: (last.y + first.y) / 2))
+        for index in points.indices {
+            let point = points[index]
+            let next = points[(index + 1) % points.count]
+            let midpoint = CGPoint(x: (point.x + next.x) / 2, y: (point.y + next.y) / 2)
+            path.addQuadCurve(to: midpoint, control: point)
+        }
         path.closeSubpath()
         return path
     }
@@ -1055,7 +1091,6 @@ private enum CanvasPalette {
 private enum NotedInkAssets {
     static let wordmark = load("noted-wordmark")
     static let mark = load("noted-mark")
-    static let splatters = (1...6).compactMap { load(String(format: "splat-%02d", $0)) }
 
     private static func load(_ name: String) -> NSImage? {
         let moduleURL = Bundle.module.url(forResource: name, withExtension: "svg", subdirectory: "NotedInk")
@@ -1125,20 +1160,7 @@ private struct CanvasClayBackground: View {
             ZStack {
                 LinearGradient(colors: [CanvasPalette.clayLight, CanvasPalette.clay], startPoint: .topLeading, endPoint: .bottomTrailing)
 
-                CanvasInkBlob()
-                    .fill(CanvasPalette.clayMid.opacity(0.72))
-                    .frame(width: proxy.size.width * 0.42, height: proxy.size.height * 0.50)
-                    .rotationEffect(.degrees(-16))
-                    .position(x: proxy.size.width * 0.04, y: proxy.size.height * 0.04)
-                    .blur(radius: 10)
-                CanvasInkBlob()
-                    .fill(CanvasPalette.clayLow.opacity(0.48))
-                    .frame(width: proxy.size.width * 0.34, height: proxy.size.height * 0.44)
-                    .rotationEffect(.degrees(24))
-                    .position(x: proxy.size.width * 0.98, y: proxy.size.height * 0.12)
-                    .blur(radius: 12)
-
-                AuthoredInkField(size: proxy.size, zoom: zoom)
+                WavyInkField(size: proxy.size, zoom: zoom)
                     .opacity(focused ? 0.35 : 1)
                     .animation(.easeOut(duration: 0.44), value: focused)
             }
@@ -1147,33 +1169,29 @@ private struct CanvasClayBackground: View {
     }
 }
 
-private struct AuthoredInkField: View {
+private struct WavyInkField: View {
     let size: CGSize
     let zoom: CGFloat
 
     private let placements: [(x: CGFloat, y: CGFloat, size: CGFloat, opacity: Double, rotation: Double)] = [
-        (-0.02, 0.04, 0.42, 0.13, -8),
-        (0.77, 0.12, 0.31, 0.09, 24),
-        (0.27, 0.72, 0.48, 0.11, -32),
-        (0.93, 0.64, 0.28, 0.07, 12),
-        (0.03, 0.96, 0.36, 0.09, 48),
-        (0.76, 1.02, 0.44, 0.06, 140),
+        (-0.05, 0.02, 0.48, 0.10, -18),
+        (0.92, 0.08, 0.38, 0.08, 22),
+        (0.22, 0.78, 0.56, 0.075, -28),
+        (0.98, 0.66, 0.34, 0.065, 14),
+        (0.02, 1.04, 0.40, 0.06, 42),
+        (0.76, 1.08, 0.50, 0.055, 128),
     ]
 
     var body: some View {
         ZStack {
-            ForEach(Array(NotedInkAssets.splatters.enumerated()), id: \.offset) { index, splatter in
-                let placement = placements[index % placements.count]
-                Image(nsImage: splatter)
-                    .resizable()
-                    .renderingMode(.template)
-                    .foregroundStyle(CanvasPalette.ink)
+            ForEach(Array(placements.enumerated()), id: \.offset) { index, placement in
+                CanvasInkBlob()
+                    .fill(CanvasPalette.ink.opacity(placement.opacity))
                     .frame(
                         width: max(size.width, size.height) * placement.size,
-                        height: max(size.width, size.height) * placement.size
+                        height: max(size.width, size.height) * placement.size * (0.78 + CGFloat(index % 3) * 0.08)
                     )
                     .rotationEffect(.degrees(placement.rotation))
-                    .opacity(placement.opacity)
                     .scaleEffect(0.96 + zoom * 0.05)
                     .position(x: size.width * placement.x, y: size.height * placement.y)
             }
