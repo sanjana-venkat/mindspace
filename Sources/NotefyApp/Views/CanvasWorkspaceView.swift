@@ -454,8 +454,8 @@ private struct CaptureGridView: View {
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 26) {
-                VStack(alignment: .leading, spacing: 8) {
+            VStack(alignment: .leading, spacing: 14) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text("NOTE")
                         .font(.custom("GeistMono-Medium", size: 10)).tracking(1.4)
                         .opacity(0.45)
@@ -465,24 +465,18 @@ private struct CaptureGridView: View {
                         .font(CanvasTypography.noteTitle)
                         .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
 
-                    ZStack(alignment: .topLeading) {
-                        if appState.rawDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                            Text("Write the note you want to keep beside these captures…")
-                                .font(CanvasTypography.noteBody)
-                                .opacity(0.38)
-                                .padding(.top, 8).padding(.leading, 5)
-                                .allowsHitTesting(false)
-                        }
-                        TextEditor(text: Binding(
-                            get: { appState.rawDraft },
-                            set: { appState.rawDraft = $0; appState.scheduleActiveNoteAutosave() }
-                        ))
-                        .font(CanvasTypography.noteBody)
-                        .lineSpacing(6)
-                        .scrollContentBackground(.hidden)
-                        .background(.clear)
-                    }
-                    .frame(height: 78)
+                    // A vertical TextField rather than a TextEditor: it grows
+                    // with what you write instead of reserving a fixed block
+                    // of empty height, so an empty note costs one line rather
+                    // than a gap the width of the page. No placeholder — the
+                    // heading above already says what this is.
+                    TextField("", text: Binding(
+                        get: { appState.rawDraft },
+                        set: { appState.rawDraft = $0; appState.scheduleActiveNoteAutosave() }
+                    ), axis: .vertical)
+                    .textFieldStyle(.plain)
+                    .font(CanvasTypography.noteBody)
+                    .lineLimit(1...8)
                 }
                 .frame(maxWidth: 620, alignment: .leading)
 
@@ -530,7 +524,6 @@ private struct CaptureGridView: View {
                 }
             }
             .padding(.horizontal, 38)
-            .padding(.top, 4)
             .padding(.bottom, 60)
         }
         .scrollIndicators(.hidden)
