@@ -1199,11 +1199,11 @@ private struct InkOpenTransition: View {
     private let revealFrameCount = 20
 
     var body: some View {
-        Canvas(rendersAsynchronously: true) { context, size in
+        Canvas { context, size in
             if frame < coverFrameCount {
                 drawLandingSplashes(in: &context, size: size)
             } else {
-                drawDissolvingInk(in: &context, size: size)
+                drawRecedingInk(in: &context, size: size)
             }
         }
         .background(Color.clear)
@@ -1284,51 +1284,63 @@ private struct InkOpenTransition: View {
         return path
     }
 
-    private func drawDissolvingInk(in context: inout GraphicsContext, size: CGSize) {
+    /// The reveal used to punch a 6x5 grid of blooms out of the ink with a
+    /// destinationOut layer. Those openings ARE the holes — thirty of them,
+    /// appearing all over the screen at once, each one showing a hard-edged
+    /// patch of the page behind. It also read as a completely different
+    /// gesture from the cover, which is one mass growing.
+    ///
+    /// So the reveal is now the cover played backwards: a single body of ink
+    /// contracting and drifting off, with a couple of droplets outrunning it.
+    /// No layers, no blend modes, and nothing that can open a hole.
+    private func drawRecedingInk(in context: inout GraphicsContext, size: CGSize) {
         let revealIndex = frame - coverFrameCount + 1
         let progress = min(1, CGFloat(revealIndex) / CGFloat(revealFrameCount))
 
-        context.drawLayer { layer in
-            layer.fill(Path(CGRect(origin: .zero, size: size)), with: .color(CanvasPalette.inkBlue))
-            layer.blendMode = .destinationOut
+        let center = CGPoint(
+            x: min(max(origin?.x ?? size.width / 2, 0), size.width),
+            y: min(max(origin?.y ?? size.height / 2, 0), size.height)
+        )
+        let farthestX = max(center.x, size.width - center.x)
+        let farthestY = max(center.y, size.height - center.y)
+        let maximumRadius = hypot(farthestX, farthestY) * 1.22
 
-            let columns = 6
-            let rows = 5
-            let cellWidth = size.width / CGFloat(columns)
-            let cellHeight = size.height / CGFloat(rows)
-            let maximumRadius = hypot(cellWidth, cellHeight) * 1.48
+        // Holds a beat at full cover, then pulls away quickly — pigment
+        // being drawn off the page rather than fading out.
+        let eased = pow(progress, 1.7)
+        let radius = maximumRadius * (1 - eased)
+        guard radius > 0.5 else { return }
 
-            for row in 0..<rows {
-                for column in 0..<columns {
-                    let ordinal = row * columns + column
-                    let stagger = CGFloat((ordinal * 7 + row * 3) % 13) / 90
-                    let localProgress = max(0, min(1, (progress - stagger) / (1 - stagger)))
-                    let bloom = 1 - pow(1 - localProgress, 2.4)
-                    guard bloom > 0 else { continue }
+        // A slight drift as it goes, so it reads as withdrawing rather than
+        // as a circle shrinking on the spot.
+        let drift = eased * maximumRadius * 0.10
+        let recedingCenter = CGPoint(x: center.x - drift * 0.35, y: center.y + drift)
 
-                    let jitterX = CGFloat((ordinal * 37) % 31 - 15)
-                    let jitterY = CGFloat((ordinal * 19) % 27 - 13)
-                    let center = CGPoint(
-                        x: (CGFloat(column) + 0.5) * cellWidth + jitterX,
-                        y: (CGFloat(row) + 0.5) * cellHeight + jitterY
-                    )
-                    let radius = maximumRadius * bloom
-                    layer.fill(
-                        organicSplat(center: center, radius: radius, seed: ordinal + 31),
-                        with: .color(.white)
-                    )
+        context.fill(
+            organicSplat(center: recedingCenter, radius: radius, seed: 23),
+            with: .color(CanvasPalette.inkBlue)
+        )
 
-                    // Offset blooms roughen each opening like pigment feathering in water.
-                    let fringeRadius = radius * 0.36
-                    let fringe = CGRect(
-                        x: center.x + radius * 0.62 - fringeRadius,
-                        y: center.y - radius * 0.48 - fringeRadius,
-                        width: fringeRadius * 2,
-                        height: fringeRadius * 1.4
-                    )
-                    layer.fill(Path(ellipseIn: fringe), with: .color(.white.opacity(0.92)))
-                }
-            }
+        // Droplets that broke away as it pulled back. They shrink out rather
+        // than being erased, so they never leave a gap behind them.
+        for index in 0..<4 {
+            let angle = CGFloat(index) * 1.61 + 0.4
+            let distance = radius * (0.74 + CGFloat(index % 2) * 0.13)
+            let dropletRadius = max(0, radius * (0.020 + CGFloat(index % 3) * 0.005))
+            guard dropletRadius > 0.5 else { continue }
+            let dropletCenter = CGPoint(
+                x: recedingCenter.x + cos(angle) * distance,
+                y: recedingCenter.y + sin(angle) * distance * 0.82
+            )
+            context.fill(
+                Path(ellipseIn: CGRect(
+                    x: dropletCenter.x - dropletRadius,
+                    y: dropletCenter.y - dropletRadius,
+                    width: dropletRadius * 2,
+                    height: dropletRadius * 1.55
+                )),
+                with: .color(CanvasPalette.inkBlue)
+            )
         }
     }
 }
