@@ -121,7 +121,7 @@ struct CanvasWorkspaceView: View {
     /// Switching notes keeps the ink wipe the card wall used to open with —
     /// it is the one moment that still marks "you are now somewhere else".
     private func transitionToReading(_ url: URL) {
-        inkWipe { appState.openNote(url) }
+        inkWipe(interval: Self.noteWipeInterval) { appState.openNote(url) }
     }
 
     /// Grid and panel are two views of the same note, so the change is worth
@@ -129,12 +129,19 @@ struct CanvasWorkspaceView: View {
     /// pulls back. Without it the whole page silently becomes something else.
     private func setLayout(_ option: ReaderLayout) {
         guard option.rawValue != layoutRaw else { return }
-        inkWipe { layoutRaw = option.rawValue }
+        inkWipe(interval: Self.layoutWipeInterval) { layoutRaw = option.rawValue }
     }
 
     /// Cover, change, reveal. The change happens at the midpoint so it is
     /// never seen happening.
-    private func inkWipe(_ change: @escaping () -> Void) {
+    /// Opening a note is a rarer, heavier move and keeps the full beat.
+    /// Flipping posture is something you do repeatedly while working, so it
+    /// runs the same 36 frames at a shorter interval — same gesture, roughly
+    /// two-thirds the time, so it still reads as ink rather than a cut.
+    private static let noteWipeInterval = 28
+    private static let layoutWipeInterval = 18
+
+    private func inkWipe(interval: Int, _ change: @escaping () -> Void) {
         guard inkTransitionFrame == nil else { return }
 
         guard !reduceMotion else {
@@ -148,14 +155,14 @@ struct CanvasWorkspaceView: View {
 
             for frame in 0..<coverFrames {
                 inkTransitionFrame = frame
-                try? await Task.sleep(for: .milliseconds(28))
+                try? await Task.sleep(for: .milliseconds(interval))
             }
 
             change()
 
             for frame in coverFrames..<(coverFrames + revealFrames) {
                 inkTransitionFrame = frame
-                try? await Task.sleep(for: .milliseconds(28))
+                try? await Task.sleep(for: .milliseconds(interval))
             }
 
             inkTransitionFrame = nil
