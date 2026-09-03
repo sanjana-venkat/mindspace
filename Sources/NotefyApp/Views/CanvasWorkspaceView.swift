@@ -1409,13 +1409,20 @@ private enum CanvasTypography {
 }
 
 private enum NotedInkAssets {
-    static let mark = load("noted-mark")
+    /// The splat mark: a single unbroken line that lands as an ink splash and
+    /// resolves into a lowercase n. Generated from Sanjana's third concept,
+    /// keyed off its background and normalised to the app's cobalt so it can
+    /// be tinted as a template image on any surface.
+    static let splat = load("noted-splat", "png")
+    static let mark = load("noted-mark", "svg")
 
-    private static func load(_ name: String) -> NSImage? {
-        let moduleURL = Bundle.module.url(forResource: name, withExtension: "svg", subdirectory: "NotedInk")
-            ?? Bundle.module.url(forResource: name, withExtension: "svg")
+    private static func load(_ name: String, _ ext: String) -> NSImage? {
+        let moduleURL = Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "NotedInk")
+            ?? Bundle.module.url(forResource: name, withExtension: ext)
         guard let moduleURL else { return nil }
-        return NSImage(contentsOf: moduleURL)
+        let image = NSImage(contentsOf: moduleURL)
+        image?.isTemplate = true
+        return image
     }
 }
 
@@ -1433,16 +1440,19 @@ private struct CanvasBrandMark: View {
 private struct CanvasBrandIcon: View {
     var body: some View {
         Group {
-            if let mark = NotedInkAssets.mark {
-                Image(nsImage: mark)
+            if let splat = NotedInkAssets.splat ?? NotedInkAssets.mark {
+                Image(nsImage: splat)
                     .resizable()
                     .renderingMode(.template)
-                    .foregroundStyle(CanvasPalette.ink)
+                    .foregroundStyle(CanvasPalette.inkBlue)
             } else {
                 Image(systemName: "folder.fill")
             }
         }
-        .frame(width: 18, height: 18)
+        // 22pt, not the 18 the old folder glyph used: the splat carries an
+        // interior counter, and below about this size the n inside it closes
+        // up and the whole mark reads as a smudge.
+        .frame(width: 22, height: 22)
         .accessibilityHidden(true)
     }
 }
