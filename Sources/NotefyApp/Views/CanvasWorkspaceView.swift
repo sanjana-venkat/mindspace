@@ -2,11 +2,6 @@ import SwiftUI
 import AppKit
 import NotefyCore
 
-private enum CanvasRoute: Equatable {
-    case canvas
-    case reading(URL)
-}
-
 private enum CanvasFolderFilter: Hashable {
     case all
     case unfiled
@@ -36,62 +31,39 @@ private enum ReaderLayout: String, CaseIterable, Identifiable {
 struct CanvasWorkspaceView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
-    @State private var route: CanvasRoute = .canvas
     @State private var folderFilter: CanvasFolderFilter = .all
     @State private var foldersOpen = false
     @State private var settingsOpen = false
-    @State private var zoom: CGFloat = 0.84
-    @State private var selectedIndex = 0
     @State private var inkTransitionFrame: Int?
-    @State private var inkTransitionOrigin: CGPoint?
     @FocusState private var keyboardFocused: Bool
 
-    private var notes: [CanvasNoteSnapshot] {
-        switch folderFilter {
-        case .all: return appState.canvasNoteSnapshots
-        case .unfiled: return appState.canvasNoteSnapshots.filter { $0.folderID == nil }
-        case .folder(let id): return appState.canvasNoteSnapshots.filter { $0.folderID == id }
-        }
+    /// The note picker's label. The workspace is always inside a note now, so
+    /// the useful context is which note you are in and which folder it came
+    /// from — not which filter the (now removed) card wall was under.
+    private var pickerTitle: String {
+        let title = appState.noteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
+        return title.isEmpty ? "Untitled note" : title
     }
 
-    private var folderTitle: String {
-        switch folderFilter {
-        case .all: return "All notes"
-        case .unfiled: return "Unfiled"
-        case .folder(let id): return appState.folderPath(for: id)
-        }
+    private var pickerSubtitle: String {
+        guard let url = appState.activeNoteURL else { return "Unfiled" }
+        let path = appState.folderPath(for: appState.folderID(for: url))
+        return path.isEmpty ? "Unfiled" : path
     }
 
     var body: some View {
         ZStack {
-            CanvasClayBackground(focused: route != .canvas, zoom: zoom)
+            CanvasClayBackground(focused: true, zoom: 1)
 
-            Group {
-                switch route {
-                case .canvas:
-                    ChronologicalCanvas(
-                        notes: notes,
-                        zoom: $zoom,
-                        selectedIndex: $selectedIndex,
-                        moveNote: appState.moveCanvasNote,
-                        openNote: openNote
-                    )
-                case .reading:
-                    CaptureReadingView()
-                        .environmentObject(appState)
-                        .transition(.opacity)
-                }
-            }
+            CaptureReadingView()
+                .environmentObject(appState)
 
             VStack(spacing: 0) {
                 CanvasToolbar(
-                    route: route,
-                    folderTitle: folderTitle,
+                    title: pickerTitle,
+                    subtitle: pickerSubtitle,
                     foldersOpen: $foldersOpen,
-                    settingsOpen: $settingsOpen,
-                    zoom: $zoom,
-                    createNote: createNote,
-                    back: { withAnimation(.spring(response: 0.48, dampingFraction: 0.86)) { route = .canvas } }
+                    settingsOpen: $settingsOpen
                 )
                 Spacer()
             }
@@ -102,10 +74,11 @@ struct CanvasWorkspaceView: View {
                     filter: $folderFilter,
                     isOpen: $foldersOpen,
                     notes: appState.canvasNoteSnapshots,
-                    openNote: { url in transitionToReading(url, from: nil) },
+                    activeURL: appState.activeNoteURL,
+                    openNote: { url in transitionToReading(url) },
                     createNote: { folderID in
                         let destination = appState.createNewNote(inFolder: folderID)
-                        transitionToReading(destination.url, from: nil)
+                        transitionToReading(destination.url)
                     }
                 )
                 .environmentObject(appState)
@@ -114,12 +87,11 @@ struct CanvasWorkspaceView: View {
             }
 
             if let inkTransitionFrame {
-                InkOpenTransition(frame: inkTransitionFrame, origin: inkTransitionOrigin)
+                InkOpenTransition(frame: inkTransitionFrame, origin: nil)
                     .ignoresSafeArea()
                     .allowsHitTesting(true)
                     .zIndex(20)
             }
-
         }
         .focusable()
         .focused($keyboardFocused)
@@ -127,13 +99,9 @@ struct CanvasWorkspaceView: View {
             appState.refreshHistory()
             keyboardFocused = true
         }
-        .onKeyPress(.leftArrow) { guard route == .canvas else { return .ignored }; moveSelection(-1); return .handled }
-        .onKeyPress(.rightArrow) { guard route == .canvas else { return .ignored }; moveSelection(1); return .handled }
-        .onKeyPress(.upArrow) { guard route == .canvas else { return .ignored }; moveSelection(-canvasColumnCount); return .handled }
-        .onKeyPress(.downArrow) { guard route == .canvas else { return .ignored }; moveSelection(canvasColumnCount); return .handled }
         .onKeyPress(.escape) {
-            if route != .canvas { withAnimation { route = .canvas } }
-            return .handled
+            if foldersOpen { withAnimation { foldersOpen = false }; return .handled }
+            return .ignored
         }
         .sheet(isPresented: $settingsOpen) {
             SettingsView()
@@ -144,38 +112,14 @@ struct CanvasWorkspaceView: View {
         }
     }
 
-    private var canvasColumnCount: Int { 3 }
-
-    private func moveSelection(_ delta: Int) {
-        guard route == .canvas, !notes.isEmpty else { return }
-        let targetIndex = min(max(selectedIndex + delta, 0), notes.count - 1)
-        guard targetIndex != selectedIndex else { return }
-        let selectedURL = notes[selectedIndex].url
-        let targetURL = notes[targetIndex].url
-        withAnimation(.spring(response: 0.42, dampingFraction: 0.80)) {
-            appState.swapCanvasNotes(selectedURL, targetURL)
-            selectedIndex = targetIndex
-        }
-    }
-
-    private func openNote(_ snapshot: CanvasNoteSnapshot, from origin: CGPoint) {
-        transitionToReading(snapshot.url, from: origin)
-    }
-
-    private func createNote() {
-        let folderID: UUID?
-        if case .folder(let id) = folderFilter { folderID = id } else { folderID = nil }
-        let destination = appState.createNewNote(inFolder: folderID)
-        transitionToReading(destination.url, from: nil)
-    }
-
-    private func transitionToReading(_ url: URL, from origin: CGPoint?) {
+    /// Switching notes keeps the ink wipe the card wall used to open with —
+    /// it is the one moment that still marks "you are now somewhere else",
+    /// and without the wall it is the only such moment left.
+    private func transitionToReading(_ url: URL) {
         guard inkTransitionFrame == nil else { return }
-        inkTransitionOrigin = origin
 
         guard !reduceMotion else {
             appState.openNote(url)
-            withAnimation(.easeInOut(duration: 0.16)) { route = .reading(url) }
             return
         }
 
@@ -189,7 +133,6 @@ struct CanvasWorkspaceView: View {
             }
 
             appState.openNote(url)
-            route = .reading(url)
 
             for frame in coverFrames..<(coverFrames + revealFrames) {
                 inkTransitionFrame = frame
@@ -197,189 +140,66 @@ struct CanvasWorkspaceView: View {
             }
 
             inkTransitionFrame = nil
-            inkTransitionOrigin = nil
             keyboardFocused = true
         }
     }
 }
 
 private struct CanvasToolbar: View {
-    let route: CanvasRoute
-    let folderTitle: String
+    let title: String
+    let subtitle: String
     @Binding var foldersOpen: Bool
     @Binding var settingsOpen: Bool
-    @Binding var zoom: CGFloat
-    let createNote: () -> Void
-    let back: () -> Void
 
     var body: some View {
         ZStack {
             HStack(spacing: 12) {
+                // The note switcher. Two lines because the folder is context
+                // for the title, not a peer of it.
                 Button {
-                    if route == .canvas { withAnimation { foldersOpen.toggle() } } else { back() }
+                    withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) { foldersOpen.toggle() }
                 } label: {
-                    HStack(spacing: 9) {
-                        if route == .canvas {
-                            CanvasBrandIcon()
-                        } else {
-                            Image(systemName: "arrow.left")
+                    HStack(spacing: 10) {
+                        CanvasBrandIcon()
+                        VStack(alignment: .leading, spacing: 1) {
+                            Text(subtitle.uppercased())
+                                .font(.custom("GeistMono-Medium", size: 8)).tracking(1.1)
+                                .opacity(0.45)
+                            Text(title)
+                                .font(.system(size: 13, weight: .semibold))
+                                .lineLimit(1)
                         }
-                        Text(route == .canvas ? folderTitle : "Canvas")
-                            .font(.system(size: 13, weight: .semibold, design: .rounded))
-                            .lineLimit(1)
-                        if route == .canvas { Image(systemName: "chevron.down").font(.system(size: 9, weight: .bold)) }
+                        Image(systemName: "chevron.down")
+                            .font(.system(size: 9, weight: .bold))
+                            .rotationEffect(.degrees(foldersOpen ? 180 : 0))
+                            .opacity(0.55)
                     }
-                    .padding(.horizontal, 15).frame(height: 42)
+                    .padding(.horizontal, 15).frame(height: 46)
+                    .frame(maxWidth: 280, alignment: .leading)
                     .background(CanvasPalette.paper.opacity(0.72), in: Capsule())
                     .overlay(Capsule().stroke(CanvasPalette.ink.opacity(0.10)))
                 }
                 .buttonStyle(.plain)
+                .help("Switch note")
 
                 Spacer()
 
-                if route == .canvas {
-                    Button(action: createNote) {
-                        Label("New note", systemImage: "square.and.pencil")
-                            .font(.system(size: 12, weight: .bold, design: .rounded))
-                            .padding(.horizontal, 15).frame(height: 42)
-                            .foregroundStyle(CanvasPalette.paper)
-                            .background(CanvasPalette.inkBlue, in: Capsule())
-                    }
-                    .buttonStyle(.plain)
-                    .accessibilityLabel("New note")
-                }
-
-                HStack(spacing: 8) {
-                    if route == .canvas {
-                        Button { zoom = max(0.50, zoom - 0.10) } label: { Image(systemName: "minus") }
-                        Text("\(Int(zoom * 100))%")
-                            .font(.system(size: 10, weight: .bold, design: .monospaced)).frame(width: 38)
-                        Button { zoom = min(1.30, zoom + 0.10) } label: { Image(systemName: "plus") }
-                        Divider().frame(height: 18).opacity(0.25)
-                    }
-                    Button { settingsOpen = true } label: { Image(systemName: "gearshape") }
-                        .accessibilityLabel("Settings")
+                Button { settingsOpen = true } label: {
+                    Image(systemName: "gearshape")
+                        .font(.system(size: 13, weight: .medium))
+                        .frame(width: 42, height: 42)
+                        .background(CanvasPalette.paper.opacity(0.72), in: Circle())
+                        .overlay(Circle().stroke(CanvasPalette.ink.opacity(0.10)))
                 }
                 .buttonStyle(.plain)
-                .padding(.horizontal, 13).frame(height: 42)
-                .background(CanvasPalette.paper.opacity(0.72), in: Capsule())
-                .overlay(Capsule().stroke(CanvasPalette.ink.opacity(0.10)))
+                .help("Settings")
+                .accessibilityLabel("Settings")
             }
 
-            // The mark owns the window's actual center; side controls no
-            // longer shift it according to their unequal widths.
             CanvasBrandMark()
         }
         .padding(.horizontal, 24).padding(.top, 20)
     }
-}
-
-private struct ChronologicalCanvas: View {
-    let notes: [CanvasNoteSnapshot]
-    @Binding var zoom: CGFloat
-    @Binding var selectedIndex: Int
-    let moveNote: (URL, URL) -> Void
-    let openNote: (CanvasNoteSnapshot, CGPoint) -> Void
-
-    private let columns = Array(repeating: GridItem(.fixed(300), spacing: 30), count: 3)
-
-    var body: some View {
-        ScrollViewReader { reader in
-            ScrollView([.horizontal, .vertical]) {
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 30) {
-                    ForEach(Array(notes.enumerated()), id: \.element.id) { index, note in
-                        CanvasNoteCard(note: note, selected: index == selectedIndex)
-                            .id(note.id)
-                            .onTapGesture(count: 2, coordinateSpace: .global) { location in
-                                selectedIndex = index
-                                openNote(note, location)
-                            }
-                            .onTapGesture(count: 1) {
-                                withAnimation(.easeOut(duration: 0.16)) { selectedIndex = index }
-                            }
-                            .draggable(note.url.absoluteString) {
-                                CanvasNoteCard(note: note, selected: true)
-                                    .opacity(0.88)
-                            }
-                            .dropDestination(for: String.self) { items, _ in
-                                guard let value = items.first,
-                                      let sourceURL = URL(string: value),
-                                      sourceURL != note.url else { return false }
-                                withAnimation(.spring(response: 0.46, dampingFraction: 0.78)) {
-                                    moveNote(sourceURL, note.url)
-                                }
-                                selectedIndex = index
-                                return true
-                            } isTargeted: { targeted in
-                                if targeted { selectedIndex = index }
-                            }
-                    }
-                }
-                .padding(.horizontal, 100).padding(.vertical, 126)
-                .scaleEffect(zoom, anchor: .topLeading)
-                .frame(minWidth: 1120, minHeight: 780, alignment: .topLeading)
-            }
-            .scrollIndicators(.hidden)
-            .onChange(of: selectedIndex) {
-                guard notes.indices.contains(selectedIndex) else { return }
-                withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
-                    reader.scrollTo(notes[selectedIndex].id, anchor: .center)
-                }
-            }
-            .gesture(
-                MagnifyGesture().onChanged { value in
-                    zoom = min(max(zoom * value.magnification, 0.50), 1.30)
-                }
-            )
-        }
-        .overlay {
-            if notes.isEmpty {
-                ContentUnavailableView(
-                    "No notes here yet",
-                    systemImage: "note.text",
-                    description: Text("Create a note or choose another folder.")
-                )
-                .foregroundStyle(CanvasPalette.ink)
-            }
-        }
-    }
-}
-
-private struct CanvasNoteCard: View {
-    let note: CanvasNoteSnapshot
-    let selected: Bool
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 0) {
-            HStack {
-                Text(note.createdAt.formatted(.dateTime.month(.abbreviated).day().hour().minute()).uppercased())
-                Spacer()
-            }
-            .font(.system(size: 9, weight: .black, design: .monospaced)).tracking(0.7).opacity(0.52)
-            Spacer(minLength: 18)
-            Text(note.title)
-                .font(CanvasTypography.cardTitle)
-                .lineLimit(2)
-            Text(note.excerpt)
-                .font(CanvasTypography.cardBody)
-                .lineSpacing(4).opacity(0.67).lineLimit(3).padding(.top, 10)
-            Spacer(minLength: 16)
-            HStack {
-                Text(note.folderName.isEmpty ? "UNFILED" : note.folderName.uppercased())
-                    .lineLimit(1)
-                Spacer()
-                Label("\(note.captureCount)", systemImage: note.hasOrganizedNote ? "sparkles" : "paperclip")
-            }
-            .font(.system(size: 9, weight: .black, design: .monospaced)).tracking(0.8).opacity(0.46)
-        }
-        .padding(24).frame(width: 300, height: 236)
-        .background(CanvasPalette.paper, in: RoundedRectangle(cornerRadius: 18))
-        .overlay(RoundedRectangle(cornerRadius: 18).stroke(selected ? CanvasPalette.inkBlue : CanvasPalette.paperEdge, lineWidth: selected ? 2 : 1))
-        .rotationEffect(.degrees(Double(abs(note.url.lastPathComponent.hashValue) % 3) - 1))
-        .shadow(color: CanvasPalette.warmShadow.opacity(selected ? 0.18 : 0.11), radius: selected ? 22 : 14, y: selected ? 12 : 8)
-        .contentShape(Rectangle())
-    }
-
 }
 
 private struct CaptureReadingView: View {
@@ -529,44 +349,46 @@ private struct CaptureReadingView: View {
 /// the app is doing.
 private struct ReaderLayoutToggle: View {
     @Binding var layoutRaw: String
+    @Namespace private var inkSelection
 
     private var layout: ReaderLayout { ReaderLayout(rawValue: layoutRaw) ?? .panel }
 
     var body: some View {
-        HStack(spacing: 3) {
+        HStack(spacing: 5) {
             ForEach(ReaderLayout.allCases) { option in
                 let active = option == layout
                 Button {
                     guard !active else { return }
-                    withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+                    withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
                         layoutRaw = option.rawValue
                     }
                 } label: {
-                    HStack(spacing: 6) {
-                        Image(systemName: option.icon)
-                            .font(.system(size: 10, weight: .bold))
-                        Text(option.rawValue.uppercased())
-                            .font(.custom("GeistMono-Medium", size: 9)).tracking(1.1)
-                    }
-                    .foregroundStyle(active ? CanvasPalette.paper : CanvasPalette.ink.opacity(0.55))
-                    .padding(.horizontal, 12)
-                    .frame(height: 30)
-                    .background {
-                        if active {
-                            Capsule().fill(CanvasPalette.inkBlue)
+                    // Icon only. The label was carrying the same two words on
+                    // every screen for a control you use once and then leave
+                    // alone, and it made a persistent chip wider than the tab
+                    // bar it sits opposite. The name lives in the tooltip.
+                    Image(systemName: option.icon)
+                        .font(.system(size: 13, weight: .semibold))
+                        .foregroundStyle(active ? CanvasPalette.paper : CanvasPalette.ink.opacity(0.54))
+                        .frame(width: 40, height: 34)
+                        .background {
+                            if active {
+                                InkPillShape(variation: option == .grid ? 0 : 1)
+                                    .fill(CanvasPalette.inkBlue)
+                                    .matchedGeometryEffect(id: "ink-layout", in: inkSelection)
+                            }
                         }
-                    }
-                    .contentShape(Capsule())
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
-                .help(option == .grid
-                      ? "Every capture at once — drag to rearrange"
-                      : "One column beside your note")
+                .help(option.rawValue)
+                .accessibilityLabel(option.rawValue)
             }
         }
-        .padding(3)
-        .background(CanvasPalette.paper.opacity(0.80), in: Capsule())
-        .overlay(Capsule().stroke(CanvasPalette.ink.opacity(0.10)))
+        .padding(4)
+        .background(CanvasPalette.paper.opacity(0.88), in: InkPillShape(variation: 2))
+        .overlay(InkPillShape(variation: 2).stroke(CanvasPalette.inkBlue.opacity(0.13)))
+        .shadow(color: CanvasPalette.clay.opacity(0.95), radius: 16, y: 5)
     }
 }
 
@@ -704,30 +526,33 @@ private struct GridCaptureTile: View {
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .clipShape(RoundedRectangle(cornerRadius: 7))
             } else if let text = primaryText, !text.isEmpty {
-                ScrollView {
-                    Text(text)
-                        .font(.custom("NewsreaderRoman-Regular", size: 14))
-                        .lineSpacing(5)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .scrollIndicators(.hidden)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                Text(text)
+                    .font(.custom("NewsreaderRoman-Regular", size: 14))
+                    .lineSpacing(5)
+                    .truncationMode(.tail)
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             }
 
             ZStack(alignment: .topLeading) {
-                if note.isEmpty && !noteFocused {
-                    Text("Add a note…")
+                if noteFocused {
+                    TextEditor(text: $note)
+                        .focused($noteFocused)
                         .font(.custom("NewsreaderRoman-Regular", size: 13))
-                        .opacity(0.34)
-                        .allowsHitTesting(false)
+                        .lineSpacing(3)
+                        .scrollContentBackground(.hidden)
+                        .background(.clear)
+                } else {
+                    Text(note.isEmpty ? "Add a note…" : note)
+                        .font(.custom("NewsreaderRoman-Regular", size: 13))
+                        .lineSpacing(3)
+                        .lineLimit(3)
+                        .truncationMode(.tail)
+                        .opacity(note.isEmpty ? 0.34 : 1)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
                         .padding(.leading, 4).padding(.top, 4)
+                        .contentShape(Rectangle())
+                        .onTapGesture { noteFocused = true }
                 }
-                TextEditor(text: $note)
-                    .focused($noteFocused)
-                    .font(.custom("NewsreaderRoman-Regular", size: 13))
-                    .lineSpacing(3)
-                    .scrollContentBackground(.hidden)
-                    .background(.clear)
             }
             .frame(height: 54)
             .padding(.horizontal, 4)
@@ -1127,12 +952,16 @@ private struct CanvasFolderOverlay: View {
     @Binding var filter: CanvasFolderFilter
     @Binding var isOpen: Bool
     let notes: [CanvasNoteSnapshot]
+    /// The note currently open, so the list can show you where you are —
+    /// this dropdown is the only navigation left.
+    let activeURL: URL?
     let openNote: (URL) -> Void
     let createNote: (UUID?) -> Void
 
     @State private var creatingFolder = false
     @State private var newFolderName = ""
     @State private var expanded: Set<CanvasFolderFilter> = []
+    @State private var didSeedExpansion = false
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -1203,6 +1032,18 @@ private struct CanvasFolderOverlay: View {
             .shadow(color: CanvasPalette.ink.opacity(0.18), radius: 26, y: 13)
             .padding(.leading, 24).padding(.top, 70)
         }
+        .onAppear {
+            guard !didSeedExpansion else { return }
+            didSeedExpansion = true
+            // Land on the folder holding the open note, rather than making
+            // the user hunt for where they already are.
+            if let activeURL,
+               let snapshot = notes.first(where: { $0.url == activeURL }) {
+                expanded.insert(snapshot.folderID.map { CanvasFolderFilter.folder($0) } ?? .unfiled)
+            } else {
+                expanded.insert(.all)
+            }
+        }
     }
 
     @ViewBuilder
@@ -1237,13 +1078,15 @@ private struct CanvasFolderOverlay: View {
             if isExpanded {
                 VStack(alignment: .leading, spacing: 1) {
                     ForEach(folderNotes) { note in
+                        let isCurrent = note.url == activeURL
                         Button {
                             withAnimation { isOpen = false }
+                            guard !isCurrent else { return }
                             openNote(note.url)
                         } label: {
                             HStack(spacing: 8) {
                                 Circle()
-                                    .fill(CanvasPalette.inkBlue.opacity(note.captureCount > 0 ? 0.55 : 0.18))
+                                    .fill(CanvasPalette.inkBlue.opacity(isCurrent ? 0.9 : (note.captureCount > 0 ? 0.55 : 0.18)))
                                     .frame(width: 5, height: 5)
                                 Text(note.title).lineLimit(1)
                                 Spacer()
@@ -1253,11 +1096,13 @@ private struct CanvasFolderOverlay: View {
                                         .opacity(0.40)
                                 }
                             }
-                            .font(.system(size: 13))
+                            .font(.system(size: 13, weight: isCurrent ? .semibold : .regular))
                             .padding(.horizontal, 12).frame(height: 32)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
+                        .background(isCurrent ? CanvasPalette.inkBlue.opacity(0.09) : .clear,
+                                    in: RoundedRectangle(cornerRadius: 8))
                     }
 
                     // Scoped to the folder it sits under, so there is never a
