@@ -122,6 +122,23 @@ public final class ExplorationTracker: NSObject {
     }
 
     @discardableResult
+    /// Reads the frontmost app's current selection WITHOUT capturing it.
+    ///
+    /// Deliberately does NOT use the synthetic-Copy fallback that
+    /// `captureSelectedText` falls back to: this is called on a poll while the
+    /// user is still choosing what to highlight, and firing ⌘C at another app
+    /// several times a second would stomp their clipboard and fight their
+    /// selection. Accessibility-only means it reports nothing for Chromium
+    /// views that hide AXSelectedText — that case still works, it just waits
+    /// for the timeout and then goes through the copy path once.
+    public func peekSelectedText() -> String? {
+        guard AXIsProcessTrusted(), isTracking, !isPaused else { return nil }
+        guard let text = selectedText()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !text.isEmpty
+        else { return nil }
+        return text
+    }
+
     public func captureSelectedText() async -> Bool {
         // Permission prompts belong to the app's onboarding flow. Capture paths
         // only inspect current state so a failed action cannot create a prompt loop.

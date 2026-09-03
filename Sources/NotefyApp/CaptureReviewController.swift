@@ -210,17 +210,17 @@ private struct CaptureReviewView: View {
                         .clipShape(RoundedRectangle(cornerRadius: 7))
                 }
                 Text(metadata)
-                    .font(NotefyFont.caption)
+                    .font(StoneFont.mark())
                     .tracking(1)
-                    .foregroundStyle(NotefyTheme.inkFaint)
+                    .foregroundStyle(Stoneink.textMuted)
                     .lineLimit(1)
             }
             .padding(.horizontal, 10)
             .padding(.top, 10)
             .padding(.bottom, 14)
-            .background(NotefyTheme.cardPaper)
+            .background(Stoneink.surfaceSlip)
             .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(NotefyTheme.ink.opacity(0.14), lineWidth: 1))
+            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Stoneink.textPrimary.opacity(0.14), lineWidth: 1))
             .rotationEffect(.degrees(-0.6))
 
             sticky
@@ -234,32 +234,33 @@ private struct CaptureReviewView: View {
         VStack(alignment: .leading, spacing: 13) {
             destinationPicker
             HStack(alignment: .top, spacing: 12) {
-                RoundedRectangle(cornerRadius: 2).fill(NotefyTheme.pebbleOlive).frame(width: 3)
+                RoundedRectangle(cornerRadius: 2).fill(Stoneink.cobalt600).frame(width: 3)
                 Text(displayExcerpt)
-                    .font(NotefyFont.body)
+                    .font(StoneFont.body())
                     .lineSpacing(7)
-                    .foregroundStyle(NotefyTheme.ink)
+                    .foregroundStyle(Stoneink.textPrimary)
                     .padding(.horizontal, 3)
-                    .background(NotefyTheme.pebbleTan.opacity(0.58), in: RoundedRectangle(cornerRadius: 8))
+                    .background(Stoneink.cobalt100, in: RoundedRectangle(cornerRadius: 8))
             }
             .fixedSize(horizontal: false, vertical: true)
 
             Text(sourceLine)
-                .font(NotefyFont.caption)
+                .font(StoneFont.mark())
                 .tracking(1)
-                .foregroundStyle(NotefyTheme.inkFaint)
+                .foregroundStyle(Stoneink.textMuted)
 
             noteField
-                .padding(.vertical, 5)
-                .background(RuledNoteLines())
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(Stoneink.surfacePress, in: ThrownRect.press)
 
             captureActions
         }
         .padding(20)
         .frame(width: 560)
-        .background(NotefyTheme.cardPaper)
+        .background(Stoneink.surfaceSlip)
         .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(NotefyTheme.ink.opacity(0.14), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Stoneink.textPrimary.opacity(0.14), lineWidth: 1))
         .transition(.scale(scale: 0.98).combined(with: .opacity))
     }
 
@@ -267,14 +268,14 @@ private struct CaptureReviewView: View {
         VStack(alignment: .leading, spacing: 5) {
             noteField
             if let error = voice.errorMessage {
-                Text(error).font(NotefyFont.caption).foregroundStyle(NotefyTheme.marginRose)
+                Text(error).font(StoneFont.mark()).foregroundStyle(Stoneink.oxide600)
             }
             captureActions
         }
         .padding(12)
-        .background(NotefyTheme.cardPaper)
+        .background(Stoneink.surfaceSlip)
         .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(NotefyTheme.ink.opacity(0.14), lineWidth: 1))
+        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Stoneink.textPrimary.opacity(0.14), lineWidth: 1))
     }
 
     private var destinationPicker: some View {
@@ -294,8 +295,8 @@ private struct CaptureReviewView: View {
                 set: { note = String($0.prefix(1_600)) }
             ), axis: .vertical)
             .textFieldStyle(.plain)
-            .font(NotefyFont.hand)
-            .foregroundStyle(NotefyTheme.ink)
+            .font(StoneFont.body())
+            .foregroundStyle(Stoneink.textPrimary)
             .lineLimit(1...12)
             .fixedSize(horizontal: false, vertical: true)
             .onSubmit { keep() }
@@ -304,29 +305,29 @@ private struct CaptureReviewView: View {
                 HStack(spacing: 9) {
                     ProgressView().controlSize(.small)
                     Text("Adding what you said below your typed thought…")
-                        .font(NotefyFont.caption)
-                        .foregroundStyle(NotefyTheme.inkSoft)
+                        .font(StoneFont.mark())
+                        .foregroundStyle(Stoneink.textSecondary)
                     Spacer()
                 }
                 .frame(minHeight: 34)
             } else if voice.isRecording {
                 HStack(spacing: 8) {
-                    Circle().fill(NotefyTheme.marginRose).frame(width: 8, height: 8)
+                    Circle().fill(Stoneink.oxide600).frame(width: 8, height: 8)
                     Text("RECORDING · THIS WILL BE ADDED BELOW")
-                        .font(NotefyFont.caption)
+                        .font(StoneFont.mark())
                         .tracking(0.7)
-                        .foregroundStyle(NotefyTheme.inkSoft)
+                        .foregroundStyle(Stoneink.textSecondary)
                     HStack(spacing: 3) {
                         ForEach(0..<12, id: \.self) { index in
                             Capsule()
-                                .fill(NotefyTheme.ink)
+                                .fill(Stoneink.textPrimary)
                                 .frame(width: 2.5, height: waveformHeight(index) * 0.55)
                         }
                     }
                     Spacer()
                     Text(time(voice.elapsed))
-                        .font(NotefyFont.caption)
-                        .foregroundStyle(voice.elapsed >= 50 ? NotefyTheme.marginRose : NotefyTheme.inkSoft)
+                        .font(StoneFont.mark())
+                        .foregroundStyle(voice.elapsed >= 50 ? Stoneink.oxide600 : Stoneink.textSecondary)
                 }
                 .frame(minHeight: 34)
             }
@@ -337,14 +338,14 @@ private struct CaptureReviewView: View {
         HStack(spacing: 9) {
             if note.count >= 1_300 {
                 Text("\(note.count) / 1600")
-                    .font(NotefyFont.caption)
-                    .foregroundStyle(note.count >= 1_550 ? NotefyTheme.marginRose : NotefyTheme.inkFaint)
+                    .font(StoneFont.mark())
+                    .foregroundStyle(note.count >= 1_550 ? Stoneink.oxide600 : Stoneink.textMuted)
             }
             Spacer()
             Button(action: toggleVoiceAnnotation) {
                 ZStack {
-                    Circle().fill(voice.isRecording ? NotefyTheme.marginRose : Color.clear)
-                    Circle().stroke(NotefyTheme.ink, lineWidth: 1.5)
+                    Circle().fill(voice.isRecording ? Stoneink.oxide600 : Color.clear)
+                    Circle().stroke(Stoneink.textPrimary, lineWidth: 1.5)
                     OverlayIcon(kind: .microphone).frame(width: 17, height: 17)
                         .colorInvertIfRecording(voice.isRecording)
                 }
@@ -357,21 +358,21 @@ private struct CaptureReviewView: View {
                     Image(systemName: "xmark")
                     Text("DISCARD · ESC")
                 }
-                .font(NotefyFont.caption)
+                .font(StoneFont.mark())
                 .tracking(0.8)
-                .foregroundStyle(NotefyTheme.ink)
+                .foregroundStyle(Stoneink.textPrimary)
                 .padding(.horizontal, 13)
                 .padding(.vertical, 9)
                 .background(Color.clear, in: Capsule())
-                .overlay(Capsule().stroke(NotefyTheme.ink.opacity(0.45), lineWidth: 1))
+                .overlay(Capsule().stroke(Stoneink.textPrimary.opacity(0.45), lineWidth: 1))
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)
             Button(action: keep) {
-                Text("KEEP ↧").font(NotefyFont.label).tracking(1.1)
+                Text("KEEP ↧").font(StoneFont.label()).tracking(1.1)
                     .padding(.horizontal, 17).padding(.vertical, 10)
-                    .background(NotefyTheme.ink, in: Capsule())
-                    .foregroundStyle(NotefyTheme.sand)
+                    .background(Stoneink.textPrimary, in: Capsule())
+                    .foregroundStyle(Stoneink.clay050)
             }
             .buttonStyle(.plain)
             .disabled(voice.isRecording || isTranscribing)
@@ -478,11 +479,11 @@ private struct CaptureDestinationPicker: View {
                 Text("SAVING TO · \(title.uppercased())")
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
             }
-            .font(NotefyFont.caption).tracking(0.7)
-            .foregroundStyle(NotefyTheme.inkSoft)
+            .font(StoneFont.mark()).tracking(0.7)
+            .foregroundStyle(Stoneink.textSecondary)
             .padding(.horizontal, 11).padding(.vertical, 6)
-            .background(NotefyTheme.sandDeep, in: Capsule())
-            .overlay(Capsule().stroke(NotefyTheme.ink.opacity(0.12), lineWidth: 1))
+            .background(Stoneink.surfacePress, in: Capsule())
+            .overlay(Capsule().stroke(Stoneink.textPrimary.opacity(0.12), lineWidth: 1))
         }
         .buttonStyle(.plain)
         .fixedSize()
@@ -499,20 +500,6 @@ private struct CaptureDestinationPicker: View {
                 }
             )
         }
-    }
-}
-
-private struct RuledNoteLines: View {
-    var body: some View {
-        Canvas { context, size in
-            for y in stride(from: CGFloat(27), through: size.height, by: 27) {
-                var path = Path()
-                path.move(to: CGPoint(x: 0, y: y))
-                path.addLine(to: CGPoint(x: size.width, y: y))
-                context.stroke(path, with: .color(NotefyTheme.inkSoft.opacity(0.16)), lineWidth: 1)
-            }
-        }
-        .allowsHitTesting(false)
     }
 }
 

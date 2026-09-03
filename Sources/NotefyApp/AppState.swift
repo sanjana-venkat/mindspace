@@ -213,6 +213,16 @@ private struct StoredNoteDocument: Codable {
     var organized: String
     var organizationTemplate: OrganizationTemplate?
     var thoughtGraph: ThoughtGraph?
+    /// The note written beside the captures — the thing the reader view lets
+    /// you live-edit while scrolling the stream. It was rendered into the
+    /// markdown but never stored here, and `loadNote` blanked it on every
+    /// open, so any note typed beside a capture was lost the moment the note
+    /// was reopened. Optional with a default so sidecars written before this
+    /// field still decode, and so the existing initialiser call sites are
+    /// unaffected.
+    var rawDraft: String? = nil
+    /// Same story for the free-standing thoughts block.
+    var annotationDraft: String? = nil
 }
 
 @MainActor
@@ -238,6 +248,12 @@ final class AppState: ObservableObject {
     @Published var visionStatus: String = "Not checked"
     @Published var noteTitle: String = "Untitled capture"
     @Published var rawDraft: String = ""
+
+    /// Non-nil while the text button is armed and waiting for a highlight.
+    private var armedTextCaptureTask: Task<Void, Never>?
+    /// Long enough to switch apps and find the passage, short enough that a
+    /// forgotten arm doesn't sit live all afternoon.
+    private static let armedTextCaptureTimeout: TimeInterval = 45
     @Published var annotationDraft: String = ""
     @Published var stepAnnotations: [UUID: String] = [:]
     @Published var selectedStepIDs: Set<UUID> = []
@@ -684,9 +700,62 @@ final class AppState: ObservableObject {
         isPaused.toggle()
     }
 
+    /// Two ways in, and they want opposite behaviour:
+    ///
+    ///   ⌘⇧T — you highlight FIRST, then fire the shortcut. Take it now.
+    ///   Rail button — you press the button first, THEN go and highlight.
+    ///
+    /// The old version did the first thing for both, which is why the button
+    /// never worked: it told you to "select any text" and then read the
+    /// selection in the same breath, always finding nothing. So: if something
+    /// is already highlighted, capture it; otherwise arm and wait for a
+    /// selection to appear.
     func captureSelectedText() {
         guard ensureCaptureSession() else { return }
-        instructionToast.show("Select any text to annotate")
+        if tracker.peekSelectedText() != nil {
+            performSelectedTextCapture()
+        } else {
+            armSelectedTextCapture()
+        }
+    }
+
+    /// Pressing the button again while armed cancels, so an accidental press
+    /// isn't a thing you have to wait out.
+    func armSelectedTextCapture() {
+        if armedTextCaptureTask != nil {
+            cancelArmedTextCapture(status: "Text capture cancelled")
+            return
+        }
+        instructionToast.show("Highlight any text — it gets captured automatically")
+        recordingStatus = "Waiting for a highlight…"
+        armedTextCaptureTask = Task { [weak self] in
+            let deadline = Date().addingTimeInterval(Self.armedTextCaptureTimeout)
+            while !Task.isCancelled, Date() < deadline {
+                try? await Task.sleep(nanoseconds: 220_000_000)
+                guard !Task.isCancelled, let self else { return }
+                // Ignore our own windows: the rail and the review panel are
+                // ours, and lifting text out of Noted into Noted is never
+                // what the button meant.
+                if NSWorkspace.shared.frontmostApplication?.bundleIdentifier
+                    == Bundle.main.bundleIdentifier { continue }
+                guard self.tracker.peekSelectedText() != nil else { continue }
+                self.armedTextCaptureTask = nil
+                self.performSelectedTextCapture()
+                return
+            }
+            guard !Task.isCancelled, let self else { return }
+            self.armedTextCaptureTask = nil
+            self.recordingStatus = "Nothing highlighted — press the text button or ⌘⇧T again."
+        }
+    }
+
+    func cancelArmedTextCapture(status: String? = nil) {
+        armedTextCaptureTask?.cancel()
+        armedTextCaptureTask = nil
+        recordingStatus = status
+    }
+
+    private func performSelectedTextCapture() {
         recordingStatus = "Lifting selected text…"
         Task { [weak self] in
             guard let self else { return }
@@ -1506,7 +1575,9 @@ final class AppState: ObservableObject {
             annotations: Dictionary(uniqueKeysWithValues: stepAnnotations.map { ($0.key.uuidString, $0.value) }),
             organized: organizedDraft,
             organizationTemplate: organizedTemplate,
-            thoughtGraph: organizedGraph
+            thoughtGraph: organizedGraph,
+            rawDraft: rawDraft,
+            annotationDraft: annotationDraft
         )
         if let data = try? JSONEncoder().encode(document) {
             try? data.write(to: sidecarURL(for: activeNoteURL), options: .atomic)
@@ -1529,10 +1600,10 @@ final class AppState: ObservableObject {
         })
         let markdown = renderNoteMarkdown(
             title: document.title,
-            rawDraft: "",
+            rawDraft: document.rawDraft ?? "",
             steps: document.steps,
             annotations: annotations,
-            annotationDraft: ""
+            annotationDraft: document.annotationDraft ?? ""
         )
         try? markdown.write(to: url, atomically: true, encoding: .utf8)
         if let data = try? JSONEncoder().encode(document) {
@@ -1579,8 +1650,8 @@ final class AppState: ObservableObject {
             organizedDraft = document.organized
             organizedGraph = document.thoughtGraph
             organizedTemplate = document.organizationTemplate ?? .bulletList
-            rawDraft = ""
-            annotationDraft = ""
+            rawDraft = document.rawDraft ?? ""
+            annotationDraft = document.annotationDraft ?? ""
         } else {
             let markdown = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
             noteTitle = markdown.split(separator: "\n").first(where: { $0.hasPrefix("# ") }).map { String($0.dropFirst(2)) }
