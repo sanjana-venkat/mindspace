@@ -35,6 +35,11 @@ struct CanvasWorkspaceView: View {
     @State private var foldersOpen = false
     @State private var settingsOpen = false
     @State private var inkTransitionFrame: Int?
+    @State private var zoom: CGFloat = 1.0
+    /// Owned here rather than in the reader so switching posture can be
+    /// wrapped in the same ink wipe that switching notes uses — the overlay
+    /// lives at this level.
+    @AppStorage(ReaderLayout.storageKey) private var layoutRaw = ReaderLayout.panel.rawValue
     @FocusState private var keyboardFocused: Bool
 
     /// The note picker's label. The workspace is always inside a note now, so
@@ -55,7 +60,7 @@ struct CanvasWorkspaceView: View {
         ZStack {
             CanvasClayBackground(focused: true, zoom: 1)
 
-            CaptureReadingView()
+            CaptureReadingView(zoom: zoom, layoutRaw: layoutRaw, setLayout: setLayout)
                 .environmentObject(appState)
 
             VStack(spacing: 0) {
@@ -63,7 +68,8 @@ struct CanvasWorkspaceView: View {
                     title: pickerTitle,
                     subtitle: pickerSubtitle,
                     foldersOpen: $foldersOpen,
-                    settingsOpen: $settingsOpen
+                    settingsOpen: $settingsOpen,
+                    zoom: $zoom
                 )
                 Spacer()
             }
@@ -113,13 +119,26 @@ struct CanvasWorkspaceView: View {
     }
 
     /// Switching notes keeps the ink wipe the card wall used to open with —
-    /// it is the one moment that still marks "you are now somewhere else",
-    /// and without the wall it is the only such moment left.
+    /// it is the one moment that still marks "you are now somewhere else".
     private func transitionToReading(_ url: URL) {
+        inkWipe { appState.openNote(url) }
+    }
+
+    /// Grid and panel are two views of the same note, so the change is worth
+    /// the same beat: the ink covers, the layout swaps behind it, the ink
+    /// pulls back. Without it the whole page silently becomes something else.
+    private func setLayout(_ option: ReaderLayout) {
+        guard option.rawValue != layoutRaw else { return }
+        inkWipe { layoutRaw = option.rawValue }
+    }
+
+    /// Cover, change, reveal. The change happens at the midpoint so it is
+    /// never seen happening.
+    private func inkWipe(_ change: @escaping () -> Void) {
         guard inkTransitionFrame == nil else { return }
 
         guard !reduceMotion else {
-            appState.openNote(url)
+            change()
             return
         }
 
@@ -132,7 +151,7 @@ struct CanvasWorkspaceView: View {
                 try? await Task.sleep(for: .milliseconds(28))
             }
 
-            appState.openNote(url)
+            change()
 
             for frame in coverFrames..<(coverFrames + revealFrames) {
                 inkTransitionFrame = frame
@@ -150,12 +169,16 @@ private struct CanvasToolbar: View {
     let subtitle: String
     @Binding var foldersOpen: Bool
     @Binding var settingsOpen: Bool
+    @Binding var zoom: CGFloat
 
     var body: some View {
         ZStack {
             HStack(spacing: 12) {
                 // The note switcher. Two lines because the folder is context
-                // for the title, not a peer of it.
+                // for the title, not a peer of it — and the chevron is pinned
+                // to the pill's trailing edge rather than trailing the title,
+                // so it reads as the control's affordance instead of drifting
+                // with whatever the note happens to be called.
                 Button {
                     withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) { foldersOpen.toggle() }
                 } label: {
@@ -169,13 +192,14 @@ private struct CanvasToolbar: View {
                                 .font(.system(size: 13, weight: .semibold))
                                 .lineLimit(1)
                         }
+                        Spacer(minLength: 10)
                         Image(systemName: "chevron.down")
                             .font(.system(size: 9, weight: .bold))
                             .rotationEffect(.degrees(foldersOpen ? 180 : 0))
                             .opacity(0.55)
                     }
                     .padding(.horizontal, 15).frame(height: 46)
-                    .frame(maxWidth: 280, alignment: .leading)
+                    .frame(width: 250, alignment: .leading)
                     .background(CanvasPalette.paper.opacity(0.72), in: Capsule())
                     .overlay(Capsule().stroke(CanvasPalette.ink.opacity(0.10)))
                 }
@@ -184,16 +208,25 @@ private struct CanvasToolbar: View {
 
                 Spacer()
 
-                Button { settingsOpen = true } label: {
-                    Image(systemName: "gearshape")
-                        .font(.system(size: 13, weight: .medium))
-                        .frame(width: 42, height: 42)
-                        .background(CanvasPalette.paper.opacity(0.72), in: Circle())
-                        .overlay(Circle().stroke(CanvasPalette.ink.opacity(0.10)))
+                // Zoom belongs with the captures now that they are what the
+                // window actually holds.
+                HStack(spacing: 8) {
+                    Button { zoom = max(0.60, zoom - 0.10) } label: { Image(systemName: "minus") }
+                        .help("Zoom out")
+                    Text("\(Int(zoom * 100))%")
+                        .font(.custom("GeistMono-Medium", size: 10))
+                        .frame(width: 38)
+                    Button { zoom = min(1.40, zoom + 0.10) } label: { Image(systemName: "plus") }
+                        .help("Zoom in")
+                    Divider().frame(height: 18).opacity(0.25)
+                    Button { settingsOpen = true } label: { Image(systemName: "gearshape") }
+                        .help("Settings")
+                        .accessibilityLabel("Settings")
                 }
                 .buttonStyle(.plain)
-                .help("Settings")
-                .accessibilityLabel("Settings")
+                .padding(.horizontal, 13).frame(height: 46)
+                .background(CanvasPalette.paper.opacity(0.72), in: Capsule())
+                .overlay(Capsule().stroke(CanvasPalette.ink.opacity(0.10)))
             }
 
             CanvasBrandMark()
@@ -205,9 +238,11 @@ private struct CanvasToolbar: View {
 private struct CaptureReadingView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    let zoom: CGFloat
+    let layoutRaw: String
+    let setLayout: (ReaderLayout) -> Void
     @State private var activeCaptureID: UUID?
     @State private var tab: ReaderTab = .raw
-    @AppStorage(ReaderLayout.storageKey) private var layoutRaw = ReaderLayout.panel.rawValue
 
     private var layout: ReaderLayout { ReaderLayout(rawValue: layoutRaw) ?? .panel }
 
@@ -264,8 +299,12 @@ private struct CaptureReadingView: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.99)))
                 }
             }
+            // Zoom scales the work, never the chrome — the tab bar and the
+            // posture switch stay the size the pointer expects them to be.
+            .scaleEffect(zoom, anchor: .top)
             .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: tab)
             .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: layoutRaw)
+            .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.88), value: zoom)
 
             ReaderTabBar(selection: $tab)
                 .padding(.top, 78)
@@ -276,7 +315,7 @@ private struct CaptureReadingView: View {
             if tab == .raw {
                 HStack {
                     Spacer()
-                    ReaderLayoutToggle(layoutRaw: $layoutRaw)
+                    ReaderLayoutToggle(layout: layout, setLayout: setLayout)
                 }
                 .padding(.horizontal, 24)
                 .padding(.top, 78)
@@ -348,10 +387,11 @@ private struct CaptureReadingView: View {
 /// the window toolbar, because it changes what THIS note looks like, not what
 /// the app is doing.
 private struct ReaderLayoutToggle: View {
-    @Binding var layoutRaw: String
+    let layout: ReaderLayout
+    /// The switch is wrapped in the ink wipe by the workspace, so this only
+    /// reports intent.
+    let setLayout: (ReaderLayout) -> Void
     @Namespace private var inkSelection
-
-    private var layout: ReaderLayout { ReaderLayout(rawValue: layoutRaw) ?? .panel }
 
     var body: some View {
         HStack(spacing: 5) {
@@ -359,9 +399,7 @@ private struct ReaderLayoutToggle: View {
                 let active = option == layout
                 Button {
                     guard !active else { return }
-                    withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
-                        layoutRaw = option.rawValue
-                    }
+                    setLayout(option)
                 } label: {
                     // Icon only. The label was carrying the same two words on
                     // every screen for a control you use once and then leave
