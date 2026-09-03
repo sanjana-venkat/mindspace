@@ -442,6 +442,25 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// Reorders one capture within the open note, for the grid's drag.
+    ///
+    /// `steps` is stored oldest-first and every view renders it reversed, so
+    /// "drop A before B" in the grid is an insert AFTER B in storage. Doing
+    /// the flip here rather than at the call site keeps the one place that
+    /// knows about the reversal in the model.
+    func moveCapture(_ sourceID: UUID, before targetID: UUID) {
+        guard sourceID != targetID,
+              let from = steps.firstIndex(where: { $0.id == sourceID })
+        else { return }
+        let step = steps.remove(at: from)
+        guard let target = steps.firstIndex(where: { $0.id == targetID }) else {
+            steps.insert(step, at: from)
+            return
+        }
+        steps.insert(step, at: target + 1)
+        scheduleActiveNoteAutosave()
+    }
+
     func moveCanvasNote(_ sourceURL: URL, to targetURL: URL) {
         var ordered = canvasNoteSnapshots.map(\.url)
         guard let sourceIndex = ordered.firstIndex(of: sourceURL),

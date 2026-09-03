@@ -19,6 +19,20 @@ private enum ReaderTab: String, CaseIterable, Identifiable {
     var id: String { rawValue }
 }
 
+/// How a note's captures are laid out. Panel is the reading posture — the
+/// note pinned beside a single column you scroll through. Grid is the
+/// arranging posture — every capture visible at once and draggable, which is
+/// what the workspace is actually for.
+private enum ReaderLayout: String, CaseIterable, Identifiable {
+    case grid = "Grid view"
+    case panel = "Panel view"
+    var id: String { rawValue }
+    var icon: String { self == .grid ? "square.grid.2x2" : "sidebar.right" }
+    /// Remembered across notes and launches — a working posture, not a
+    /// per-note property.
+    static let storageKey = "noted.readerLayout"
+}
+
 struct CanvasWorkspaceView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -87,7 +101,12 @@ struct CanvasWorkspaceView: View {
                 CanvasFolderOverlay(
                     filter: $folderFilter,
                     isOpen: $foldersOpen,
-                    notes: appState.canvasNoteSnapshots
+                    notes: appState.canvasNoteSnapshots,
+                    openNote: { url in transitionToReading(url, from: nil) },
+                    createNote: { folderID in
+                        let destination = appState.createNewNote(inFolder: folderID)
+                        transitionToReading(destination.url, from: nil)
+                    }
                 )
                 .environmentObject(appState)
                 .transition(.opacity.combined(with: .scale(scale: 0.97, anchor: .topLeading)))
@@ -368,6 +387,9 @@ private struct CaptureReadingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var activeCaptureID: UUID?
     @State private var tab: ReaderTab = .raw
+    @AppStorage(ReaderLayout.storageKey) private var layoutRaw = ReaderLayout.panel.rawValue
+
+    private var layout: ReaderLayout { ReaderLayout(rawValue: layoutRaw) ?? .panel }
 
     private var activeStep: ExplorationStep? {
         appState.steps.first { $0.id == activeCaptureID } ?? appState.steps.last
@@ -397,16 +419,24 @@ private struct CaptureReadingView: View {
             Group {
                 switch tab {
                 case .raw:
-                    GeometryReader { proxy in
-                        HStack(spacing: 0) {
-                            rawNoteColumn
-                                .frame(width: proxy.size.width / 3)
-                            captureColumn
-                                .padding(.top, 146)
-                                .frame(width: proxy.size.width * 2 / 3)
+                    switch layout {
+                    case .panel:
+                        GeometryReader { proxy in
+                            HStack(spacing: 0) {
+                                rawNoteColumn
+                                    .frame(width: proxy.size.width / 3)
+                                captureColumn
+                                    .padding(.top, 146)
+                                    .frame(width: proxy.size.width * 2 / 3)
+                            }
                         }
+                        .transition(.opacity)
+                    case .grid:
+                        CaptureGridView(activeCaptureID: $activeCaptureID)
+                            .environmentObject(appState)
+                            .padding(.top, 146)
+                            .transition(.opacity)
                     }
-                    .transition(.opacity)
                 case .organized:
                     OrganizedEssayView()
                         .environmentObject(appState)
@@ -415,10 +445,23 @@ private struct CaptureReadingView: View {
                 }
             }
             .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: tab)
+            .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: layoutRaw)
 
             ReaderTabBar(selection: $tab)
                 .padding(.top, 78)
                 .zIndex(2)
+
+            // Only Raw has two postures to choose between; the essay is a
+            // single reading surface either way.
+            if tab == .raw {
+                HStack {
+                    Spacer()
+                    ReaderLayoutToggle(layoutRaw: $layoutRaw)
+                }
+                .padding(.horizontal, 24)
+                .padding(.top, 78)
+                .zIndex(2)
+            }
         }
     }
 
@@ -478,6 +521,214 @@ private struct CaptureReadingView: View {
                 .scrollIndicators(.hidden)
             }
         }
+    }
+}
+
+/// The posture switch. Sits opposite the Raw/Organized tabs rather than in
+/// the window toolbar, because it changes what THIS note looks like, not what
+/// the app is doing.
+private struct ReaderLayoutToggle: View {
+    @Binding var layoutRaw: String
+
+    private var layout: ReaderLayout { ReaderLayout(rawValue: layoutRaw) ?? .panel }
+
+    var body: some View {
+        HStack(spacing: 3) {
+            ForEach(ReaderLayout.allCases) { option in
+                let active = option == layout
+                Button {
+                    guard !active else { return }
+                    withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) {
+                        layoutRaw = option.rawValue
+                    }
+                } label: {
+                    HStack(spacing: 6) {
+                        Image(systemName: option.icon)
+                            .font(.system(size: 10, weight: .bold))
+                        Text(option.rawValue.uppercased())
+                            .font(.custom("GeistMono-Medium", size: 9)).tracking(1.1)
+                    }
+                    .foregroundStyle(active ? CanvasPalette.paper : CanvasPalette.ink.opacity(0.55))
+                    .padding(.horizontal, 12)
+                    .frame(height: 30)
+                    .background {
+                        if active {
+                            Capsule().fill(CanvasPalette.inkBlue)
+                        }
+                    }
+                    .contentShape(Capsule())
+                }
+                .buttonStyle(.plain)
+                .help(option == .grid
+                      ? "Every capture at once — drag to rearrange"
+                      : "One column beside your note")
+            }
+        }
+        .padding(3)
+        .background(CanvasPalette.paper.opacity(0.80), in: Capsule())
+        .overlay(Capsule().stroke(CanvasPalette.ink.opacity(0.10)))
+    }
+}
+
+/// Grid view: the whole note laid out at once. The note itself is the first
+/// tile rather than a separate column, because in this posture it is one more
+/// thing you place — captures reorder around it by drag, and the order is the
+/// note's own order, persisted the same way the canvas persists note order.
+private struct CaptureGridView: View {
+    @EnvironmentObject private var appState: AppState
+    @Binding var activeCaptureID: UUID?
+
+    private let columns = [GridItem(.adaptive(minimum: 300, maximum: 380), spacing: 24)]
+
+    var body: some View {
+        ScrollView {
+            LazyVGrid(columns: columns, alignment: .leading, spacing: 24) {
+                GridNoteTile()
+                    .environmentObject(appState)
+
+                ForEach(appState.steps.reversed()) { step in
+                    GridCaptureTile(step: step, selected: step.id == activeCaptureID)
+                        .id(step.id)
+                        .onTapGesture { activeCaptureID = step.id }
+                        .draggable(step.id.uuidString) {
+                            GridCaptureTile(step: step, selected: true).opacity(0.9)
+                        }
+                        .dropDestination(for: String.self) { items, _ in
+                            guard let raw = items.first,
+                                  let sourceID = UUID(uuidString: raw),
+                                  sourceID != step.id
+                            else { return false }
+                            withAnimation(.spring(response: 0.46, dampingFraction: 0.78)) {
+                                appState.moveCapture(sourceID, before: step.id)
+                            }
+                            return true
+                        }
+                }
+            }
+            .padding(.horizontal, 38)
+            .padding(.bottom, 60)
+        }
+        .scrollIndicators(.hidden)
+        .overlay {
+            if appState.steps.isEmpty {
+                ContentUnavailableView(
+                    "No captures yet",
+                    systemImage: "square.grid.2x2",
+                    description: Text("Use Kami or a capture shortcut to add the first source.")
+                )
+                .foregroundStyle(CanvasPalette.ink)
+            }
+        }
+    }
+}
+
+/// The note, as a tile. Same paper, same radius as a capture — it belongs to
+/// the grid rather than floating above it.
+private struct GridNoteTile: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("NOTE")
+                .font(.custom("GeistMono-Medium", size: 10)).tracking(1.4)
+                .opacity(0.45)
+
+            TextField("Untitled note", text: $appState.noteTitle)
+                .textFieldStyle(.plain)
+                .font(CanvasTypography.cardTitle)
+                .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
+
+            ZStack(alignment: .topLeading) {
+                if appState.rawDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("Write the note you want to keep beside these captures…")
+                        .font(CanvasTypography.cardBody)
+                        .opacity(0.40)
+                        .padding(.top, 7).padding(.leading, 5)
+                        .allowsHitTesting(false)
+                }
+                TextEditor(text: Binding(
+                    get: { appState.rawDraft },
+                    set: { appState.rawDraft = $0; appState.scheduleActiveNoteAutosave() }
+                ))
+                .font(CanvasTypography.cardBody)
+                .lineSpacing(6)
+                .scrollContentBackground(.hidden)
+                .background(.clear)
+            }
+            .frame(maxHeight: .infinity)
+        }
+        .padding(24)
+        .frame(height: 340)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CanvasPalette.paper, in: RoundedRectangle(cornerRadius: 14))
+        .overlay(RoundedRectangle(cornerRadius: 14).stroke(CanvasPalette.inkBlue.opacity(0.22), lineWidth: 1))
+        .shadow(color: CanvasPalette.ink.opacity(0.10), radius: 16, y: 8)
+    }
+}
+
+/// A capture at grid scale: the capture fills the tile, with one mono caption
+/// above and the source below — the same rule the panel-view card follows.
+private struct GridCaptureTile: View {
+    let step: ExplorationStep
+    let selected: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("\(kindLabel) · \(step.timestamp.formatted(date: .omitted, time: .shortened))".uppercased())
+                Spacer()
+                Image(systemName: kindIcon)
+            }
+            .font(.custom("GeistMono-Medium", size: 9)).tracking(1.0).opacity(0.45)
+
+            if let path = step.screenshotPath, let image = NSImage(contentsOfFile: path) {
+                Image(nsImage: image)
+                    .resizable().scaledToFit()
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .clipShape(RoundedRectangle(cornerRadius: 7))
+            } else if let text = primaryText, !text.isEmpty {
+                ScrollView {
+                    Text(text)
+                        .font(.custom("NewsreaderRoman-Regular", size: 14))
+                        .lineSpacing(5)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                }
+                .scrollIndicators(.hidden)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+            }
+
+            Text(sourceLabel)
+                .font(.custom("GeistMono-Regular", size: 9)).tracking(0.8)
+                .opacity(0.50)
+                .lineLimit(1).truncationMode(.middle)
+        }
+        .padding(18)
+        .frame(height: 340)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(CanvasPalette.paper.opacity(0.93), in: RoundedRectangle(cornerRadius: 14))
+        .overlay(
+            RoundedRectangle(cornerRadius: 14)
+                .stroke(selected ? CanvasPalette.inkBlue.opacity(0.55) : CanvasPalette.ink.opacity(0.11),
+                        lineWidth: selected ? 2 : 1)
+        )
+        .shadow(color: CanvasPalette.ink.opacity(selected ? 0.16 : 0.09), radius: selected ? 20 : 14, y: 8)
+    }
+
+    private var primaryText: String? { step.selectedText ?? step.pageText }
+    private var kindLabel: String {
+        step.screenshotPath != nil ? "Capture"
+            : (step.appName.localizedCaseInsensitiveContains("audio") ? "Voice" : "Text")
+    }
+    private var kindIcon: String {
+        step.screenshotPath != nil ? "photo"
+            : (step.appName.localizedCaseInsensitiveContains("audio") ? "waveform" : "text.alignleft")
+    }
+    private var sourceLabel: String {
+        if let host = step.url.flatMap(URL.init(string:))?.host, !host.isEmpty { return host.uppercased() }
+        if step.appName == "Audio" { return "COMPUTER AUDIO" }
+        if ["Notefy", "Noted", "notefy-app"].contains(step.appName) { return "SCREEN REGION" }
+        let title = step.windowTitle.isEmpty ? step.appName : step.windowTitle
+        return title.uppercased()
     }
 }
 
@@ -824,13 +1075,25 @@ private struct LiveCaptureCard: View {
     private var kindIcon: String { step.screenshotPath != nil ? "photo" : (step.appName.localizedCaseInsensitiveContains("audio") ? "waveform" : "text.alignleft") }
 }
 
+/// The folder list, expandable. Choosing a folder used to filter the canvas
+/// and close — which meant the only way to see what was inside a folder was
+/// to dismiss the list and look at the grid. Now a folder opens in place and
+/// shows its notes, so this is a navigator rather than a filter menu.
+///
+/// The two plus buttons are deliberately different verbs and sit where their
+/// scope is: the one in the header makes a FOLDER, and the one at the foot of
+/// an open folder's note list makes a NOTE in that folder.
 private struct CanvasFolderOverlay: View {
     @EnvironmentObject private var appState: AppState
     @Binding var filter: CanvasFolderFilter
     @Binding var isOpen: Bool
     let notes: [CanvasNoteSnapshot]
+    let openNote: (URL) -> Void
+    let createNote: (UUID?) -> Void
+
     @State private var creatingFolder = false
     @State private var newFolderName = ""
+    @State private var expanded: Set<CanvasFolderFilter> = []
     @FocusState private var nameFocused: Bool
 
     var body: some View {
@@ -839,7 +1102,7 @@ private struct CanvasFolderOverlay: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("FOLDERS")
-                        .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.5).opacity(0.48)
+                        .font(.custom("GeistMono-Medium", size: 10)).tracking(1.5).opacity(0.48)
                     Spacer()
                     Button {
                         withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) { creatingFolder = true }
@@ -851,7 +1114,8 @@ private struct CanvasFolderOverlay: View {
                             .background(CanvasPalette.inkBlue.opacity(0.10), in: Circle())
                     }
                     .buttonStyle(.plain)
-                    .accessibilityLabel("Create folder")
+                    .help("New folder")
+                    .accessibilityLabel("New folder")
                 }
                 .padding(.bottom, 8)
 
@@ -860,13 +1124,12 @@ private struct CanvasFolderOverlay: View {
                         Image(systemName: "folder.fill").foregroundStyle(CanvasPalette.inkBlue)
                         TextField("Folder name", text: $newFolderName)
                             .textFieldStyle(.plain)
-                            .font(.system(size: 14, weight: .semibold, design: .rounded))
+                            .font(.system(size: 14, weight: .semibold))
                             .focused($nameFocused)
                             .onSubmit(createFolder)
                             .onExitCommand(perform: cancelFolder)
                         Button(action: createFolder) {
-                            Image(systemName: "checkmark")
-                                .font(.system(size: 11, weight: .bold))
+                            Image(systemName: "checkmark").font(.system(size: 11, weight: .bold))
                         }
                         .buttonStyle(.plain)
                         .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
@@ -875,14 +1138,27 @@ private struct CanvasFolderOverlay: View {
                     .background(CanvasPalette.inkBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 11))
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
-                folderButton("All notes", count: notes.count, value: .all)
-                folderButton("Unfiled", count: notes.filter { $0.folderID == nil }.count, value: .unfiled)
-                if !appState.workspace.folders.isEmpty { Divider().opacity(0.18).padding(.vertical, 5) }
-                ForEach(appState.workspace.folders) { folder in
-                    folderButton(appState.folderPath(for: folder.id), count: notes.filter { $0.folderID == folder.id }.count, value: .folder(folder.id))
+
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 3) {
+                        folderSection("All notes", value: .all, notes: notes)
+                        folderSection("Unfiled", value: .unfiled, notes: notes.filter { $0.folderID == nil })
+                        if !appState.workspace.folders.isEmpty {
+                            Divider().opacity(0.18).padding(.vertical, 5)
+                        }
+                        ForEach(appState.workspace.folders) { folder in
+                            folderSection(
+                                appState.folderPath(for: folder.id),
+                                value: .folder(folder.id),
+                                notes: notes.filter { $0.folderID == folder.id }
+                            )
+                        }
+                    }
                 }
+                .frame(maxHeight: 420)
+                .scrollIndicators(.hidden)
             }
-            .padding(16).frame(width: 270)
+            .padding(16).frame(width: 300)
             .background(CanvasPalette.paper.opacity(0.98), in: RoundedRectangle(cornerRadius: 20))
             .overlay(RoundedRectangle(cornerRadius: 20).stroke(CanvasPalette.ink.opacity(0.10)))
             .shadow(color: CanvasPalette.ink.opacity(0.18), radius: 26, y: 13)
@@ -890,21 +1166,82 @@ private struct CanvasFolderOverlay: View {
         }
     }
 
-    private func folderButton(_ title: String, count: Int, value: CanvasFolderFilter) -> some View {
-        Button {
-            filter = value
-            withAnimation { isOpen = false }
-        } label: {
-            HStack {
-                Text(title).lineLimit(1)
-                Spacer()
-                Text("\(count)").opacity(0.46)
+    @ViewBuilder
+    private func folderSection(_ title: String, value: CanvasFolderFilter, notes folderNotes: [CanvasNoteSnapshot]) -> some View {
+        let isExpanded = expanded.contains(value)
+        VStack(alignment: .leading, spacing: 2) {
+            Button {
+                filter = value
+                withAnimation(.spring(response: 0.34, dampingFraction: 0.86)) {
+                    if isExpanded { expanded.remove(value) } else { expanded.insert(value) }
+                }
+            } label: {
+                HStack(spacing: 8) {
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 9, weight: .bold))
+                        .rotationEffect(.degrees(isExpanded ? 90 : 0))
+                        .opacity(0.45)
+                    Text(title).lineLimit(1)
+                    Spacer()
+                    Text("\(folderNotes.count)")
+                        .font(.custom("GeistMono-Regular", size: 11))
+                        .opacity(0.46)
+                }
+                .font(.system(size: 14, weight: .semibold))
+                .padding(.horizontal, 12).frame(height: 40)
+                .contentShape(Rectangle())
             }
-            .font(.system(size: 14, weight: .semibold, design: .rounded))
-            .padding(.horizontal, 12).frame(height: 40)
+            .buttonStyle(.plain)
+            .background(filter == value ? CanvasPalette.inkBlue.opacity(0.11) : .clear,
+                        in: RoundedRectangle(cornerRadius: 11))
+
+            if isExpanded {
+                VStack(alignment: .leading, spacing: 1) {
+                    ForEach(folderNotes) { note in
+                        Button {
+                            withAnimation { isOpen = false }
+                            openNote(note.url)
+                        } label: {
+                            HStack(spacing: 8) {
+                                Circle()
+                                    .fill(CanvasPalette.inkBlue.opacity(note.captureCount > 0 ? 0.55 : 0.18))
+                                    .frame(width: 5, height: 5)
+                                Text(note.title).lineLimit(1)
+                                Spacer()
+                                if note.captureCount > 0 {
+                                    Text("\(note.captureCount)")
+                                        .font(.custom("GeistMono-Regular", size: 10))
+                                        .opacity(0.40)
+                                }
+                            }
+                            .font(.system(size: 13))
+                            .padding(.horizontal, 12).frame(height: 32)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(.plain)
+                    }
+
+                    // Scoped to the folder it sits under, so there is never a
+                    // question of where the new note lands.
+                    Button {
+                        withAnimation { isOpen = false }
+                        if case .folder(let id) = value { createNote(id) } else { createNote(nil) }
+                    } label: {
+                        HStack(spacing: 8) {
+                            Image(systemName: "plus").font(.system(size: 10, weight: .bold))
+                            Text("New note").font(.system(size: 13, weight: .medium))
+                            Spacer()
+                        }
+                        .foregroundStyle(CanvasPalette.inkBlue)
+                        .padding(.horizontal, 12).frame(height: 32)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(.plain)
+                }
+                .padding(.leading, 14)
+                .transition(.opacity.combined(with: .move(edge: .top)))
+            }
         }
-        .buttonStyle(.plain)
-        .background(filter == value ? CanvasPalette.inkBlue.opacity(0.11) : .clear, in: RoundedRectangle(cornerRadius: 11))
     }
 
     private func createFolder() {
@@ -912,9 +1249,9 @@ private struct CanvasFolderOverlay: View {
         guard !name.isEmpty else { return }
         let id = appState.createFolder(name: name)
         filter = .folder(id)
+        expanded.insert(.folder(id))
         newFolderName = ""
         creatingFolder = false
-        withAnimation { isOpen = false }
     }
 
     private func cancelFolder() {
@@ -1195,53 +1532,69 @@ private struct InkPillShape: Shape {
     }
 }
 
+/// The blobs are gone. Six large ink shapes drifting behind the cards read
+/// as decoration a template shipped with, and they were the loudest thing on
+/// a screen whose actual job is to let you scan and rearrange your own work.
+/// What replaces them does the same job — stop the ground being a dead flat
+/// fill — without ever becoming an object: a quiet warm gradient, a fine
+/// grain that reads as paper tooth rather than as shapes, and a vignette
+/// that lets the corners fall away so the cards sit on a surface.
 private struct CanvasClayBackground: View {
     let focused: Bool
     let zoom: CGFloat
 
     var body: some View {
         GeometryReader { proxy in
+            let diagonal = sqrt(proxy.size.width * proxy.size.width + proxy.size.height * proxy.size.height)
             ZStack {
-                LinearGradient(colors: [CanvasPalette.clayLight, CanvasPalette.clay], startPoint: .topLeading, endPoint: .bottomTrailing)
+                LinearGradient(
+                    colors: [CanvasPalette.clayLight, CanvasPalette.clay],
+                    startPoint: .topLeading, endPoint: .bottomTrailing
+                )
 
-                WavyInkField(size: proxy.size, zoom: zoom)
-                    .opacity(focused ? 0.35 : 1)
-                    .animation(.easeOut(duration: 0.44), value: focused)
+                // A single wide warm lift, well off-centre and far too soft to
+                // have an edge you could point at. Felt, not seen.
+                RadialGradient(
+                    colors: [CanvasPalette.paper.opacity(0.55), CanvasPalette.paper.opacity(0)],
+                    center: UnitPoint(x: 0.30, y: 0.16),
+                    startRadius: 0,
+                    endRadius: diagonal * 0.72
+                )
+
+                CanvasGrain()
+
+                RadialGradient(
+                    colors: [.clear, CanvasPalette.warmShadow.opacity(0.10)],
+                    center: .center,
+                    startRadius: diagonal * 0.30,
+                    endRadius: diagonal * 0.74
+                )
             }
+            // Reading dims the ground so the sheet in front of it carries the
+            // eye; the canvas gets it at full strength.
+            .opacity(focused ? 0.82 : 1)
+            .animation(.easeOut(duration: 0.44), value: focused)
         }
         .ignoresSafeArea()
     }
 }
 
-private struct WavyInkField: View {
-    let size: CGSize
-    let zoom: CGFloat
-
-    private let placements: [(x: CGFloat, y: CGFloat, size: CGFloat, opacity: Double, rotation: Double)] = [
-        (-0.05, 0.02, 0.48, 0.10, -18),
-        (0.92, 0.08, 0.38, 0.08, 22),
-        (0.22, 0.78, 0.56, 0.075, -28),
-        (0.98, 0.66, 0.34, 0.065, 14),
-        (0.02, 1.04, 0.40, 0.06, 42),
-        (0.76, 1.08, 0.50, 0.055, 128),
-    ]
-
+/// Paper tooth. Sparse enough to be felt rather than seen — dense specks
+/// average into a grey cast and take the warmth of the clay with them.
+private struct CanvasGrain: View {
     var body: some View {
-        ZStack {
-            ForEach(Array(placements.enumerated()), id: \.offset) { index, placement in
-                CanvasInkBlob()
-                    .fill(CanvasPalette.ink.opacity(placement.opacity))
-                    .frame(
-                        width: max(size.width, size.height) * placement.size,
-                        height: max(size.width, size.height) * placement.size * (0.78 + CGFloat(index % 3) * 0.08)
-                    )
-                    .rotationEffect(.degrees(placement.rotation))
-                    .scaleEffect(0.96 + zoom * 0.05)
-                    .position(x: size.width * placement.x, y: size.height * placement.y)
+        Canvas { context, size in
+            var generator = SeededGenerator(seed: 17)
+            let count = Int(size.width * size.height / 9)
+            for _ in 0..<count {
+                let x = CGFloat.random(in: 0...size.width, using: &generator)
+                let y = CGFloat.random(in: 0...size.height, using: &generator)
+                context.fill(Path(CGRect(x: x, y: y, width: 1, height: 1)), with: .color(.black))
             }
         }
-        .frame(width: size.width, height: size.height)
-        .clipped()
+        .blendMode(.multiply)
+        .opacity(0.030)
         .allowsHitTesting(false)
     }
 }
+
