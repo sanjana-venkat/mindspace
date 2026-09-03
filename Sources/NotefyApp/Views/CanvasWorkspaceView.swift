@@ -587,11 +587,22 @@ private struct CaptureGridView: View {
                     .environmentObject(appState)
 
                 ForEach(appState.steps.reversed()) { step in
-                    GridCaptureTile(step: step, selected: step.id == activeCaptureID)
+                    GridCaptureTile(
+                        step: step,
+                        selected: step.id == activeCaptureID,
+                        note: Binding(
+                            get: { appState.stepAnnotations[step.id] ?? "" },
+                            set: {
+                                appState.stepAnnotations[step.id] = $0
+                                appState.scheduleActiveNoteAutosave()
+                            }
+                        )
+                    )
                         .id(step.id)
                         .onTapGesture { activeCaptureID = step.id }
                         .draggable(step.id.uuidString) {
-                            GridCaptureTile(step: step, selected: true).opacity(0.9)
+                            GridCaptureTile(step: step, selected: true, note: .constant(appState.stepAnnotations[step.id] ?? ""))
+                                .opacity(0.9)
                         }
                         .dropDestination(for: String.self) { items, _ in
                             guard let raw = items.first,
@@ -658,7 +669,7 @@ private struct GridNoteTile: View {
             .frame(maxHeight: .infinity)
         }
         .padding(24)
-        .frame(height: 340)
+        .frame(height: 420)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(CanvasPalette.paper, in: RoundedRectangle(cornerRadius: 14))
         .overlay(RoundedRectangle(cornerRadius: 14).stroke(CanvasPalette.inkBlue.opacity(0.22), lineWidth: 1))
@@ -671,6 +682,12 @@ private struct GridNoteTile: View {
 private struct GridCaptureTile: View {
     let step: ExplorationStep
     let selected: Bool
+    /// The note you wrote against THIS capture. In panel view it lives in the
+    /// left column and swaps as you scroll; here every capture carries its own
+    /// alongside it, which is the whole point of seeing them all at once.
+    @Binding var note: String
+
+    @FocusState private var noteFocused: Bool
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
@@ -697,13 +714,35 @@ private struct GridCaptureTile: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             }
 
+            ZStack(alignment: .topLeading) {
+                if note.isEmpty && !noteFocused {
+                    Text("Add a note…")
+                        .font(.custom("NewsreaderRoman-Regular", size: 13))
+                        .opacity(0.34)
+                        .allowsHitTesting(false)
+                        .padding(.leading, 4).padding(.top, 4)
+                }
+                TextEditor(text: $note)
+                    .focused($noteFocused)
+                    .font(.custom("NewsreaderRoman-Regular", size: 13))
+                    .lineSpacing(3)
+                    .scrollContentBackground(.hidden)
+                    .background(.clear)
+            }
+            .frame(height: 54)
+            .padding(.horizontal, 4)
+            .background(
+                CanvasPalette.inkBlue.opacity(noteFocused ? 0.07 : 0.035),
+                in: RoundedRectangle(cornerRadius: 7)
+            )
+
             Text(sourceLabel)
                 .font(.custom("GeistMono-Regular", size: 9)).tracking(0.8)
                 .opacity(0.50)
                 .lineLimit(1).truncationMode(.middle)
         }
         .padding(18)
-        .frame(height: 340)
+        .frame(height: 420)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(CanvasPalette.paper.opacity(0.93), in: RoundedRectangle(cornerRadius: 14))
         .overlay(

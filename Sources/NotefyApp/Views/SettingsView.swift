@@ -14,10 +14,10 @@ struct SettingsView: View {
                 VStack(alignment: .leading, spacing: 24) {
                 VStack(alignment: .leading, spacing: 5) {
                     Text("THE WORKBENCH")
-                        .font(NotefyFont.label).tracking(1.3)
+                        .font(StoneFont.label()).tracking(1.3)
                         .foregroundStyle(ground.onGround42)
                     Text("Settings")
-                        .font(NotefyFont.pageTitle)
+                        .font(StoneFont.title())
                         .foregroundStyle(ground.onGround)
                 }
                 groundSection
@@ -59,12 +59,12 @@ struct SettingsView: View {
                     if saved {
                         Label("Saved", systemImage: "checkmark.circle.fill")
                             .foregroundStyle(.green)
-                            .font(NotefyFont.caption.weight(.semibold))
+                            .font(StoneFont.markMedium())
                     }
                 }
 
                 Text("Settings are stored at \(appState.settingsURL.path)")
-                    .font(NotefyFont.caption)
+                    .font(StoneFont.mark())
                     .foregroundStyle(ground.onGround72)
                 }
                 .padding(24)
@@ -76,9 +76,9 @@ struct SettingsView: View {
                 Image(systemName: "xmark")
                     .font(.system(size: 13, weight: .bold))
                     .frame(width: 34, height: 34)
-                    .background(NotefyTheme.cardPaper, in: Circle())
-                    .overlay(Circle().stroke(NotefyTheme.ink.opacity(0.14)))
-                    .shadow(color: NotefyTheme.ink.opacity(0.10), radius: 8, y: 3)
+                    .background(Stoneink.surfaceSlip, in: Circle())
+                    .overlay(Circle().stroke(Stoneink.textPrimary.opacity(0.14)))
+                    .shadow(color: Stoneink.textPrimary.opacity(0.10), radius: 8, y: 3)
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)
@@ -100,13 +100,27 @@ struct SettingsView: View {
                 .tracking(Stoneink.trMark * 11)
                 .foregroundStyle(ground.onGround42)
 
-            Picker("", selection: $groundRaw) {
+            HStack(spacing: 3) {
                 ForEach(GroundMode.allCases) { mode in
-                    Text(mode.label).tag(mode.rawValue)
+                    let active = mode.rawValue == groundRaw
+                    Button {
+                        withAnimation(.easeOut(duration: 0.18)) { groundRaw = mode.rawValue }
+                    } label: {
+                        Text(mode.label)
+                            .font(StoneFont.bodyMedium())
+                            .foregroundStyle(active ? Stoneink.clay050 : Stoneink.textSecondary)
+                            .padding(.horizontal, 18)
+                            .frame(height: 30)
+                            .background {
+                                if active { Capsule().fill(Stoneink.cobalt600) }
+                            }
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
                 }
             }
-            .pickerStyle(.segmented)
-            .labelsHidden()
+            .padding(3)
+            .background(Stoneink.surfacePress, in: Capsule())
             .fixedSize()
 
             Text("Same object, different light. The panels stay paper either way — only the ground swaps.")
@@ -118,7 +132,7 @@ struct SettingsView: View {
     private var permissionSection: some View {
         VStack(alignment: .leading, spacing: 12) {
             Label("Mac Permissions", systemImage: "checkmark.shield")
-                .font(NotefyFont.heading)
+                .font(StoneFont.subhead())
             HStack(spacing: 10) {
                 permissionBadge("MICROPHONE", granted: appState.permissionCenter.snapshot.microphone)
                 permissionBadge("ACCESSIBILITY", granted: appState.permissionCenter.snapshot.accessibility)
@@ -126,23 +140,23 @@ struct SettingsView: View {
                 Spacer()
                 Button("REVIEW PERMISSIONS") { appState.showPermissionOnboarding() }
                     .buttonStyle(.plain)
-                    .font(NotefyFont.label).tracking(0.8)
+                    .font(StoneFont.label()).tracking(0.8)
                     .padding(.horizontal, 14).padding(.vertical, 9)
-                    .overlay(Capsule().stroke(NotefyTheme.ink.opacity(0.65), lineWidth: 1.2))
+                    .overlay(Capsule().stroke(Stoneink.textPrimary.opacity(0.65), lineWidth: 1.2))
             }
         }
         .padding(16)
-        .background(NotefyTheme.cardPaper)
+        .background(Stoneink.surfaceSlip)
         .clipShape(RoundedRectangle(cornerRadius: 14))
         .onAppear { appState.permissionCenter.refresh() }
     }
 
     private func permissionBadge(_ title: String, granted: Bool) -> some View {
         Label(title, systemImage: granted ? "checkmark.circle.fill" : "exclamationmark.circle")
-            .font(NotefyFont.caption).tracking(0.5)
-            .foregroundStyle(granted ? NotefyTheme.ink : NotefyTheme.marginRose)
+            .font(StoneFont.mark()).tracking(0.5)
+            .foregroundStyle(granted ? Stoneink.textPrimary : Stoneink.oxide600)
             .padding(.horizontal, 10).padding(.vertical, 6)
-            .background((granted ? NotefyTheme.pebbleOlive : NotefyTheme.pebbleMauve).opacity(0.55), in: Capsule())
+            .background((granted ? Stoneink.celadon600 : Stoneink.oxide600).opacity(0.55), in: Capsule())
     }
 
     private var audioModelStatus: some View {
@@ -152,13 +166,13 @@ struct SettingsView: View {
                     .fill(audioStateColor)
                     .frame(width: 8, height: 8)
                 Text(appState.audioModelState.label)
-                    .font(NotefyFont.caption.weight(.medium))
+                    .font(StoneFont.markMedium())
                 if case .downloading(let progress) = appState.audioModelState {
                     ProgressView(value: progress).frame(width: 120)
                 }
                 Spacer()
                 if appState.settings.audio.provider == .local {
-                    NotefyPillButton(title: "Prepare Model", systemImage: "arrow.down.circle", tint: NotefyTheme.ink, filled: false) {
+                    NotefyPillButton(title: "Prepare Model", systemImage: "arrow.down.circle", tint: Stoneink.textPrimary, filled: false) {
                         Task { await appState.whisperTranscriber.ensureReady(variant: appState.settings.audio.modelName) }
                     }
                     .fixedSize()
@@ -169,10 +183,10 @@ struct SettingsView: View {
             HStack {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("MEETING MICROPHONE")
-                        .font(NotefyFont.label).tracking(1.1)
+                        .font(StoneFont.label()).tracking(1.1)
                     Text("Recorded as “You”. Computer audio is captured separately as “Others”.")
-                        .font(NotefyFont.caption)
-                        .foregroundStyle(NotefyTheme.inkSoft)
+                        .font(StoneFont.mark())
+                        .foregroundStyle(Stoneink.textSecondary)
                 }
                 Spacer()
                 Picker("Microphone", selection: $appState.settings.audio.inputDeviceUID) {
@@ -196,7 +210,7 @@ struct SettingsView: View {
     private var audioStateColor: Color {
         switch appState.audioModelState {
         case .ready: return .green
-        case .downloading, .loadingModel, .transcribing: return NotefyTheme.gold
+        case .downloading, .loadingModel, .transcribing: return Stoneink.amber600
         case .failed: return .red
         case .notDownloaded: return .gray
         }
@@ -208,10 +222,10 @@ struct SettingsView: View {
                 .fill(appState.visionStatus.contains("reachable") ? .green : .gray)
                 .frame(width: 8, height: 8)
             Text(appState.visionStatus)
-                .font(NotefyFont.caption.weight(.medium))
+                .font(StoneFont.markMedium())
             Spacer()
             if appState.settings.vision.provider == .local {
-                NotefyPillButton(title: "Check Status", systemImage: "arrow.clockwise", tint: NotefyTheme.ink, filled: false) {
+                NotefyPillButton(title: "Check Status", systemImage: "arrow.clockwise", tint: Stoneink.textPrimary, filled: false) {
                     appState.checkVisionStatus()
                 }
                 .fixedSize()
@@ -233,7 +247,7 @@ struct SettingsView: View {
     ) -> some View {
         VStack(alignment: .leading, spacing: 12) {
             Label(title, systemImage: icon)
-                .font(NotefyFont.heading)
+                .font(StoneFont.subhead())
 
             LabeledContent("Provider") {
                 Picker("", selection: provider) {
@@ -249,8 +263,8 @@ struct SettingsView: View {
             switch provider.wrappedValue {
             case .local:
                 Text(localHint)
-                    .font(NotefyFont.caption)
-                    .foregroundStyle(NotefyTheme.textSecondary)
+                    .font(StoneFont.mark())
+                    .foregroundStyle(Stoneink.textSecondary)
                 LabeledContent("Model") {
                     TextField(modelNamePlaceholder, text: modelName)
                         .textFieldStyle(.roundedBorder)
@@ -270,8 +284,8 @@ struct SettingsView: View {
                 }
             case .gemini:
                 Text("Uses Google's Gemini API for both transcription and note synthesis — one key covers everything.")
-                    .font(NotefyFont.caption)
-                    .foregroundStyle(NotefyTheme.textSecondary)
+                    .font(StoneFont.mark())
+                    .foregroundStyle(Stoneink.textSecondary)
                 LabeledContent("Gemini API Key") {
                     SecureField("AIza...", text: apiKey)
                         .textFieldStyle(.roundedBorder)
@@ -292,7 +306,7 @@ struct SettingsView: View {
             footer()
         }
         .padding(16)
-        .background(NotefyTheme.cardPaper)
+        .background(Stoneink.surfaceSlip)
         .clipShape(RoundedRectangle(cornerRadius: 16))
     }
 }
