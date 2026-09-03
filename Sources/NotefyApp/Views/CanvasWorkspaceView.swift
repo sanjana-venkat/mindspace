@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import NotefyCore
+import UniformTypeIdentifiers
 
 private enum CanvasFolderFilter: Hashable {
     case all
@@ -445,14 +446,47 @@ private struct CaptureGridView: View {
     @EnvironmentObject private var appState: AppState
     @Binding var activeCaptureID: UUID?
 
+    /// The capture currently under the pointer's drag. Held here rather than
+    /// read out of the drop payload so reordering can happen on hover.
+    @State private var draggingID: UUID?
+
     private let columns = [GridItem(.adaptive(minimum: 300, maximum: 380), spacing: 24)]
 
     var body: some View {
         ScrollView {
-            LazyVGrid(columns: columns, alignment: .leading, spacing: 24) {
-                GridNoteTile()
-                    .environmentObject(appState)
+            VStack(alignment: .leading, spacing: 26) {
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("NOTE")
+                        .font(.custom("GeistMono-Medium", size: 10)).tracking(1.4)
+                        .opacity(0.45)
 
+                    TextField("Untitled note", text: $appState.noteTitle)
+                        .textFieldStyle(.plain)
+                        .font(CanvasTypography.noteTitle)
+                        .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
+
+                    ZStack(alignment: .topLeading) {
+                        if appState.rawDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                            Text("Write the note you want to keep beside these captures…")
+                                .font(CanvasTypography.noteBody)
+                                .opacity(0.38)
+                                .padding(.top, 8).padding(.leading, 5)
+                                .allowsHitTesting(false)
+                        }
+                        TextEditor(text: Binding(
+                            get: { appState.rawDraft },
+                            set: { appState.rawDraft = $0; appState.scheduleActiveNoteAutosave() }
+                        ))
+                        .font(CanvasTypography.noteBody)
+                        .lineSpacing(6)
+                        .scrollContentBackground(.hidden)
+                        .background(.clear)
+                    }
+                    .frame(height: 78)
+                }
+                .frame(maxWidth: 620, alignment: .leading)
+
+                LazyVGrid(columns: columns, alignment: .leading, spacing: 24) {
                 ForEach(appState.steps.reversed()) { step in
                     GridCaptureTile(
                         step: step,
@@ -466,27 +500,46 @@ private struct CaptureGridView: View {
                         )
                     )
                         .id(step.id)
-                        .onTapGesture { activeCaptureID = step.id }
-                        .draggable(step.id.uuidString) {
-                            GridCaptureTile(step: step, selected: true, note: .constant(appState.stepAnnotations[step.id] ?? ""))
-                                .opacity(0.9)
+                        .opacity(draggingID == step.id ? 0.35 : 1)
+                        // simultaneousGesture, not onTapGesture: a plain tap
+                        // gesture claims the mouse-down and the drag session
+                        // never starts, which is why these tiles could not be
+                        // moved at all. A simultaneous recogniser lets the
+                        // drag through and still selects on a clean click.
+                        .simultaneousGesture(
+                            TapGesture().onEnded { activeCaptureID = step.id }
+                        )
+                        // onDrag/onDrop rather than draggable/dropDestination:
+                        // the newer pair silently refuses to start a drag on
+                        // macOS when the dragged view holds rich content like
+                        // an NSImage and its own tap targets, which is exactly
+                        // what a capture tile is.
+                        .onDrag {
+                            draggingID = step.id
+                            return NSItemProvider(object: step.id.uuidString as NSString)
                         }
-                        .dropDestination(for: String.self) { items, _ in
-                            guard let raw = items.first,
-                                  let sourceID = UUID(uuidString: raw),
-                                  sourceID != step.id
-                            else { return false }
-                            withAnimation(.spring(response: 0.46, dampingFraction: 0.78)) {
-                                appState.moveCapture(sourceID, before: step.id)
-                            }
-                            return true
-                        }
+                        .onDrop(
+                            of: [.utf8PlainText, .plainText, .text],
+                            delegate: CaptureReorderDelegate(
+                                target: step.id,
+                                dragging: $draggingID,
+                                move: appState.moveCapture
+                            )
+                        )
+                }
                 }
             }
             .padding(.horizontal, 38)
+            .padding(.top, 4)
             .padding(.bottom, 60)
         }
         .scrollIndicators(.hidden)
+        .onDrop(of: [.utf8PlainText, .plainText, .text], isTargeted: nil) { _ in
+            // Released over the gaps between tiles: nothing to reorder
+            // against, but the drag is over, so stop dimming the source.
+            draggingID = nil
+            return false
+        }
         .overlay {
             if appState.steps.isEmpty {
                 ContentUnavailableView(
@@ -500,48 +553,34 @@ private struct CaptureGridView: View {
     }
 }
 
-/// The note, as a tile. Same paper, same radius as a capture — it belongs to
-/// the grid rather than floating above it.
-private struct GridNoteTile: View {
-    @EnvironmentObject private var appState: AppState
+/// Reorders on hover rather than on release, so the grid rearranges under
+/// the pointer and you can see where the capture will land before you let
+/// go. `performDrop` only has to clear the drag state — the move already
+/// happened.
+private struct CaptureReorderDelegate: DropDelegate {
+    let target: UUID
+    @Binding var dragging: UUID?
+    let move: (UUID, UUID) -> Void
 
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            Text("NOTE")
-                .font(.custom("GeistMono-Medium", size: 10)).tracking(1.4)
-                .opacity(0.45)
+    func validateDrop(info: DropInfo) -> Bool { dragging != nil }
 
-            TextField("Untitled note", text: $appState.noteTitle)
-                .textFieldStyle(.plain)
-                .font(CanvasTypography.cardTitle)
-                .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
-
-            ZStack(alignment: .topLeading) {
-                if appState.rawDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
-                    Text("Write the note you want to keep beside these captures…")
-                        .font(CanvasTypography.cardBody)
-                        .opacity(0.40)
-                        .padding(.top, 7).padding(.leading, 5)
-                        .allowsHitTesting(false)
-                }
-                TextEditor(text: Binding(
-                    get: { appState.rawDraft },
-                    set: { appState.rawDraft = $0; appState.scheduleActiveNoteAutosave() }
-                ))
-                .font(CanvasTypography.cardBody)
-                .lineSpacing(6)
-                .scrollContentBackground(.hidden)
-                .background(.clear)
-            }
-            .frame(maxHeight: .infinity)
+    func dropEntered(info: DropInfo) {
+        guard let dragging, dragging != target else { return }
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) {
+            move(dragging, target)
         }
-        .padding(24)
-        .frame(height: 420)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CanvasPalette.paper, in: RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(CanvasPalette.inkBlue.opacity(0.22), lineWidth: 1))
-        .shadow(color: CanvasPalette.ink.opacity(0.10), radius: 16, y: 8)
     }
+
+    func dropUpdated(info: DropInfo) -> DropProposal? {
+        DropProposal(operation: .move)
+    }
+
+    func performDrop(info: DropInfo) -> Bool {
+        dragging = nil
+        return true
+    }
+
+    func dropExited(info: DropInfo) {}
 }
 
 /// A capture at grid scale: the capture fills the tile, with one mono caption
