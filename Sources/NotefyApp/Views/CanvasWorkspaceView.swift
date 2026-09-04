@@ -142,7 +142,10 @@ struct CanvasWorkspaceView: View {
     /// runs the same 36 frames at a shorter interval — same gesture, roughly
     /// two-thirds the time, so it still reads as ink rather than a cut.
     private static let noteWipeInterval = 28
-    private static let layoutWipeInterval = 18
+    /// Flipping posture happens constantly while working, so it runs the
+    /// same gesture at roughly a third of the note-switch duration — about
+    /// 290ms end to end. Any slower and it is a wait, not a transition.
+    private static let layoutWipeInterval = 8
 
     private func inkWipe(interval: Int, _ change: @escaping () -> Void) {
         guard inkTransitionFrame == nil else { return }
@@ -224,27 +227,38 @@ private struct CanvasToolbar: View {
         .frame(maxWidth: 320, alignment: .leading)
     }
 
+    /// Mark and wordmark as one lockup. On its own in the breadcrumb the nib
+    /// read as a toolbar icon; set beside the word at the optical size of the
+    /// cap height, with real air between them, it reads as a masthead.
     private var wordmark: some View {
-        Text("noted")
-            .font(CanvasTypography.wordmark)
-            .tracking(-0.02 * 28)
-            .foregroundStyle(CanvasPalette.ink)
-            .accessibilityLabel("Noted")
+        HStack(spacing: 11) {
+            NotedCanvasMark(size: 26, weight: .light)
+            Text("noted")
+                .font(CanvasTypography.wordmark)
+                .tracking(-0.02 * 28)
+                .foregroundStyle(CanvasPalette.ink)
+        }
+        .accessibilityElement()
+        .accessibilityLabel("Noted")
     }
 
     /// Zoom, the layout toggles and settings share one baseline at 22px
     /// apart. The toggles used to float in their own row below, which read
     /// as a second toolbar.
+    /// Two rows, right-aligned to the same edge: zoom and settings above,
+    /// the posture toggles directly beneath them.
     private var chrome: some View {
-        HStack(alignment: .center, spacing: 22) {
-            lineButton("minus", label: "Zoom out") { zoom = max(0.60, zoom - 0.10) }
-            Text("\(Int(zoom * 100))%")
-                .font(CanvasTypography.data())
-                .foregroundStyle(CanvasPalette.ink45)
-                .monospacedDigit()
-            lineButton("plus", label: "Zoom in") { zoom = min(1.40, zoom + 0.10) }
+        VStack(alignment: .trailing, spacing: 10) {
+            HStack(alignment: .center, spacing: 22) {
+                lineButton("minus", label: "Zoom out") { zoom = max(0.60, zoom - 0.10) }
+                Text("\(Int(zoom * 100))%")
+                    .font(CanvasTypography.data())
+                    .foregroundStyle(CanvasPalette.ink45)
+                    .monospacedDigit()
+                lineButton("plus", label: "Zoom in") { zoom = min(1.40, zoom + 0.10) }
+                lineButton("gearshape", label: "Settings") { settingsOpen = true }
+            }
             ReaderLayoutToggle(layout: layout, setLayout: setLayout)
-            lineButton("gearshape", label: "Settings") { settingsOpen = true }
         }
         .frame(maxWidth: 420, alignment: .trailing)
     }
@@ -1785,24 +1799,39 @@ private struct CanvasBrandMark: View {
     }
 }
 
-private struct CanvasBrandIcon: View {
+/// The Noted mark, drawn at whatever size it is asked for.
+///
+/// It was reading as a toolbar icon because it was only ever used AS one —
+/// 22pt, boxed in beside a label. It is a template image, so weight here is
+/// just how much of the ink is let through: light for the masthead, full for
+/// the small placements where a thin nib would disappear.
+struct NotedCanvasMark: View {
+    enum Weight { case light, full }
+    var size: CGFloat = 22
+    var weight: Weight = .full
+    var tint: Color = CanvasPalette.ink
+
     var body: some View {
         Group {
             if let mark = NotedInkAssets.nib ?? NotedInkAssets.splat ?? NotedInkAssets.mark {
                 Image(nsImage: mark)
                     .resizable()
                     .renderingMode(.template)
-                    .foregroundStyle(CanvasPalette.inkBlue)
+                    .aspectRatio(contentMode: .fit)
+                    .foregroundStyle(tint.opacity(weight == .light ? 0.82 : 1))
             } else {
-                Image(systemName: "folder.fill")
+                Image(systemName: "pencil.tip")
+                    .font(.system(size: size * 0.8, weight: .light))
+                    .foregroundStyle(tint)
             }
         }
-        // 22pt, not the 18 the old folder glyph used: the splat carries an
-        // interior counter, and below about this size the n inside it closes
-        // up and the whole mark reads as a smudge.
-        .frame(width: 22, height: 22)
+        .frame(width: size, height: size)
         .accessibilityHidden(true)
     }
+}
+
+private struct CanvasBrandIcon: View {
+    var body: some View { NotedCanvasMark(size: 20) }
 }
 
 private struct CanvasInkBlob: Shape {
@@ -2061,7 +2090,6 @@ private struct CanvasClayBackground: View {
             if surface == .paper { PaperGrain() }
         }
         .ignoresSafeArea()
-        .overlay(WindowSurfaceBridge(glass: surface == .glass).allowsHitTesting(false))
     }
 }
 

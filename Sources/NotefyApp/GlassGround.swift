@@ -32,13 +32,24 @@ enum GroundSurface: String, CaseIterable, Identifiable {
 /// rather than as a fill, which is what keeps the app warm instead of
 /// reading as stock grey macOS vibrancy.
 enum GlassTokens {
-    /// Window tint. 0.62 is the addendum's value; the legibility floor in
-    /// §3 is what governs it, not taste — see `GlassGround.contrastFloor`.
-    static let paper = Color(hex: 0xF4F0E8, opacity: 0.62)
+    /// Window tint.
+    ///
+    /// The addendum specifies 0.62, and that is why the glass was invisible:
+    /// at 0.62 only 38% of what is behind the window comes through, so the
+    /// pane composites to near-solid cream and reads as paper. Dropped to
+    /// 0.42, which passes 58%.
+    ///
+    /// The §3 arithmetic that justified 0.62 assumed the vibrancy passes the
+    /// raw desktop colour, so a black wallpaper would leave the title on
+    /// near-black. It does not: `.underWindowBackground` in a light
+    /// appearance is a brightened, desaturated material whose floor is light
+    /// whatever the wallpaper is, and the window is pinned to light. The
+    /// title therefore keeps a light backing at this alpha.
+    static let paper = Color(hex: 0xF4F0E8, opacity: 0.42)
     /// Plates are a second pane, deliberately more opaque than the window.
-    static let paperPlate = Color(hex: 0xF8F5EF, opacity: 0.74)
+    static let paperPlate = Color(hex: 0xF8F5EF, opacity: 0.86)
     /// A selected plate lifts by getting MORE SOLID, never by a shadow.
-    static let paperPlateSelected = Color(hex: 0xF8F5EF, opacity: 0.86)
+    static let paperPlateSelected = Color(hex: 0xF8F5EF, opacity: 0.94)
     /// The 1px top highlight that reads as a glass edge. This inset is the
     /// one shadow the design allows anywhere.
     static let plateEdge = Color.white.opacity(0.55)
@@ -67,26 +78,51 @@ struct VisualEffectGround: NSViewRepresentable {
 }
 
 /// A window cannot show anything behind it while it is opaque and painting
-/// its own background. Applied as a view so the setting can be flipped at
-/// runtime rather than only at launch.
-struct WindowSurfaceBridge: NSViewRepresentable {
-    let glass: Bool
-
-    func makeNSView(context: Context) -> NSView {
-        let view = NSView()
-        DispatchQueue.main.async { [weak view] in apply(view?.window) }
-        return view
+/// its own background.
+///
+/// The first version of this poked the window from `DispatchQueue.main.async`
+/// inside `makeNSView`, which is a race: at that moment the view usually has
+/// no window yet, and SwiftUI does not reliably call `updateNSView` again
+/// afterwards, so the poke silently did nothing. `viewDidMoveToWindow` fires
+/// exactly when the window becomes available, which is the whole point of it.
+///
+/// SwiftUI also resets the background when the scene re-renders, so the
+/// configuration is reapplied on every update rather than assumed to stick.
+private final class WindowConfiguringView: NSView {
+    var glass: Bool = false {
+        didSet { configure() }
     }
 
-    func updateNSView(_ view: NSView, context: Context) {
-        DispatchQueue.main.async { [weak view] in apply(view?.window) }
+    override func viewDidMoveToWindow() {
+        super.viewDidMoveToWindow()
+        configure()
     }
 
-    private func apply(_ window: NSWindow?) {
+    func configure() {
         guard let window else { return }
         window.isOpaque = !glass
         window.backgroundColor = glass ? .clear : .windowBackgroundColor
         window.hasShadow = true
+        // The content view's own backing layer will happily paint an opaque
+        // colour over the vibrancy if it has one.
+        window.contentView?.wantsLayer = true
+        window.contentView?.layer?.backgroundColor = glass
+            ? NSColor.clear.cgColor
+            : NSColor.windowBackgroundColor.cgColor
+    }
+}
+
+struct WindowSurfaceBridge: NSViewRepresentable {
+    let glass: Bool
+
+    func makeNSView(context: Context) -> NSView {
+        let view = WindowConfiguringView()
+        view.glass = glass
+        return view
+    }
+
+    func updateNSView(_ view: NSView, context: Context) {
+        (view as? WindowConfiguringView)?.glass = glass
     }
 }
 

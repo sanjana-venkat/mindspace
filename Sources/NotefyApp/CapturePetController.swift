@@ -126,8 +126,9 @@ private struct CaptureRailView: View {
                 Button {
                     onDismiss()
                 } label: {
-                    NotedMark(tint: NotefyTheme.ink, knockout: NotefyTheme.cardPaper)
-                        .frame(width: 22, height: 22)
+                    // The current mark, not the retired splat one — the rail
+                    // was still drawing the old logo.
+                    NotedCanvasMark(size: 20, tint: NotefyTheme.ink)
                         .frame(width: 46, height: 38)
                         .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
                 }

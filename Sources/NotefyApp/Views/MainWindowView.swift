@@ -45,6 +45,9 @@ struct MainWindowView: View {
         // background here paints over anything the window would otherwise
         // let through, so on glass the canvas must own the surface alone.
         .background(surface == .glass ? Color.clear : Stoneink.surfaceBed)
+        // Configured at the shell, not deep inside the canvas: this needs to
+        // reach the NSWindow, and the shell is what owns it.
+        .background(WindowSurfaceBridge(glass: surface == .glass))
         // Pinned to light in BOTH modes. This is not a dark theme: the paper
         // panels have to resolve as paper whatever the Mac is set to, and the
         // ground is chosen here, never by the system appearance.
