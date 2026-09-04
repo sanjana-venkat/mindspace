@@ -103,6 +103,7 @@ struct CanvasWorkspaceView: View {
             }
         }
         .focusable()
+        .focusEffectDisabled()
         .focused($keyboardFocused)
         .onAppear {
             appState.refreshHistory()
@@ -230,16 +231,13 @@ private struct CanvasToolbar: View {
     /// Mark and wordmark as one lockup. On its own in the breadcrumb the nib
     /// read as a toolbar icon; set beside the word at the optical size of the
     /// cap height, with real air between them, it reads as a masthead.
+    /// Wordmark only for now — the mark is out until it is redrawn.
     private var wordmark: some View {
-        HStack(spacing: 11) {
-            NotedCanvasMark(size: 26, weight: .light)
-            Text("noted")
-                .font(CanvasTypography.wordmark)
-                .tracking(-0.02 * 28)
-                .foregroundStyle(CanvasPalette.ink)
-        }
-        .accessibilityElement()
-        .accessibilityLabel("Noted")
+        Text("noted")
+            .font(CanvasTypography.wordmark)
+            .tracking(-0.02 * 28)
+            .foregroundStyle(CanvasPalette.ink)
+            .accessibilityLabel("Noted")
     }
 
     /// Zoom, the layout toggles and settings share one baseline at 22px
@@ -464,32 +462,55 @@ private struct CaptureReadingView: View {
 /// The posture switch. Sits opposite the Raw/Organized tabs rather than in
 /// the window toolbar, because it changes what THIS note looks like, not what
 /// the app is doing.
+/// The posture switch, given the same treatment as Raw/Organized.
+///
+/// It used to mark the active side with a 6px printer's dot underneath,
+/// which was the editorial brief's instruction and was genuinely too quiet:
+/// two near-identical grey glyphs with a speck under one of them does not
+/// tell you which view you are in. It now carries the same filled ink shape
+/// the tab bar uses — a track, and the live side sitting in ink — so the two
+/// controls read as one family and the state is unmissable.
 private struct ReaderLayoutToggle: View {
     let layout: ReaderLayout
     let setLayout: (ReaderLayout) -> Void
+    @Namespace private var inkSelection
 
     var body: some View {
-        HStack(spacing: 18) {
+        HStack(spacing: 4) {
             ForEach(ReaderLayout.allCases) { option in
                 let active = option == layout
                 Button {
                     guard !active else { return }
                     setLayout(option)
                 } label: {
-                    VStack(spacing: 4) {
-                        Image(systemName: option.icon)
-                            .font(.system(size: 13, weight: .light))
-                            .foregroundStyle(active ? CanvasPalette.ink : CanvasPalette.ink70)
-                            .frame(width: 32, height: 16)
-                        PrintersMark(active: active)
-                    }
-                    .contentShape(Rectangle())
+                    Image(systemName: option.icon)
+                        .font(.system(size: 12, weight: .regular))
+                        .foregroundStyle(active ? CanvasPalette.paperPlate : CanvasPalette.ink55)
+                        .frame(width: 38, height: 26)
+                        .background {
+                            if active {
+                                // Calmer than Raw's blob and busier than a
+                                // plain capsule: the same ink, one step down
+                                // in voice, because this is chrome and the
+                                // tab bar is the brand moment.
+                                InkTabShape(dispersion: 0.45, seed: 6.7)
+                                    .fill(CanvasPalette.accent)
+                                    .matchedGeometryEffect(id: "ink-layout", in: inkSelection)
+                            }
+                        }
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(option.rawValue)
                 .accessibilityLabel(option.rawValue)
+                .accessibilityAddTraits(active ? [.isSelected] : [])
             }
         }
+        .padding(3)
+        .background(CanvasPalette.paperPlate.opacity(0.55),
+                    in: InkTabShape(dispersion: 0.20, seed: 5.4))
+        .overlay(InkTabShape(dispersion: 0.20, seed: 5.4).stroke(CanvasPalette.ink12, lineWidth: 1))
+        .animation(.spring(response: 0.34, dampingFraction: 0.84), value: layout)
     }
 }
 
@@ -515,7 +536,11 @@ private struct CaptureGridView: View {
                 .padding(.bottom, 80)
             }
             .scrollIndicators(.hidden)
+            // Focusable so the arrow keys reach it — but without the system
+            // focus ring, which on a full-width scroll view draws as a blue
+            // rule straight across the page the moment anything is selected.
             .focusable()
+            .focusEffectDisabled()
             .onKeyPress(.leftArrow) { nudge(-1) }
             .onKeyPress(.rightArrow) { nudge(1) }
             .onDrop(of: [.utf8PlainText, .plainText, .text], isTargeted: nil) { _ in

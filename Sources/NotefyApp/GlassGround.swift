@@ -157,11 +157,59 @@ struct GroundSurfaceView: View {
                 // The frost itself is installed into the window by
                 // WindowConfiguringView and sits beneath all of this.
                 GlassTokens.paper
+                FrostGrain()
                 GlassSheen()
                 GlassEdge()
             }
         }
         .ignoresSafeArea()
+    }
+}
+
+/// Heavy frost grain.
+///
+/// Etched glass scatters light rather than only blocking it, so the noise
+/// runs both ways off a mid grey and composites with `.overlay` — a
+/// single-colour multiply would read as dirt on the pane instead of as
+/// texture in it.
+///
+/// Generated once into a small tile and repeated. The naive version — a
+/// Canvas drawing a dot per pixel — is roughly a million fill operations
+/// over a full window on every redraw, which is a real cost for something
+/// that never changes.
+private enum FrostNoise {
+    static let tile: NSImage = make(side: 220)
+
+    private static func make(side: Int) -> NSImage {
+        let cs = CGColorSpaceCreateDeviceRGB()
+        let ctx = CGContext(data: nil, width: side, height: side, bitsPerComponent: 8,
+                            bytesPerRow: 0, space: cs,
+                            bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue)!
+        var generator = SeededGenerator(seed: 97)
+        for y in 0..<side {
+            for x in 0..<side {
+                // Centred on mid grey so overlay lifts and drops in equal
+                // measure; the spread is what reads as coarseness.
+                let v = Double.random(in: 0.16...0.84, using: &generator)
+                ctx.setFillColor(CGColor(srgbRed: v, green: v, blue: v, alpha: 1))
+                ctx.fill(CGRect(x: x, y: y, width: 1, height: 1))
+            }
+        }
+        let cg = ctx.makeImage()!
+        return NSImage(cgImage: cg, size: NSSize(width: side, height: side))
+    }
+}
+
+struct FrostGrain: View {
+    /// Heavy by design — this is the texture of the etch, not a whisper of
+    /// paper tooth. It sits under the plates, which are 86% opaque, so it
+    /// roughens the ground without touching anything anyone reads.
+    var body: some View {
+        Image(nsImage: FrostNoise.tile)
+            .resizable(resizingMode: .tile)
+            .blendMode(.overlay)
+            .opacity(0.38)
+            .allowsHitTesting(false)
     }
 }
 
