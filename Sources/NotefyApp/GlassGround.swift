@@ -45,7 +45,7 @@ enum GlassTokens {
     /// appearance is a brightened, desaturated material whose floor is light
     /// whatever the wallpaper is, and the window is pinned to light. The
     /// title therefore keeps a light backing at this alpha.
-    static let paper = Color(hex: 0xF4F0E8, opacity: 0.24)
+    static let paper = Color(hex: 0xF4F0E8, opacity: 0.13)
     /// Plates are a second pane, deliberately more opaque than the window.
     static let paperPlate = Color(hex: 0xF8F5EF, opacity: 0.86)
     /// A selected plate lifts by getting MORE SOLID, never by a shadow.
@@ -208,7 +208,7 @@ struct FrostGrain: View {
         Image(nsImage: FrostNoise.tile)
             .resizable(resizingMode: .tile)
             .blendMode(.overlay)
-            .opacity(0.50)
+            .opacity(0.58)
             .allowsHitTesting(false)
     }
 }
