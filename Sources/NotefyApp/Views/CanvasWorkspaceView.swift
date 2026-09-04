@@ -1498,53 +1498,67 @@ private enum CanvasPalette {
 
 /// Three voices, each with a job.
 ///
-/// Libre Caslon carries the editorial moments: wordmark, note titles, essay
-/// headings, empty states. It is set BOLD and large, because the brief is an
-/// independent art publication rather than a literary journal — a hairline
-/// serif fights the ink concept instead of belonging to it.
+/// Bodoni Moda carries the editorial moments — wordmark, note titles, essay
+/// headings, empty states — set at weight 900 with the optical-size axis
+/// pushed to display. That combination is the point: a Didone's whole
+/// identity is the jump between hairline and stem, and the opsz axis widens
+/// that jump as the size goes up. It is what a magazine masthead is made of,
+/// and it is what Libre Caslon could not do — Caslon is a book face, evenly
+/// weighted by design, so bolding it produced something heavy but never
+/// graphic.
 ///
-/// Note on the face: the ask was Libre Caslon *Display*, which ships a single
-/// Regular weight. At display size that is lighter than Instrument Serif was,
-/// so it would have reproduced the exact complaint. Libre Caslon *Text* is the
-/// same Caslon, shipped as a variable font with a real wght axis, so asking
-/// for bold instantiates a genuine 700 master rather than smearing a 400.
-/// Both files are bundled; this is the one that renders.
+/// Archivo is the interface. A grotesque drawn for editorial settings: flat
+/// terminals, tight apertures, no rounded softness. Geist read generic
+/// beside a display serif; Archivo reads like the caption text in a printed
+/// magazine, which is exactly the job.
 ///
-/// Geist Sans is the interface: body, controls, navigation. Neutral on
-/// purpose, so the serif is the only thing raising its voice.
+/// IBM Plex Mono is the record: timestamps, source labels, system marks.
 ///
-/// IBM Plex Mono is the record: timestamps, source labels, system marks. Its
-/// mechanical letterforms make a metadata line read as stamped onto the page
-/// rather than written on it.
-///
-/// All PostScript names — Font.custom fails silently to San Francisco on a
-/// miss, so a typo here looks like a design choice.
+/// These are real variable-font instances, not synthetic weights. SwiftUI's
+/// `Font.custom(_:).weight()` can fake a bold by smearing outlines; building
+/// the CTFont with an explicit variation dictionary asks the file for the
+/// master that was actually drawn.
 private enum CanvasTypography {
-    private static let editorial = "LibreCaslonText-Regular"
+    private static let wght: UInt32 = 0x77676874
+    private static let opsz: UInt32 = 0x6F70737A
 
-    // Editorial — set heavy and large. Tracking is applied at the call sites
-    // that can carry it, since Font cannot hold it.
-    static let wordmark = Font.custom(editorial, size: 34, relativeTo: .title).weight(.bold)
-    static let loaderWordmark = Font.custom(editorial, size: 48, relativeTo: .largeTitle).weight(.bold)
-    static let noteTitle = Font.custom(editorial, size: 54, relativeTo: .largeTitle).weight(.bold)
-    static let essayTitle = Font.custom(editorial, size: 56, relativeTo: .largeTitle).weight(.bold)
-    static let essayHeading = Font.custom(editorial, size: 30, relativeTo: .title2).weight(.bold)
-    static let emptyTitle = Font.custom(editorial, size: 26, relativeTo: .title3).weight(.bold)
-    static let cardTitle = Font.custom(editorial, size: 30, relativeTo: .title).weight(.bold)
+    private static func varied(_ name: String, _ size: CGFloat, _ axes: [UInt32: CGFloat]) -> Font {
+        var variations: [CFNumber: CFNumber] = [:]
+        for (tag, value) in axes { variations[tag as CFNumber] = value as CFNumber }
+        let descriptor = CTFontDescriptorCreateWithAttributes([
+            kCTFontNameAttribute: name,
+            kCTFontVariationAttribute: variations
+        ] as CFDictionary)
+        return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
+    }
 
-    /// Art-book headline, not journal heading: negative tracking and leading
-    /// pulled under 1.0 so a long title sets as a block rather than a list of
-    /// lines.
-    static let titleTracking: CGFloat = -1.6
-    static let titleLineSpacing: CGFloat = -6
+    /// Display Didone. `opsz` 96 is what makes the hairlines thin enough to
+    /// read as printed rather than drawn.
+    private static func editorial(_ size: CGFloat, _ weight: CGFloat = 900) -> Font {
+        varied("BodoniModa-Regular", size, [wght: weight, opsz: 96])
+    }
+    private static func ui(_ size: CGFloat, _ weight: CGFloat = 400) -> Font {
+        varied("Archivo-SemiBold", size, [wght: weight])
+    }
 
-    // Interface — Geist.
-    static let noteBody = Font.custom("Geist-Regular", size: 16, relativeTo: .body)
-    static let essayBody = Font.custom("Geist-Regular", size: 16, relativeTo: .body)
-    static let cardBody = Font.custom("Geist-Regular", size: 14, relativeTo: .body)
-    static let control = Font.custom("Geist-Medium", size: 13)
+    static let wordmark = editorial(36)
+    static let loaderWordmark = editorial(52)
+    static let noteTitle = editorial(58)
+    static let essayTitle = editorial(58)
+    static let essayHeading = editorial(30, 800)
+    static let emptyTitle = editorial(26, 800)
+    static let cardTitle = editorial(30, 800)
 
-    // The record — IBM Plex Mono.
+    /// A Didone at display size needs the tracking pulled in and the leading
+    /// pulled under 1.0, or it sets as a row of separate letters.
+    static let titleTracking: CGFloat = -1.8
+    static let titleLineSpacing: CGFloat = -8
+
+    static let noteBody = ui(16)
+    static let essayBody = ui(16)
+    static let cardBody = ui(14)
+    static let control = ui(13, 500)
+
     static func mark(_ size: CGFloat = 10) -> Font { .custom("IBMPlexMono-Medium", size: size) }
     static func markRegular(_ size: CGFloat = 10) -> Font { .custom("IBMPlexMono-Regular", size: size) }
 }
