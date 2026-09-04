@@ -144,7 +144,7 @@ struct CanvasWorkspaceView: View {
     /// Flipping posture happens constantly while working, so it runs the
     /// same gesture at roughly a third of the note-switch duration — about
     /// 290ms end to end. Any slower and it is a wait, not a transition.
-    private static let layoutWipeInterval = 8
+    private static let layoutWipeInterval = 4
 
     private func inkWipe(interval: Int, _ change: @escaping () -> Void) {
         guard inkTransitionFrame == nil else { return }
@@ -365,7 +365,7 @@ private struct CaptureReadingView: View {
                 }
                 .padding(.horizontal, CanvasPalette.pageMargin)
             }
-            .padding(.top, 104)
+            .padding(.top, 88)
             .zIndex(2)
 
             // Where a new capture arrives — the top of the stream.
@@ -1063,8 +1063,8 @@ private struct OrganizedEssayView: View {
                 VStack(alignment: .leading, spacing: 22) {
                     HStack {
                         Label(appState.organizedTemplate.rawValue, systemImage: appState.organizedTemplate.icon)
-                            .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1)
-                            .foregroundStyle(CanvasPalette.inkBlue)
+                            .font(CanvasTypography.meta())
+                            .foregroundStyle(CanvasPalette.ink55)
                             .padding(.horizontal, 12).frame(height: 30)
                             .background(CanvasPalette.inkBlue.opacity(0.09), in: InkPillShape(variation: 1))
                         Spacer()
@@ -1284,7 +1284,9 @@ private struct InkWritingLoader: View {
                         .offset(y: 31)
                 }
                 .frame(height: 62)
-                Text(status).font(.system(size: 11, weight: .semibold, design: .rounded)).opacity(0.48)
+                Text(status)
+                    .font(CanvasTypography.meta())
+                    .foregroundStyle(CanvasPalette.ink55)
             }
         }
     }
@@ -1746,7 +1748,11 @@ private enum CanvasTypography {
 
     /// Fraunces, display optical size, softness off, wonk off. Never Black,
     /// never Bold.
-    static func display(_ size: CGFloat, _ weight: CGFloat = 300) -> Font {
+    /// Display weight goes 300 -> 600. The brief said never bold and that
+    /// was right for a Didone; Fraunces at 300 just reads thin, and at 600
+    /// with the display optical size the contrast between stem and hairline
+    /// is what carries it rather than sheer mass.
+    static func display(_ size: CGFloat, _ weight: CGFloat = 600) -> Font {
         varied("Fraunces-9ptBlack", size, [wght: weight, opsz: 144, soft: 0, wonk: 0])
     }
     static func text(_ size: CGFloat = 15.5, _ weight: CGFloat = 400) -> Font {
@@ -1762,14 +1768,14 @@ private enum CanvasTypography {
     }
 
     // Roles the rest of the file names.
-    static let wordmark = display(28, 400)
-    static let loaderWordmark = display(44, 300)
-    static let noteTitleReader = display(56, 300)
-    static let noteTitleGrid = display(44, 300)
-    static let noteTitle = display(44, 300)
-    static let essayTitle = display(56, 300)
+    static let wordmark = display(28, 600)
+    static let loaderWordmark = display(44, 600)
+    static let noteTitleReader = display(56, 600)
+    static let noteTitleGrid = display(44, 600)
+    static let noteTitle = display(44, 600)
+    static let essayTitle = display(56, 600)
     static let essayHeading = display(28, 400)
-    static let emptyTitle = display(26, 300)
+    static let emptyTitle = display(26, 600)
     static let cardTitle = text(15.5, 500)
 
     static let noteBody = text(15.5)
