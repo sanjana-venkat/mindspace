@@ -188,12 +188,17 @@ private struct CanvasToolbar: View {
     @Binding var zoom: CGFloat
 
     var body: some View {
-        HStack(alignment: .center) {
-            breadcrumb
-            Spacer()
+        // The wordmark owns the window's actual centre. Left in the HStack it
+        // was pushed off it: the breadcrumb caps at 320 and the chrome at
+        // 420, so the spacers do not balance and "noted" sat left of the tab
+        // bar below it.
+        ZStack {
+            HStack(alignment: .center) {
+                breadcrumb
+                Spacer()
+                chrome
+            }
             wordmark
-            Spacer()
-            chrome
         }
         .padding(.horizontal, CanvasPalette.pageMargin)
         .padding(.top, 26)
@@ -494,7 +499,10 @@ private struct ReaderLayoutToggle: View {
                                 // plain capsule: the same ink, one step down
                                 // in voice, because this is chrome and the
                                 // tab bar is the brand moment.
-                                InkTabShape(dispersion: 0.45, seed: 6.7)
+                                // Clean pills here: this is chrome, and the
+                                // wandering edge is reserved for the tab bar,
+                                // which is the brand moment.
+                                Capsule()
                                     .fill(CanvasPalette.accent)
                                     .matchedGeometryEffect(id: "ink-layout", in: inkSelection)
                             }
@@ -508,9 +516,8 @@ private struct ReaderLayoutToggle: View {
             }
         }
         .padding(3)
-        .background(CanvasPalette.paperPlate.opacity(0.55),
-                    in: InkTabShape(dispersion: 0.20, seed: 5.4))
-        .overlay(InkTabShape(dispersion: 0.20, seed: 5.4).stroke(CanvasPalette.ink12, lineWidth: 1))
+        .background(CanvasPalette.paperPlate.opacity(0.55), in: Capsule())
+        .overlay(Capsule().stroke(CanvasPalette.ink12, lineWidth: 1))
         .animation(.spring(response: 0.34, dampingFraction: 0.84), value: layout)
     }
 }
@@ -1010,18 +1017,12 @@ private struct ReaderTabBar: View {
                         .background {
                             if selection == tab {
                                 ZStack {
-                                    // The blob persists on whichever side is
-                                    // active — it never resolves to a plain
-                                    // pill, because the blob IS the brand
-                                    // moment and losing it on Organized threw
-                                    // the loudest thing on the page away.
-                                    //
-                                    // It still says something: Raw is ink that
-                                    // has just landed with its edge wandering,
-                                    // Organized is the same ink settled but
-                                    // unmistakably the same body. Dispersion
-                                    // 1 -> 0.5, not 1 -> 0.
-                                    InkTabShape(dispersion: tab == .raw ? 1 : 0.5, seed: 2.1)
+                                    // Raw is ink that has just landed, edge
+                                    // still wandering. Organized is that same
+                                    // ink resolved into a contained pill —
+                                    // fragment becoming composition, which is
+                                    // the thing the two tabs actually mean.
+                                    InkTabShape(dispersion: tab == .raw ? 1 : 0, seed: 2.1)
                                         .fill(CanvasPalette.inkBlue)
                                         .matchedGeometryEffect(id: "ink-tab", in: inkSelection)
 
