@@ -473,13 +473,57 @@ private struct CaptureGridView: View {
 
     private let columns = [GridItem(.adaptive(minimum: 300, maximum: 380), spacing: 24)]
 
+    /// Moves the selected capture one place along the grid. With nothing
+    /// selected yet, the first arrow press selects rather than moves — so the
+    /// key does something visible instead of nothing.
+    private func nudge(_ delta: Int) -> KeyPress.Result {
+        guard !appState.steps.isEmpty else { return .ignored }
+        guard let id = activeCaptureID else {
+            activeCaptureID = appState.steps.reversed().first?.id
+            return .handled
+        }
+        withAnimation(.spring(response: 0.40, dampingFraction: 0.82)) {
+            _ = appState.nudgeCapture(id, by: delta)
+        }
+        return .handled
+    }
+
+    private var runningHeadLeft: String {
+        let folder = appState.activeNoteURL
+            .map { appState.folderPath(for: appState.folderID(for: $0)) } ?? ""
+        return (folder.isEmpty ? "UNFILED" : folder.uppercased())
+    }
+
+    private var runningHeadRight: String {
+        let count = appState.steps.count
+        let plates = count == 1 ? "1 CAPTURE" : "\(count) CAPTURES"
+        let date = (appState.steps.last?.timestamp ?? Date())
+            .formatted(.dateTime.month(.abbreviated).day())
+            .uppercased()
+        return "\(plates) · \(date)"
+    }
+
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("NOTE")
-                        .font(CanvasTypography.mark(10)).tracking(1.4)
-                        .opacity(0.45)
+                    // The running head. Every magazine page carries one:
+                    // where you are on the left, the folio on the right, a
+                    // rule under both. All of it is information the app
+                    // already had — it was just never set like print.
+                    VStack(spacing: 5) {
+                        Rectangle().fill(CanvasPalette.ink.opacity(0.55)).frame(height: 1.5)
+                        HStack {
+                            Text(runningHeadLeft)
+                                .font(CanvasTypography.mark(9)).tracking(1.6)
+                            Spacer()
+                            Text(runningHeadRight)
+                                .font(CanvasTypography.mark(9)).tracking(1.6)
+                        }
+                        .opacity(0.55)
+                        Rectangle().fill(CanvasPalette.ink.opacity(0.18)).frame(height: 0.5)
+                    }
+                    .padding(.bottom, 10)
 
                     VStack(alignment: .leading, spacing: 0) {
                         TextField("Untitled note", text: $appState.noteTitle)
@@ -503,13 +547,20 @@ private struct CaptureGridView: View {
                     .textFieldStyle(.plain)
                     .font(CanvasTypography.noteBody)
                     .lineLimit(1...8)
+
+                    // The rule that closes the deck and opens the plates.
+                    Rectangle()
+                        .fill(CanvasPalette.ink.opacity(0.55))
+                        .frame(height: 1.5)
+                        .padding(.top, 12)
                 }
                 .frame(maxWidth: 620, alignment: .leading)
 
                 LazyVGrid(columns: columns, alignment: .leading, spacing: 24) {
-                ForEach(appState.steps.reversed()) { step in
+                ForEach(Array(appState.steps.reversed().enumerated()), id: \.element.id) { index, step in
                     GridCaptureTile(
                         step: step,
+                        plate: index + 1,
                         selected: step.id == activeCaptureID,
                         note: Binding(
                             get: { appState.stepAnnotations[step.id] ?? "" },
@@ -553,6 +604,11 @@ private struct CaptureGridView: View {
             .padding(.bottom, 60)
         }
         .scrollIndicators(.hidden)
+        .focusable()
+        // Same reordering the drag performs, from the keyboard. Left and
+        // right follow the grid's reading order, not storage order.
+        .onKeyPress(.leftArrow) { nudge(-1) }
+        .onKeyPress(.rightArrow) { nudge(1) }
         .onDrop(of: [.utf8PlainText, .plainText, .text], isTargeted: nil) { _ in
             // Released over the gaps between tiles: nothing to reorder
             // against, but the drag is over, so stop dimming the source.
@@ -604,8 +660,70 @@ private struct CaptureReorderDelegate: DropDelegate {
 
 /// A capture at grid scale: the capture fills the tile, with one mono caption
 /// above and the source below — the same rule the panel-view card follows.
+/// The editor's slip: the note you wrote, laid on the clipping and taped
+/// down. Paper a shade lighter than the card it sits on, a fraction off
+/// square, with two pieces of tape over the corners. Same field, same place,
+/// same behaviour — only the material changed.
+private struct SlipBacking: ViewModifier {
+    let taped: Bool
+    let seed: Int
+
+    func body(content: Content) -> some View {
+        if taped {
+            TapedSlip(tilt: seed % 2 == 0 ? -0.7 : 0.6, seed: seed) { content }
+                .padding(.top, 10)
+        } else {
+            // Nothing written yet: a bare rule, so an untouched clipping
+            // stays a clipping and the grid keeps its unevenness.
+            content
+                .padding(.top, 8)
+                .overlay(alignment: .top) {
+                    Rectangle()
+                        .fill(CanvasPalette.inkBlue.opacity(0.14))
+                        .frame(height: 0.75)
+                }
+        }
+    }
+}
+
+private struct TapedSlip<Content: View>: View {
+    let tilt: Double
+    let seed: Int
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        content
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CanvasPalette.slip)
+            .overlay(Rectangle().stroke(CanvasPalette.ink.opacity(0.07), lineWidth: 0.5))
+            .shadow(color: CanvasPalette.warmShadow.opacity(0.11), radius: 2.5, y: 1.5)
+            .overlay(alignment: .topLeading) {
+                tape.rotationEffect(.degrees(-21 + Double(seed % 5))).offset(x: -9, y: -6)
+            }
+            .overlay(alignment: .topTrailing) {
+                tape.rotationEffect(.degrees(16 - Double(seed % 4))).offset(x: 9, y: -6)
+            }
+            .rotationEffect(.degrees(tilt))
+    }
+
+    /// Matte tape: warm, barely opaque, with a slightly darker edge where it
+    /// doubles over. No gloss — gloss would make it a sticker.
+    private var tape: some View {
+        Rectangle()
+            .fill(CanvasPalette.tape)
+            .frame(width: 32, height: 12)
+            .overlay(Rectangle().stroke(CanvasPalette.warmShadow.opacity(0.10), lineWidth: 0.5))
+    }
+}
+
 private struct GridCaptureTile: View {
     let step: ExplorationStep
+    /// Plate number. A magazine numbers its figures, and these ARE numbered:
+    /// it is the capture's place in the note, which the grid already lets you
+    /// change by dragging or with the arrow keys.
+    let plate: Int
     let selected: Bool
     /// The note you wrote against THIS capture. In panel view it lives in the
     /// left column and swaps as you scroll; here every capture carries its own
@@ -616,12 +734,19 @@ private struct GridCaptureTile: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 10) {
-            HStack {
+            HStack(spacing: 8) {
+                Text(String(format: "%02d", plate))
+                    .font(CanvasTypography.mark(9))
+                    .foregroundStyle(CanvasPalette.inkBlue)
+                    .opacity(0.85)
+                Rectangle().fill(CanvasPalette.ink.opacity(0.18))
+                    .frame(width: 14, height: 0.75)
                 Text("\(kindLabel) · \(step.timestamp.formatted(date: .omitted, time: .shortened))".uppercased())
+                    .opacity(0.45)
                 Spacer()
-                Image(systemName: kindIcon)
+                Image(systemName: kindIcon).opacity(0.45)
             }
-            .font(CanvasTypography.mark(9)).tracking(1.0).opacity(0.45)
+            .font(CanvasTypography.mark(9)).tracking(1.0)
 
             if let path = step.screenshotPath, let image = NSImage(contentsOfFile: path) {
                 Image(nsImage: image)
@@ -682,14 +807,8 @@ private struct GridCaptureTile: View {
                 }
             }
             .frame(height: 50)
-            .padding(.top, 8)
-            .overlay(alignment: .top) {
-                // The editor's mark on the clipping: a rule that darkens while
-                // you are writing under it, and no box at all.
-                Rectangle()
-                    .fill(CanvasPalette.inkBlue.opacity(noteFocused ? 0.34 : 0.14))
-                    .frame(height: noteFocused ? 1.1 : 0.75)
-            }
+            .modifier(SlipBacking(taped: !note.isEmpty || noteFocused,
+                                  seed: abs(step.id.hashValue)))
 
             VStack(alignment: .leading, spacing: 6) {
                 // A hairline over the caption, the way a printed caption sits
@@ -723,6 +842,7 @@ private struct GridCaptureTile: View {
     }
 
     private var primaryText: String? { step.selectedText ?? step.pageText }
+
     private var kindLabel: String {
         step.screenshotPath != nil ? "Capture"
             : (step.appName.localizedCaseInsensitiveContains("audio") ? "Voice" : "Text")
@@ -1477,6 +1597,11 @@ private enum CanvasPalette {
     static let paper = Color(hex: 0xFDFAF4)     // the sheet a card is cut from
     static let paperDim = Color(hex: 0xF8F2E7)
     static let paperEdge = Color(hex: 0xE9DFCC)
+    /// The editor's slip — a whiter, cooler paper than the card, so it reads
+    /// as a different sheet rather than a panel of the same one.
+    static let slip = Color(hex: 0xFFFDF8)
+    /// Matte tape. Warm, barely there, never glossy.
+    static let tape = Color(hex: 0xE8DEC8, opacity: 0.72)
 
     static let ink = Color(hex: 0x17142B)       // near-black indigo
     static let inkBlue = Color(hex: 0x2A2456)
@@ -1521,6 +1646,8 @@ private enum CanvasPalette {
 private enum CanvasTypography {
     private static let wght: UInt32 = 0x77676874
     private static let opsz: UInt32 = 0x6F70737A
+    private static let soft: UInt32 = 0x534F4654
+    private static let wonk: UInt32 = 0x574F4E4B
 
     private static func varied(_ name: String, _ size: CGFloat, _ axes: [UInt32: CGFloat]) -> Font {
         var variations: [CFNumber: CFNumber] = [:]
@@ -1541,6 +1668,15 @@ private enum CanvasTypography {
         varied("Archivo-SemiBold", size, [wght: weight])
     }
 
+    /// Reading copy. A magazine sets article text in a SERIF, and that is the
+    /// single biggest reason an all-sans app reads as software however good
+    /// the headline is. Fraunces at a text optical size, with a little
+    /// softness and its wonk axis open, keeps the warmth of ink on paper
+    /// without the coldness of a Didone at body size.
+    private static func reading(_ size: CGFloat, _ weight: CGFloat = 400) -> Font {
+        varied("Fraunces-9ptBlack", size, [wght: weight, opsz: 14, soft: 20, wonk: 1])
+    }
+
     static let wordmark = editorial(36)
     static let loaderWordmark = editorial(52)
     static let noteTitle = editorial(58)
@@ -1554,9 +1690,10 @@ private enum CanvasTypography {
     static let titleTracking: CGFloat = -1.8
     static let titleLineSpacing: CGFloat = -8
 
-    static let noteBody = ui(16)
-    static let essayBody = ui(16)
-    static let cardBody = ui(14)
+    // Reading copy is serif; only the chrome stays sans.
+    static let noteBody = reading(17)
+    static let essayBody = reading(17)
+    static let cardBody = reading(14.5)
     static let control = ui(13, 500)
 
     static func mark(_ size: CGFloat = 10) -> Font { .custom("IBMPlexMono-Medium", size: size) }

@@ -461,6 +461,21 @@ final class AppState: ObservableObject {
         scheduleActiveNoteAutosave()
     }
 
+    /// Nudges a capture one place along the grid's display order, for the
+    /// arrow keys. `steps` is stored oldest-first and displayed reversed, so
+    /// moving RIGHT on screen is moving LEFT in storage — the flip lives here
+    /// alongside moveCapture rather than at the call site.
+    @discardableResult
+    func nudgeCapture(_ id: UUID, by delta: Int) -> Bool {
+        guard delta != 0, let from = steps.firstIndex(where: { $0.id == id }) else { return false }
+        let to = from - delta
+        guard steps.indices.contains(to) else { return false }
+        let step = steps.remove(at: from)
+        steps.insert(step, at: to)
+        scheduleActiveNoteAutosave()
+        return true
+    }
+
     func moveCanvasNote(_ sourceURL: URL, to targetURL: URL) {
         var ordered = canvasNoteSnapshots.map(\.url)
         guard let sourceIndex = ordered.firstIndex(of: sourceURL),
