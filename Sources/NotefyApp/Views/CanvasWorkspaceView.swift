@@ -251,6 +251,7 @@ private struct CaptureReadingView: View {
     let setLayout: (ReaderLayout) -> Void
     @State private var activeCaptureID: UUID?
     @State private var tab: ReaderTab = .raw
+    @State private var captureTick = 0
 
     private var layout: ReaderLayout { ReaderLayout(rawValue: layoutRaw) ?? .panel }
 
@@ -318,6 +319,12 @@ private struct CaptureReadingView: View {
                 .padding(.top, 78)
                 .zIndex(2)
 
+            // Where a new capture arrives — the top of the stream.
+            InkCaptureBloom(trigger: captureTick)
+                .padding(.top, 150)
+                .frame(maxWidth: .infinity, alignment: .center)
+                .zIndex(1)
+
             // Only Raw has two postures to choose between; the essay is a
             // single reading surface either way.
             if tab == .raw {
@@ -330,15 +337,20 @@ private struct CaptureReadingView: View {
                 .zIndex(2)
             }
         }
+        .onChange(of: appState.steps.count) { previous, current in
+            if current > previous { captureTick += 1 }
+        }
     }
 
     private var rawNoteColumn: some View {
         VStack(alignment: .leading, spacing: 16) {
             Text(appState.activeNoteURL.map { appState.folderPath(for: appState.folderID(for: $0)) }.flatMap { $0.isEmpty ? nil : $0.uppercased() } ?? "NOTE")
-                .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.5).opacity(0.48)
+                .font(CanvasTypography.mark(10)).tracking(1.5).opacity(0.48)
             TextField("Untitled note", text: $appState.noteTitle)
                 .textFieldStyle(.plain)
                 .font(CanvasTypography.noteTitle)
+                .tracking(CanvasTypography.titleTracking)
+                .lineSpacing(CanvasTypography.titleLineSpacing)
                 .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
 
             ZStack(alignment: .topLeading) {
@@ -358,6 +370,14 @@ private struct CaptureReadingView: View {
         }
         .padding(.horizontal, 38).padding(.top, 108).padding(.bottom, 32)
         .background(CanvasPalette.paper.opacity(0.32))
+        // The gutter rule. A magazine spread separates its standing column
+        // from the running material with a hairline, not with a colour block.
+        .overlay(alignment: .trailing) {
+            Rectangle()
+                .fill(CanvasPalette.inkBlue.opacity(0.14))
+                .frame(width: 0.75)
+                .padding(.vertical, 96)
+        }
     }
 
     private var captureColumn: some View {
@@ -432,8 +452,8 @@ private struct ReaderLayoutToggle: View {
             }
         }
         .padding(4)
-        .background(CanvasPalette.paper.opacity(0.88), in: InkPillShape(variation: 2))
-        .overlay(InkPillShape(variation: 2).stroke(CanvasPalette.inkBlue.opacity(0.13)))
+        .background(CanvasPalette.paper.opacity(0.88), in: InkTabShape(dispersion: 0.22, seed: 5.4))
+        .overlay(InkTabShape(dispersion: 0.22, seed: 5.4).stroke(CanvasPalette.inkBlue.opacity(0.13)))
         .shadow(color: CanvasPalette.clay.opacity(0.95), radius: 16, y: 5)
     }
 }
@@ -449,6 +469,7 @@ private struct CaptureGridView: View {
     /// The capture currently under the pointer's drag. Held here rather than
     /// read out of the drop payload so reordering can happen on hover.
     @State private var draggingID: UUID?
+    @FocusState private var titleFocused: Bool
 
     private let columns = [GridItem(.adaptive(minimum: 300, maximum: 380), spacing: 24)]
 
@@ -460,10 +481,15 @@ private struct CaptureGridView: View {
                         .font(CanvasTypography.mark(10)).tracking(1.4)
                         .opacity(0.45)
 
-                    TextField("Untitled note", text: $appState.noteTitle)
-                        .textFieldStyle(.plain)
-                        .font(CanvasTypography.noteTitle)
-                        .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
+                    VStack(alignment: .leading, spacing: 0) {
+                        TextField("Untitled note", text: $appState.noteTitle)
+                            .textFieldStyle(.plain)
+                            .font(CanvasTypography.noteTitle)
+                            .tracking(CanvasTypography.titleTracking)
+                            .focused($titleFocused)
+                            .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
+                        InkUnderline(active: titleFocused)
+                    }
 
                     // A vertical TextField rather than a TextEditor: it grows
                     // with what you write instead of reserving a fixed block
@@ -601,13 +627,32 @@ private struct GridCaptureTile: View {
                 Image(nsImage: image)
                     .resizable().scaledToFit()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 7))
+                    .clipShape(RoundedRectangle(cornerRadius: 4))
+                    // A clipping has a cut edge. One hairline and no shadow,
+                    // so the image sits IN the page rather than on top of it.
+                    .overlay(
+                        RoundedRectangle(cornerRadius: 4)
+                            .stroke(CanvasPalette.ink.opacity(0.12), lineWidth: 0.75)
+                    )
             } else if let text = primaryText, !text.isEmpty {
-                Text(text)
-                    .font(CanvasTypography.cardBody)
-                    .lineSpacing(5)
-                    .truncationMode(.tail)
-                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                // A magazine sets its material by length, not by type. A short
+                // fragment is a pull quote and takes the editorial face; a
+                // transcript is article copy and takes the reading face. Same
+                // data, same place, same behaviour — only the setting changes.
+                if text.count <= 120 {
+                    Text(text)
+                        .font(CanvasTypography.cardTitle)
+                        .tracking(-0.6)
+                        .lineSpacing(-2)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                } else {
+                    Text(text)
+                        .font(CanvasTypography.cardBody)
+                        .lineSpacing(5)
+                        .truncationMode(.tail)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                }
             }
 
             ZStack(alignment: .topLeading) {
@@ -618,40 +663,59 @@ private struct GridCaptureTile: View {
                         .lineSpacing(3)
                         .scrollContentBackground(.hidden)
                         .background(.clear)
+                } else if note.isEmpty {
+                    Text("ADD A NOTE")
+                        .font(CanvasTypography.mark(8)).tracking(1.2)
+                        .opacity(0.30)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .contentShape(Rectangle())
+                        .onTapGesture { noteFocused = true }
                 } else {
-                    Text(note.isEmpty ? "Add a note…" : note)
+                    Text(note)
                         .font(CanvasTypography.cardBody)
                         .lineSpacing(3)
                         .lineLimit(3)
                         .truncationMode(.tail)
-                        .opacity(note.isEmpty ? 0.34 : 1)
                         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .padding(.leading, 4).padding(.top, 4)
                         .contentShape(Rectangle())
                         .onTapGesture { noteFocused = true }
                 }
             }
-            .frame(height: 54)
-            .padding(.horizontal, 4)
-            .background(
-                CanvasPalette.inkBlue.opacity(noteFocused ? 0.07 : 0.035),
-                in: RoundedRectangle(cornerRadius: 7)
-            )
+            .frame(height: 50)
+            .padding(.top, 8)
+            .overlay(alignment: .top) {
+                // The editor's mark on the clipping: a rule that darkens while
+                // you are writing under it, and no box at all.
+                Rectangle()
+                    .fill(CanvasPalette.inkBlue.opacity(noteFocused ? 0.34 : 0.14))
+                    .frame(height: noteFocused ? 1.1 : 0.75)
+            }
 
-            Text(sourceLabel)
-                .font(CanvasTypography.markRegular(9)).tracking(0.8)
-                .opacity(0.50)
-                .lineLimit(1).truncationMode(.middle)
+            VStack(alignment: .leading, spacing: 6) {
+                // A hairline over the caption, the way a printed caption sits
+                // under its rule. Ink, not grey — same pen as the rest.
+                Rectangle()
+                    .fill(CanvasPalette.inkBlue.opacity(0.16))
+                    .frame(height: 0.75)
+                Text(sourceLabel)
+                    .font(CanvasTypography.markRegular(9)).tracking(0.8)
+                    .opacity(0.50)
+                    .lineLimit(1).truncationMode(.middle)
+            }
         }
         .padding(18)
         .frame(height: 420)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(CanvasPalette.sheet(for: step.id), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(
-            RoundedRectangle(cornerRadius: 12)
-                .stroke(selected ? CanvasPalette.inkBlue.opacity(0.42) : CanvasPalette.ink.opacity(0.07),
-                        lineWidth: 1)
-        )
+        .overlay {
+            if selected {
+                InkEdgeRect(corner: 12, amplitude: 1.0, seed: CGFloat(abs(step.id.hashValue % 17)))
+                    .stroke(CanvasPalette.inkBlue.opacity(0.42), lineWidth: 1.2)
+            } else {
+                RoundedRectangle(cornerRadius: 12)
+                    .stroke(CanvasPalette.ink.opacity(0.07), lineWidth: 1)
+            }
+        }
         // Barely there. A card should sit ON the paper, not hover above it —
         // the old 14pt shadow was the single most SaaS thing on the screen.
         .shadow(color: CanvasPalette.warmShadow.opacity(selected ? 0.10 : 0.05),
@@ -693,9 +757,30 @@ private struct ReaderTabBar: View {
                         .frame(width: 96, height: 34)
                         .background {
                             if selection == tab {
-                                InkPillShape(variation: tab == .raw ? 0 : 1)
-                                    .fill(CanvasPalette.inkBlue)
-                                    .matchedGeometryEffect(id: "ink-tab", in: inkSelection)
+                                ZStack {
+                                    // Raw: ink that has just landed, edge still
+                                    // wandering. Organized: the same ink pulled
+                                    // into a contained form. One shape, one
+                                    // animatable property between them.
+                                    InkTabShape(dispersion: tab == .raw ? 1 : 0, seed: 2.1)
+                                        .fill(CanvasPalette.inkBlue)
+                                        .matchedGeometryEffect(id: "ink-tab", in: inkSelection)
+
+                                    // Two specks thrown clear on landing. They
+                                    // belong to Raw only, and they are what the
+                                    // ink gives up when it resolves.
+                                    if tab == .raw {
+                                        Circle()
+                                            .fill(CanvasPalette.inkBlue.opacity(0.55))
+                                            .frame(width: 3.5, height: 3.5)
+                                            .offset(x: -54, y: -15)
+                                        Circle()
+                                            .fill(CanvasPalette.inkBlue.opacity(0.35))
+                                            .frame(width: 2.5, height: 2.5)
+                                            .offset(x: 50, y: 16)
+                                    }
+                                }
+                                .transition(.opacity)
                             }
                         }
                 }
@@ -1411,31 +1496,47 @@ private enum CanvasPalette {
     }
 }
 
-/// Three voices, each with a job — the Editorial Ink brief's type system.
+/// Three voices, each with a job.
 ///
-/// Instrument Serif carries the editorial moments: note titles, essay
-/// headings, empty states. It is a display face with real personality and
-/// tight fit, which is why it is never asked to set body copy.
+/// Libre Caslon carries the editorial moments: wordmark, note titles, essay
+/// headings, empty states. It is set BOLD and large, because the brief is an
+/// independent art publication rather than a literary journal — a hairline
+/// serif fights the ink concept instead of belonging to it.
+///
+/// Note on the face: the ask was Libre Caslon *Display*, which ships a single
+/// Regular weight. At display size that is lighter than Instrument Serif was,
+/// so it would have reproduced the exact complaint. Libre Caslon *Text* is the
+/// same Caslon, shipped as a variable font with a real wght axis, so asking
+/// for bold instantiates a genuine 700 master rather than smearing a 400.
+/// Both files are bundled; this is the one that renders.
 ///
 /// Geist Sans is the interface: body, controls, navigation. Neutral on
 /// purpose, so the serif is the only thing raising its voice.
 ///
-/// IBM Plex Mono is the record: timestamps, source labels, system marks.
-/// Its slightly mechanical letterforms are what make a metadata line read as
-/// stamped onto the page rather than written on it.
+/// IBM Plex Mono is the record: timestamps, source labels, system marks. Its
+/// mechanical letterforms make a metadata line read as stamped onto the page
+/// rather than written on it.
 ///
-/// All three are PostScript names, because Font.custom fails silently to San
-/// Francisco on a miss and a typo here looks like a design choice.
+/// All PostScript names — Font.custom fails silently to San Francisco on a
+/// miss, so a typo here looks like a design choice.
 private enum CanvasTypography {
-    // Editorial — Instrument Serif. It runs small for its point size, so the
-    // sizes here are larger than the sans they replaced at the same role.
-    static let wordmark = Font.custom("InstrumentSerif-Regular", size: 38, relativeTo: .title)
-    static let loaderWordmark = Font.custom("InstrumentSerif-Regular", size: 52, relativeTo: .largeTitle)
-    static let noteTitle = Font.custom("InstrumentSerif-Regular", size: 46, relativeTo: .largeTitle)
-    static let essayTitle = Font.custom("InstrumentSerif-Regular", size: 50, relativeTo: .largeTitle)
-    static let essayHeading = Font.custom("InstrumentSerif-Regular", size: 30, relativeTo: .title2)
-    static let emptyTitle = Font.custom("InstrumentSerif-Regular", size: 25, relativeTo: .title3)
-    static let cardTitle = Font.custom("InstrumentSerif-Regular", size: 30, relativeTo: .title)
+    private static let editorial = "LibreCaslonText-Regular"
+
+    // Editorial — set heavy and large. Tracking is applied at the call sites
+    // that can carry it, since Font cannot hold it.
+    static let wordmark = Font.custom(editorial, size: 34, relativeTo: .title).weight(.bold)
+    static let loaderWordmark = Font.custom(editorial, size: 48, relativeTo: .largeTitle).weight(.bold)
+    static let noteTitle = Font.custom(editorial, size: 54, relativeTo: .largeTitle).weight(.bold)
+    static let essayTitle = Font.custom(editorial, size: 56, relativeTo: .largeTitle).weight(.bold)
+    static let essayHeading = Font.custom(editorial, size: 30, relativeTo: .title2).weight(.bold)
+    static let emptyTitle = Font.custom(editorial, size: 26, relativeTo: .title3).weight(.bold)
+    static let cardTitle = Font.custom(editorial, size: 30, relativeTo: .title).weight(.bold)
+
+    /// Art-book headline, not journal heading: negative tracking and leading
+    /// pulled under 1.0 so a long title sets as a block rather than a list of
+    /// lines.
+    static let titleTracking: CGFloat = -1.6
+    static let titleLineSpacing: CGFloat = -6
 
     // Interface — Geist.
     static let noteBody = Font.custom("Geist-Regular", size: 16, relativeTo: .body)
@@ -1444,12 +1545,8 @@ private enum CanvasTypography {
     static let control = Font.custom("Geist-Medium", size: 13)
 
     // The record — IBM Plex Mono.
-    static func mark(_ size: CGFloat = 10) -> Font {
-        .custom("IBMPlexMono-Medium", size: size)
-    }
-    static func markRegular(_ size: CGFloat = 10) -> Font {
-        .custom("IBMPlexMono-Regular", size: size)
-    }
+    static func mark(_ size: CGFloat = 10) -> Font { .custom("IBMPlexMono-Medium", size: size) }
+    static func markRegular(_ size: CGFloat = 10) -> Font { .custom("IBMPlexMono-Regular", size: size) }
 }
 
 private enum NotedInkAssets {
@@ -1478,7 +1575,7 @@ private struct CanvasBrandMark: View {
     var body: some View {
         Text("noted")
             .font(CanvasTypography.wordmark)
-            .tracking(-0.5)
+            .tracking(-1.0)
             .foregroundStyle(CanvasPalette.ink)
             .frame(width: 112, height: 42)
             .accessibilityLabel("Noted")
@@ -1519,6 +1616,178 @@ private struct CanvasInkBlob: Shape {
 
 /// A softly irregular control silhouette: legible as a button, but with the
 /// slight edge tension of ink settling into paper instead of a perfect capsule.
+/// The Raw / Organized pill, with irregularity as an animatable property.
+///
+/// `dispersion` 1 is ink that has just landed — the outline wanders off the
+/// capsule. `dispersion` 0 is that same ink resolved into a contained,
+/// intentional form. Because it is `animatableData`, moving between the two
+/// tabs interpolates the SHAPE rather than cross-fading two of them, so the
+/// control performs the thing the two tabs mean: messy thought settling into
+/// structured thought. The interaction is untouched — this is the same pill
+/// in the same place doing the same job.
+/// One quiet bloom when a capture lands — the app saying "that is on the
+/// page now" in its own material rather than with a toast. Fires once per
+/// capture, is over in well under a second, and does not run at all under
+/// reduced motion.
+private struct InkCaptureBloom: View {
+    let trigger: Int
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @State private var visible = false
+    @State private var grow: CGFloat = 0.35
+
+    var body: some View {
+        CanvasInkBlob()
+            .fill(CanvasPalette.inkBlue.opacity(0.14))
+            .frame(width: 104, height: 88)
+            .scaleEffect(grow)
+            .opacity(visible ? 1 : 0)
+            .blur(radius: 1.5)
+            .allowsHitTesting(false)
+            .onChange(of: trigger) { _, _ in fire() }
+    }
+
+    private func fire() {
+        guard !reduceMotion, trigger > 0 else { return }
+        grow = 0.35
+        visible = true
+        // Spreads, then soaks in. Two curves rather than one, because ink
+        // does not fade at the rate it spreads.
+        withAnimation(.easeOut(duration: 0.44)) { grow = 1.2 }
+        withAnimation(.easeIn(duration: 0.34).delay(0.30)) { visible = false }
+    }
+}
+
+/// The stroke under whatever is being written in. It is drawn with the same
+/// wander as the selected card's edge, so an active field reads as underlined
+/// by hand rather than outlined by the toolkit.
+private struct InkUnderline: View {
+    let active: Bool
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+
+    var body: some View {
+        GeometryReader { proxy in
+            let w = proxy.size.width
+            Path { path in
+                path.move(to: CGPoint(x: 0, y: 3))
+                let steps = 40
+                for i in 1...steps {
+                    let t = CGFloat(i) / CGFloat(steps)
+                    let y = 3 + sin(t * .pi * 3.1) * 0.9 + sin(t * .pi * 7.3) * 0.4
+                    path.addLine(to: CGPoint(x: w * t, y: y))
+                }
+            }
+            .trim(from: 0, to: active ? 1 : 0)
+            .stroke(CanvasPalette.inkBlue.opacity(0.42),
+                    style: StrokeStyle(lineWidth: 1.4, lineCap: .round))
+            .animation(reduceMotion ? nil : .easeOut(duration: 0.30), value: active)
+        }
+        .frame(height: 7)
+        .allowsHitTesting(false)
+    }
+}
+
+private struct InkTabShape: Shape {
+    var dispersion: CGFloat
+    var seed: CGFloat = 0
+
+    var animatableData: CGFloat {
+        get { dispersion }
+        set { dispersion = newValue }
+    }
+
+    /// Walks the perimeter of a capsule by arc length, so displacing a point
+    /// along its outward normal thickens the outline evenly instead of
+    /// bunching up at the caps.
+    private func capsulePoint(_ t: CGFloat, _ rect: CGRect) -> CGPoint {
+        let r = rect.height / 2
+        let straight = max(0, rect.width - 2 * r)
+        let arc = CGFloat.pi * r
+        let total = 2 * straight + 2 * arc
+        var d = t * total
+        if d < straight { return CGPoint(x: rect.minX + r + d, y: rect.minY) }
+        d -= straight
+        if d < arc {
+            let a = -CGFloat.pi / 2 + (d / arc) * .pi
+            return CGPoint(x: rect.maxX - r + cos(a) * r, y: rect.midY + sin(a) * r)
+        }
+        d -= arc
+        if d < straight { return CGPoint(x: rect.maxX - r - d, y: rect.maxY) }
+        d -= straight
+        let a = CGFloat.pi / 2 + (d / arc) * .pi
+        return CGPoint(x: rect.minX + r + cos(a) * r, y: rect.midY + sin(a) * r)
+    }
+
+    func path(in rect: CGRect) -> Path {
+        guard rect.width > 1, rect.height > 1 else { return Path() }
+        let samples = 96
+        var points: [CGPoint] = []
+        points.reserveCapacity(samples)
+        for i in 0..<samples {
+            let t = CGFloat(i) / CGFloat(samples)
+            let p = capsulePoint(t, rect)
+            var nx = p.x - rect.midX, ny = p.y - rect.midY
+            let len = max(0.0001, sqrt(nx * nx + ny * ny))
+            nx /= len; ny /= len
+            // Three octaves: a slow wander, a wobble, and a fine tooth. Fixed
+            // frequencies so every pill reads as the same ink.
+            let a = t * 2 * .pi
+            let wob = sin(a * 3 + seed) * 0.60
+                + sin(a * 7 - seed * 1.7) * 0.28
+                + sin(a * 13 + seed * 0.6) * 0.14
+            let amp = dispersion * rect.height * 0.09 * wob
+            points.append(CGPoint(x: p.x + nx * amp, y: p.y + ny * amp))
+        }
+        var path = Path()
+        let first = points[0], last = points[samples - 1]
+        path.move(to: CGPoint(x: (last.x + first.x) / 2, y: (last.y + first.y) / 2))
+        for i in points.indices {
+            let c = points[i]
+            let n = points[(i + 1) % samples]
+            path.addQuadCurve(to: CGPoint(x: (c.x + n.x) / 2, y: (c.y + n.y) / 2), control: c)
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
+/// A rounded rectangle whose edge wanders very slightly — the selected
+/// capture's outline. Uniform strokes read as UI chrome; this reads as a
+/// line someone drew round the thing they were looking at.
+private struct InkEdgeRect: Shape {
+    var corner: CGFloat = 12
+    var amplitude: CGFloat = 0.9
+    var seed: CGFloat = 3
+
+    func path(in rect: CGRect) -> Path {
+        let base = Path(roundedRect: rect, cornerRadius: corner)
+        let samples = 160
+        var points: [CGPoint] = []
+        points.reserveCapacity(samples)
+        for i in 0..<samples {
+            let t = CGFloat(i) / CGFloat(samples)
+            guard let p = base.trimmedPath(from: t, to: min(1, t + 0.0001)).currentPoint else { continue }
+            var nx = p.x - rect.midX, ny = p.y - rect.midY
+            let len = max(0.0001, sqrt(nx * nx + ny * ny))
+            nx /= len; ny /= len
+            let a = t * 2 * .pi
+            let wob = sin(a * 5 + seed) * 0.6 + sin(a * 11 - seed) * 0.4
+            let amp = amplitude * wob
+            points.append(CGPoint(x: p.x + nx * amp, y: p.y + ny * amp))
+        }
+        guard points.count > 3 else { return base }
+        var path = Path()
+        let first = points[0], last = points[points.count - 1]
+        path.move(to: CGPoint(x: (last.x + first.x) / 2, y: (last.y + first.y) / 2))
+        for i in points.indices {
+            let c = points[i]
+            let n = points[(i + 1) % points.count]
+            path.addQuadCurve(to: CGPoint(x: (c.x + n.x) / 2, y: (c.y + n.y) / 2), control: c)
+        }
+        path.closeSubpath()
+        return path
+    }
+}
+
 private struct InkPillShape: Shape {
     let variation: Int
 
