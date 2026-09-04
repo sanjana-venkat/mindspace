@@ -61,7 +61,7 @@ struct CanvasWorkspaceView: View {
         ZStack {
             CanvasClayBackground(focused: true, zoom: 1)
 
-            CaptureReadingView(zoom: zoom, layoutRaw: layoutRaw, setLayout: setLayout)
+            CaptureReadingView(zoom: zoom, layoutRaw: layoutRaw)
                 .environmentObject(appState)
 
             VStack(spacing: 0) {
@@ -70,7 +70,9 @@ struct CanvasWorkspaceView: View {
                     subtitle: pickerSubtitle,
                     foldersOpen: $foldersOpen,
                     settingsOpen: $settingsOpen,
-                    zoom: $zoom
+                    zoom: $zoom,
+                    layout: ReaderLayout(rawValue: layoutRaw) ?? .panel,
+                    setLayout: setLayout
                 )
                 Spacer()
             }
@@ -182,6 +184,8 @@ private struct CanvasToolbar: View {
     @Binding var foldersOpen: Bool
     @Binding var settingsOpen: Bool
     @Binding var zoom: CGFloat
+    let layout: ReaderLayout
+    let setLayout: (ReaderLayout) -> Void
 
     var body: some View {
         HStack(alignment: .center) {
@@ -228,17 +232,21 @@ private struct CanvasToolbar: View {
             .accessibilityLabel("Noted")
     }
 
+    /// Zoom, the layout toggles and settings share one baseline at 22px
+    /// apart. The toggles used to float in their own row below, which read
+    /// as a second toolbar.
     private var chrome: some View {
-        HStack(spacing: 22) {
+        HStack(alignment: .center, spacing: 22) {
             lineButton("minus", label: "Zoom out") { zoom = max(0.60, zoom - 0.10) }
             Text("\(Int(zoom * 100))%")
                 .font(CanvasTypography.data())
                 .foregroundStyle(CanvasPalette.ink45)
                 .monospacedDigit()
             lineButton("plus", label: "Zoom in") { zoom = min(1.40, zoom + 0.10) }
+            ReaderLayoutToggle(layout: layout, setLayout: setLayout)
             lineButton("gearshape", label: "Settings") { settingsOpen = true }
         }
-        .frame(maxWidth: 320, alignment: .trailing)
+        .frame(maxWidth: 420, alignment: .trailing)
     }
 
     private func lineButton(_ system: String, label: String, action: @escaping () -> Void) -> some View {
@@ -272,7 +280,6 @@ private struct CaptureReadingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let zoom: CGFloat
     let layoutRaw: String
-    let setLayout: (ReaderLayout) -> Void
     @State private var activeCaptureID: UUID?
     @State private var tab: ReaderTab = .raw
     @State private var captureTick = 0
@@ -349,17 +356,6 @@ private struct CaptureReadingView: View {
                 .frame(maxWidth: .infinity, alignment: .center)
                 .zIndex(1)
 
-            // Only Raw has two postures to choose between; the essay is a
-            // single reading surface either way.
-            if tab == .raw {
-                HStack {
-                    Spacer()
-                    ReaderLayoutToggle(layout: layout, setLayout: setLayout)
-                }
-                .padding(.horizontal, 24)
-                .padding(.top, 78)
-                .zIndex(2)
-            }
         }
         .onChange(of: appState.steps.count) { previous, current in
             if current > previous { captureTick += 1 }
@@ -392,7 +388,7 @@ private struct CaptureReadingView: View {
                 TextEditor(text: activeNoteBinding)
                     .id(activeCaptureID)
                     .font(CanvasTypography.text())
-                    .lineSpacing(CanvasTypography.bodyLineSpacing)
+                    .lineSpacing(CanvasTypography.leading(15.5))
                     .foregroundStyle(CanvasPalette.ink)
                     .scrollContentBackground(.hidden)
                     .background(.clear)
@@ -466,11 +462,11 @@ private struct ReaderLayoutToggle: View {
                     guard !active else { return }
                     setLayout(option)
                 } label: {
-                    VStack(spacing: 5) {
+                    VStack(spacing: 4) {
                         Image(systemName: option.icon)
                             .font(.system(size: 13, weight: .light))
                             .foregroundStyle(active ? CanvasPalette.ink : CanvasPalette.ink70)
-                            .frame(width: 32, height: 24)
+                            .frame(width: 32, height: 16)
                         PrintersMark(active: active)
                     }
                     .contentShape(Rectangle())
@@ -801,10 +797,13 @@ private struct GridCaptureTile: View {
         } else if let body = primaryText, !body.isEmpty {
             Text(body)
                 .font(CanvasTypography.text())
-                .lineSpacing(CanvasTypography.bodyLineSpacing)
+                .lineSpacing(CanvasTypography.leading(15.5))
                 .foregroundStyle(CanvasPalette.ink)
                 .lineLimit(12)
                 .fixedSize(horizontal: false, vertical: true)
+                // 62ch, whatever the plate's width. A wider plate gets air
+                // beside the column rather than a longer line.
+                .frame(maxWidth: CanvasPalette.measure, alignment: .leading)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
@@ -819,16 +818,13 @@ private struct GridCaptureTile: View {
     @ViewBuilder
     private var caption: some View {
         if !note.isEmpty || noteFocused {
-            HStack(alignment: .top, spacing: 10) {
-                Rectangle()
-                    .fill(CanvasPalette.accent.opacity(0.45))
-                    .frame(width: 1.5)
+            marginalia(bar: CanvasPalette.accent) {
                 Group {
                     if noteFocused {
                         TextField("", text: $note, axis: .vertical)
                             .textFieldStyle(.plain)
                             .focused($noteFocused)
-                            .lineLimit(1...12)
+                            .lineLimit(1...20)
                     } else {
                         Text(note)
                             .fixedSize(horizontal: false, vertical: true)
@@ -838,19 +834,21 @@ private struct GridCaptureTile: View {
                     }
                 }
                 .font(CanvasTypography.meta(14))
-                .foregroundStyle(CanvasPalette.ink)
+                .lineSpacing(CanvasTypography.leading(14))
+                .foregroundStyle(CanvasPalette.ink70)
             }
-            .padding(.vertical, 9)
-            .padding(.horizontal, 11)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(CanvasPalette.accentWash)
         } else {
-            Text("Add a note…")
-                .font(CanvasTypography.meta(14))
-                .foregroundStyle(CanvasPalette.ink30)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .contentShape(Rectangle())
-                .onTapGesture { noteFocused = true }
+            // The empty slot still shows its rule, so you can see where the
+            // annotation goes before there is one.
+            marginalia(bar: CanvasPalette.ink12) {
+                Text("Add a note…")
+                    .font(CanvasTypography.meta(14))
+                    .lineSpacing(CanvasTypography.leading(14))
+                    .foregroundStyle(CanvasPalette.ink30)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .contentShape(Rectangle())
+                    .onTapGesture { noteFocused = true }
+            }
         }
     }
 
@@ -860,11 +858,15 @@ private struct GridCaptureTile: View {
         if !sourceLabel.isEmpty || urlString != nil {
             VStack(alignment: .leading, spacing: 0) {
                 Rectangle().fill(CanvasPalette.ink12).frame(height: 1)
-                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                // Title and URL are different kinds of thing, so they get
+                // different lines rather than fighting over one baseline.
+                VStack(alignment: .leading, spacing: 5) {
                     Text(sourceLabel)
                         .font(CanvasTypography.meta())
+                        .lineSpacing(CanvasTypography.leading(12.5))
                         .foregroundStyle(CanvasPalette.ink55)
-                    Spacer(minLength: 8)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .frame(maxWidth: CanvasPalette.measure, alignment: .leading)
                     if let urlString {
                         // Mono survives here and nowhere else: a URL is
                         // literally machine data.
@@ -875,6 +877,7 @@ private struct GridCaptureTile: View {
                             .truncationMode(.middle)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .leading)
                 .padding(.top, 12)
             }
             .padding(.top, 4)
@@ -882,6 +885,24 @@ private struct GridCaptureTile: View {
     }
 
     private var glass: Bool { (GroundSurface(rawValue: surfaceRaw) ?? .paper) == .glass }
+
+    /// Marginalia, not a box. The bar runs the height of the text and no
+    /// further, there is no fill on paper, and on glass the separation comes
+    /// from the accent wash — never a neutral grey, which is what made this
+    /// read as a disabled input.
+    @ViewBuilder
+    private func marginalia<C: View>(bar: Color, @ViewBuilder content: () -> C) -> some View {
+        HStack(alignment: .top, spacing: 12) {
+            Rectangle().fill(bar).frame(width: 1.5)
+            content()
+                .frame(maxWidth: CanvasPalette.measure, alignment: .leading)
+        }
+        .fixedSize(horizontal: false, vertical: true)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(glass ? CanvasPalette.accentWashGlass : Color.clear)
+    }
 
     private var plateFill: Color {
         guard glass else { return CanvasPalette.paperPlate }
@@ -949,11 +970,18 @@ private struct ReaderTabBar: View {
                         .background {
                             if selection == tab {
                                 ZStack {
-                                    // Raw: ink that has just landed, edge still
-                                    // wandering. Organized: the same ink pulled
-                                    // into a contained form. One shape, one
-                                    // animatable property between them.
-                                    InkTabShape(dispersion: tab == .raw ? 1 : 0, seed: 2.1)
+                                    // The blob persists on whichever side is
+                                    // active — it never resolves to a plain
+                                    // pill, because the blob IS the brand
+                                    // moment and losing it on Organized threw
+                                    // the loudest thing on the page away.
+                                    //
+                                    // It still says something: Raw is ink that
+                                    // has just landed with its edge wandering,
+                                    // Organized is the same ink settled but
+                                    // unmistakably the same body. Dispersion
+                                    // 1 -> 0.5, not 1 -> 0.
+                                    InkTabShape(dispersion: tab == .raw ? 1 : 0.5, seed: 2.1)
                                         .fill(CanvasPalette.inkBlue)
                                         .matchedGeometryEffect(id: "ink-tab", in: inkSelection)
 
@@ -1014,7 +1042,7 @@ private struct OrganizedEssayView: View {
                             Text("This note has not been organized yet.")
                                 .font(CanvasTypography.emptyTitle)
                             Text("Choose a structure and Noted will turn the raw note and captures into one readable page using your configured model.")
-                                .font(CanvasTypography.noteBody).lineSpacing(7).opacity(0.58)
+                                .font(CanvasTypography.noteBody).lineSpacing(CanvasTypography.leading(15.5)).opacity(0.58)
                             OrganizationPicker()
                                 .environmentObject(appState)
                         }
@@ -1079,22 +1107,24 @@ private struct OrganizationPicker: View {
 
     var body: some View {
         Button { isOpen.toggle() } label: {
-            Label(appState.organizedDraft.isEmpty ? "Organize" : "Reorganize", systemImage: "sparkles")
-                .font(.system(size: 12, weight: .bold, design: .rounded))
-                .padding(.horizontal, 14).frame(height: 38)
+            // The blob shape stays — it echoes the splatter. The label now
+            // matches the Raw/Organized labels in face and case, and the
+            // filled sparkle is gone: no filled icons anywhere.
+            Text(appState.organizedDraft.isEmpty ? "ORGANIZE" : "REORGANIZE")
+                .font(CanvasTypography.data(11))
+                .tracking(1.3)
+                .padding(.horizontal, 18).frame(height: 38)
                 .foregroundStyle(CanvasPalette.paper)
-                .background(CanvasPalette.inkBlue, in: InkPillShape(variation: 0))
+                .background(CanvasPalette.accent, in: InkTabShape(dispersion: 1, seed: 2.1))
         }
         .buttonStyle(.plain)
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
                     Text("Shape this note")
-                        .font(.system(size: 9, weight: .black, design: .monospaced)).tracking(1.4)
-                        .foregroundStyle(CanvasPalette.inkBlue.opacity(0.58))
+                        .font(CanvasTypography.meta())
+                        .foregroundStyle(CanvasPalette.ink55)
                     Spacer()
-                    Circle().fill(CanvasPalette.inkBlue.opacity(0.22)).frame(width: 8)
-                    Circle().fill(CanvasPalette.inkBlue.opacity(0.12)).frame(width: 4)
                 }
                 .padding(.horizontal, 10).padding(.bottom, 6)
 
@@ -1103,18 +1133,25 @@ private struct OrganizationPicker: View {
                         isOpen = false
                         appState.organizeCurrentSession(as: template)
                     } label: {
-                        HStack(spacing: 12) {
-                            Image(systemName: template.icon).frame(width: 18)
+                        // No filled row and no pill: the chosen template is
+                        // marked by the printer's dot, like every other
+                        // active state in the app.
+                        HStack(spacing: 10) {
+                            Circle()
+                                .fill(CanvasPalette.ink)
+                                .frame(width: 6, height: 6)
+                                .opacity(appState.organizedTemplate == template ? 1 : 0)
+                            Image(systemName: template.icon)
+                                .font(.system(size: 12, weight: .light))
+                                .foregroundStyle(CanvasPalette.ink70)
+                                .frame(width: 16)
                             Text(template.rawValue)
-                                .font(.system(size: 14, weight: .semibold, design: .rounded))
+                                .font(CanvasTypography.text(14, appState.organizedTemplate == template ? 500 : 400))
                             Spacer()
-                            if appState.organizedTemplate == template {
-                                Image(systemName: "checkmark").font(.system(size: 10, weight: .black))
-                            }
                         }
-                        .foregroundStyle(appState.organizedTemplate == template ? CanvasPalette.paper : CanvasPalette.ink)
-                        .padding(.horizontal, 11).frame(height: 42)
-                        .background(appState.organizedTemplate == template ? CanvasPalette.inkBlue : .clear, in: RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous))
+                        .foregroundStyle(CanvasPalette.ink)
+                        .padding(.horizontal, 11).frame(height: 36)
+                        .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                 }
@@ -1148,19 +1185,31 @@ private struct EssayBlockView: View {
         case .paragraph(let text):
             Text(inlineMarkdown(text))
                 .font(CanvasTypography.essayBody)
-                .lineSpacing(9)
+                .lineSpacing(CanvasTypography.leading(15.5))
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: CanvasPalette.measure, alignment: .leading)
         case .bullet(let text):
-            HStack(alignment: .firstTextBaseline, spacing: 12) {
-                Circle().fill(CanvasPalette.inkBlue).frame(width: 6, height: 6)
+            // Hanging punctuation: the marker sits in the gutter and the
+            // text runs flush, so a wrapped second line aligns with the
+            // first rather than under the dot.
+            HStack(alignment: .firstTextBaseline, spacing: 0) {
+                Circle()
+                    .fill(CanvasPalette.ink)
+                    .frame(width: 5, height: 5)
+                    .frame(width: 18, alignment: .leading)
+                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] + 1 }
                 Text(inlineMarkdown(text))
-                    .font(CanvasTypography.essayBody).lineSpacing(8)
+                    .font(CanvasTypography.essayBody)
+                    .lineSpacing(CanvasTypography.leading(15.5))
+                    .fixedSize(horizontal: false, vertical: true)
+                    .frame(maxWidth: CanvasPalette.measure, alignment: .leading)
             }
         case .checklist(let text, let checked):
             HStack(alignment: .firstTextBaseline, spacing: 12) {
                 Image(systemName: checked ? "checkmark.square.fill" : "square")
                     .foregroundStyle(CanvasPalette.inkBlue)
                 Text(inlineMarkdown(text))
-                    .font(CanvasTypography.essayBody).lineSpacing(8)
+                    .font(CanvasTypography.essayBody).lineSpacing(CanvasTypography.leading(15.5))
             }
         }
     }
@@ -1231,16 +1280,18 @@ private struct CanvasFolderOverlay: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("Folders")
-                        .font(CanvasTypography.mark(10)).tracking(1.5).opacity(0.48)
+                        .font(CanvasTypography.meta())
+                        .foregroundStyle(CanvasPalette.ink55)
                     Spacer()
                     Button {
                         withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) { creatingFolder = true }
                         DispatchQueue.main.async { nameFocused = true }
                     } label: {
                         Image(systemName: "plus")
-                            .font(.system(size: 12, weight: .bold))
-                            .frame(width: 28, height: 28)
-                            .background(CanvasPalette.inkBlue.opacity(0.10), in: Circle())
+                            .font(.system(size: 12, weight: .light))
+                            .foregroundStyle(CanvasPalette.ink70)
+                            .frame(width: 32, height: 32)
+                            .contentShape(Rectangle())
                     }
                     .buttonStyle(.plain)
                     .help("New folder")
@@ -1253,7 +1304,7 @@ private struct CanvasFolderOverlay: View {
                         Image(systemName: "folder.fill").foregroundStyle(CanvasPalette.inkBlue)
                         TextField("Folder name", text: $newFolderName)
                             .textFieldStyle(.plain)
-                            .font(.system(size: 14, weight: .semibold))
+                            .font(CanvasTypography.text(14))
                             .focused($nameFocused)
                             .onSubmit(createFolder)
                             .onExitCommand(perform: cancelFolder)
@@ -1318,22 +1369,24 @@ private struct CanvasFolderOverlay: View {
             } label: {
                 HStack(spacing: 8) {
                     Image(systemName: "chevron.right")
-                        .font(.system(size: 9, weight: .bold))
+                        .font(.system(size: 8, weight: .light))
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
-                        .opacity(0.45)
-                    Text(title).lineLimit(1)
+                        .foregroundStyle(CanvasPalette.ink45)
+                    // Section headers are italic meta, not bold sans.
+                    Text(title)
+                        .font(CanvasTypography.meta())
+                        .foregroundStyle(CanvasPalette.ink55)
+                        .lineLimit(1)
                     Spacer()
                     Text("\(folderNotes.count)")
-                        .font(.custom("GeistMono-Regular", size: 11))
-                        .opacity(0.46)
+                        .font(CanvasTypography.meta(11))
+                        .foregroundStyle(CanvasPalette.ink45)
+                        .monospacedDigit()
                 }
-                .font(.system(size: 14, weight: .semibold))
-                .padding(.horizontal, 12).frame(height: 40)
+                .padding(.horizontal, 12).frame(height: 34)
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain)
-            .background(filter == value ? CanvasPalette.inkBlue.opacity(0.11) : .clear,
-                        in: RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous))
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 1) {
@@ -1344,25 +1397,30 @@ private struct CanvasFolderOverlay: View {
                             guard !isCurrent else { return }
                             openNote(note.url)
                         } label: {
-                            HStack(spacing: 8) {
+                            HStack(spacing: 10) {
+                                // The open note is marked by a printer's dot
+                                // in the left gutter and a heavier weight —
+                                // never by a filled row.
                                 Circle()
-                                    .fill(CanvasPalette.inkBlue.opacity(isCurrent ? 0.9 : (note.captureCount > 0 ? 0.55 : 0.18)))
-                                    .frame(width: 5, height: 5)
-                                Text(note.title).lineLimit(1)
+                                    .fill(CanvasPalette.ink)
+                                    .frame(width: 6, height: 6)
+                                    .opacity(isCurrent ? 1 : 0)
+                                Text(note.title)
+                                    .font(CanvasTypography.text(14, isCurrent ? 500 : 400))
+                                    .foregroundStyle(CanvasPalette.ink)
+                                    .lineLimit(1)
                                 Spacer()
                                 if note.captureCount > 0 {
                                     Text("\(note.captureCount)")
-                                        .font(CanvasTypography.markRegular(10))
-                                        .opacity(0.40)
+                                        .font(CanvasTypography.meta(11))
+                                        .foregroundStyle(CanvasPalette.ink45)
+                                        .monospacedDigit()
                                 }
                             }
-                            .font(.system(size: 13, weight: isCurrent ? .semibold : .regular))
                             .padding(.horizontal, 12).frame(height: 32)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(.plain)
-                        .background(isCurrent ? CanvasPalette.inkBlue.opacity(0.09) : .clear,
-                                    in: RoundedRectangle(cornerRadius: 8))
                     }
 
                     // Scoped to the folder it sits under, so there is never a
@@ -1371,12 +1429,14 @@ private struct CanvasFolderOverlay: View {
                         withAnimation { isOpen = false }
                         if case .folder(let id) = value { createNote(id) } else { createNote(nil) }
                     } label: {
-                        HStack(spacing: 8) {
-                            Image(systemName: "plus").font(.system(size: 10, weight: .bold))
-                            Text("New note").font(.system(size: 13, weight: .medium))
+                        HStack(spacing: 10) {
+                            Image(systemName: "plus")
+                                .font(.system(size: 10, weight: .light))
+                                .frame(width: 6)
+                            Text("New note").font(CanvasTypography.text(14))
                             Spacer()
                         }
-                        .foregroundStyle(CanvasPalette.inkBlue)
+                        .foregroundStyle(CanvasPalette.ink55)
                         .padding(.horizontal, 12).frame(height: 32)
                         .contentShape(Rectangle())
                     }
@@ -1582,6 +1642,9 @@ private enum CanvasPalette {
     /// visual weight of a screen.
     static let accent = Color(hex: 0x2B2A63)
     static let accentWash = Color(hex: 0x2B2A63, opacity: 0.08)
+    /// On glass the marginalia needs a whisper of separation; on paper the
+    /// bar alone carries it.
+    static let accentWashGlass = Color(hex: 0x2B2A63, opacity: 0.06)
 
     // Names the rest of the file still reaches for, mapped onto the tokens
     // rather than left as a second, competing palette.
@@ -1676,7 +1739,11 @@ private enum CanvasTypography {
     /// −0.02em at the sizes above, and leading pulled to 1.0.
     static let titleTracking: CGFloat = -0.02 * 44
     static let titleLineSpacing: CGFloat = -10
-    static let bodyLineSpacing: CGFloat = 15.5 * 0.55
+    /// line-height 1.55 expressed as SwiftUI's extra leading. Every text
+    /// element inside a plate uses this; display titles are the only
+    /// exception, and they set their own negative leading.
+    static func leading(_ size: CGFloat) -> CGFloat { size * 0.55 }
+    static let bodyLineSpacing: CGFloat = leading(15.5)
 
     // Kept so existing metadata call sites compile while they are converted
     // to `meta`; both now resolve to the text face in italic rather than to

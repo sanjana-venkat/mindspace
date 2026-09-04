@@ -14,8 +14,10 @@ struct MainWindowView: View {
     /// `data-ground` on the app shell. Ink is the default, and there is no
     /// system-preference auto-switch — this is a surface choice.
     @AppStorage(GroundStorage.key) private var groundRaw = GroundMode.ink.rawValue
+    @AppStorage(GroundSurface.storageKey) private var surfaceRaw = GroundSurface.paper.rawValue
 
     private var groundMode: GroundMode { GroundMode(rawValue: groundRaw) ?? .ink }
+    private var surface: GroundSurface { GroundSurface(rawValue: surfaceRaw) ?? .paper }
 
     var body: some View {
         Group {
@@ -39,7 +41,10 @@ struct MainWindowView: View {
         // The ground: base fill, ambient bloom, grain, then a felt-not-seen
         // vignette above. Only this stack changes between modes — the panels
         // resting on it are byte-identical either way.
-        .background(Stoneink.surfaceBed)
+        // This shell fill is what was blocking the vibrancy: an opaque
+        // background here paints over anything the window would otherwise
+        // let through, so on glass the canvas must own the surface alone.
+        .background(surface == .glass ? Color.clear : Stoneink.surfaceBed)
         // Pinned to light in BOTH modes. This is not a dark theme: the paper
         // panels have to resolve as paper whatever the Mac is set to, and the
         // ground is chosen here, never by the system appearance.
