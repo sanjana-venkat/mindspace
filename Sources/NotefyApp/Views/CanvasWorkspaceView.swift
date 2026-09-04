@@ -36,6 +36,10 @@ struct CanvasWorkspaceView: View {
     @State private var foldersOpen = false
     @State private var settingsOpen = false
     @State private var inkTransitionFrame: Int?
+    /// The frame counts the running wipe was started with, so the overlay
+    /// maps progress against the same numbers the loop is stepping.
+    @State private var inkCoverFrames = 16
+    @State private var inkRevealFrames = 20
     @State private var zoom: CGFloat = 1.0
     /// Owned here rather than in the reader so switching posture can be
     /// wrapped in the same ink wipe that switching notes uses — the overlay
@@ -94,7 +98,10 @@ struct CanvasWorkspaceView: View {
             }
 
             if let inkTransitionFrame {
-                InkOpenTransition(frame: inkTransitionFrame, origin: nil)
+                InkOpenTransition(frame: inkTransitionFrame,
+                                  origin: nil,
+                                  coverFrames: inkCoverFrames,
+                                  revealFrames: inkRevealFrames)
                     .ignoresSafeArea()
                     .allowsHitTesting(true)
                     .zIndex(20)
@@ -123,7 +130,9 @@ struct CanvasWorkspaceView: View {
     /// Switching notes keeps the ink wipe the card wall used to open with —
     /// it is the one moment that still marks "you are now somewhere else".
     private func transitionToReading(_ url: URL) {
-        inkWipe(interval: Self.noteWipeInterval) { appState.openNote(url) }
+        inkWipe(cover: 16, reveal: 20, interval: Self.noteWipeInterval) {
+            appState.openNote(url)
+        }
     }
 
     /// Grid and panel are two views of the same note, so the change is worth
@@ -131,7 +140,12 @@ struct CanvasWorkspaceView: View {
     /// pulls back. Without it the whole page silently becomes something else.
     private func setLayout(_ option: ReaderLayout) {
         guard option.rawValue != layoutRaw else { return }
-        inkWipe(interval: Self.layoutWipeInterval) { layoutRaw = option.rawValue }
+        // Twelve frames, not thirty-six. Shaving the interval had stopped
+        // helping: Task.sleep does not deliver 4ms, so the frame COUNT was
+        // setting the duration, not the number I kept lowering.
+        inkWipe(cover: 5, reveal: 7, interval: Self.layoutWipeInterval) {
+            layoutRaw = option.rawValue
+        }
     }
 
     /// Cover, change, reveal. The change happens at the midpoint so it is
@@ -144,9 +158,9 @@ struct CanvasWorkspaceView: View {
     /// Flipping posture happens constantly while working, so it runs the
     /// same gesture at roughly a third of the note-switch duration — about
     /// 290ms end to end. Any slower and it is a wait, not a transition.
-    private static let layoutWipeInterval = 4
+    private static let layoutWipeInterval = 8
 
-    private func inkWipe(interval: Int, _ change: @escaping () -> Void) {
+    private func inkWipe(cover: Int, reveal: Int, interval: Int, _ change: @escaping () -> Void) {
         guard inkTransitionFrame == nil else { return }
 
         guard !reduceMotion else {
@@ -154,9 +168,12 @@ struct CanvasWorkspaceView: View {
             return
         }
 
+        inkCoverFrames = cover
+        inkRevealFrames = reveal
+
         Task { @MainActor in
-            let coverFrames = 16
-            let revealFrames = 20
+            let coverFrames = cover
+            let revealFrames = reveal
 
             for frame in 0..<coverFrames {
                 inkTransitionFrame = frame
@@ -442,6 +459,7 @@ private struct CaptureReadingView: View {
                             GridCaptureTile(
                                 step: step,
                                 selected: step.id == activeCaptureID,
+                                placement: .marginal,
                                 note: Binding(
                                     get: { appState.stepAnnotations[step.id] ?? "" },
                                     set: {
@@ -770,8 +788,18 @@ private struct FragmentGlyph: View {
 /// both sides have content, which is the difference between a rule that
 /// encodes structure and a rule that decorates.
 private struct GridCaptureTile: View {
+    /// Where the plate is standing.
+    ///
+    /// In the grid it is the whole record, so it carries its own annotation
+    /// and a full plate edge. In panel view the left column already IS the
+    /// note for the active capture — printing it again on the plate showed
+    /// the same words twice — and the capture is the thing being read, so
+    /// the wrapper gets out of its way.
+    enum Placement { case grid, marginal }
+
     let step: ExplorationStep
     let selected: Bool
+    var placement: Placement = .grid
     @Binding var note: String
 
     @FocusState private var noteFocused: Bool
@@ -784,7 +812,7 @@ private struct GridCaptureTile: View {
         VStack(alignment: .leading, spacing: 12) {
             header
             content
-            caption
+            if placement == .grid { caption }
             footer
         }
         .padding(CanvasPalette.platePad)
@@ -796,7 +824,7 @@ private struct GridCaptureTile: View {
         .clipShape(RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous)
-                .stroke(borderColor, lineWidth: selected ? 1.5 : 1)
+                .stroke(borderColor, lineWidth: selected ? 1.5 : (placement == .marginal ? 0.5 : 1))
         )
         // The glass edge: a 1px top highlight. This inset is the only shadow
         // anywhere in the app.
@@ -952,13 +980,25 @@ private struct GridCaptureTile: View {
     }
 
     private var plateFill: Color {
-        guard glass else { return CanvasPalette.paperPlate }
-        return selected ? GlassTokens.paperPlateSelected : GlassTokens.paperPlate
+        guard glass else {
+            // Marginal plates sit back: the fill still has to carry the text,
+            // but it stops competing with the capture inside it.
+            return placement == .marginal
+                ? CanvasPalette.paperPlate.opacity(0.62)
+                : CanvasPalette.paperPlate
+        }
+        if selected { return GlassTokens.paperPlateSelected }
+        // On glass the fill is legibility, not decoration, so it barely
+        // softens — a translucent plate over a moving desktop is unreadable.
+        return placement == .marginal
+            ? GlassTokens.paperPlate.opacity(0.92)
+            : GlassTokens.paperPlate
     }
 
     private var borderColor: Color {
         if selected { return CanvasPalette.accent }
-        let rest = glass ? GlassTokens.ink12 : CanvasPalette.ink12
+        let base = glass ? GlassTokens.ink12 : CanvasPalette.ink12
+        let rest = placement == .marginal ? base.opacity(0.5) : base
         return hovering ? CanvasPalette.ink30 : rest
     }
 
@@ -1512,9 +1552,14 @@ private struct CanvasFolderOverlay: View {
 private struct InkOpenTransition: View {
     let frame: Int
     let origin: CGPoint?
+    /// Supplied by the caller: a short wipe and a long one step through
+    /// different numbers of frames, and progress is a fraction of whichever
+    /// is running.
+    var coverFrames: Int = 16
+    var revealFrames: Int = 20
 
-    private let coverFrameCount = 16
-    private let revealFrameCount = 20
+    private var coverFrameCount: Int { coverFrames }
+    private var revealFrameCount: Int { revealFrames }
 
     var body: some View {
         Canvas { context, size in
