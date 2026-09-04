@@ -7,6 +7,7 @@ struct SettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var saved = false
     @AppStorage(GroundStorage.key) private var groundRaw = GroundMode.ink.rawValue
+    @AppStorage(GroundSurface.storageKey) private var surfaceRaw = GroundSurface.paper.rawValue
 
     var body: some View {
         ZStack(alignment: .topTrailing) {
@@ -21,6 +22,7 @@ struct SettingsView: View {
                         .foregroundStyle(ground.onGround)
                 }
                 groundSection
+                surfaceSection
                 permissionSection
                 providerSection(
                     title: "Voice Transcription",
@@ -124,6 +126,44 @@ struct SettingsView: View {
             .fixedSize()
 
             Text("Same object, different light. The panels stay paper either way — only the ground swaps.")
+                .font(StoneFont.body())
+                .foregroundStyle(ground.onGround72)
+        }
+    }
+
+    /// Paper or glass. Paper is the default and the product's original
+    /// thesis — the one opaque object on a screen full of glass. Glass
+    /// inverts the ground only: the sheet goes translucent over your
+    /// desktop, the captures on it stay opaque paper.
+    private var surfaceSection: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("SURFACE")
+                .font(StoneFont.markMedium())
+                .tracking(Stoneink.trMark * 11)
+                .foregroundStyle(ground.onGround42)
+
+            HStack(spacing: 3) {
+                ForEach(GroundSurface.allCases) { option in
+                    let active = option.rawValue == surfaceRaw
+                    Button {
+                        withAnimation(.easeOut(duration: 0.18)) { surfaceRaw = option.rawValue }
+                    } label: {
+                        Text(option.label)
+                            .font(StoneFont.bodyMedium())
+                            .foregroundStyle(active ? Stoneink.clay050 : Stoneink.textSecondary)
+                            .padding(.horizontal, 18)
+                            .frame(height: 30)
+                            .background { if active { Capsule().fill(Stoneink.cobalt600) } }
+                            .contentShape(Capsule())
+                    }
+                    .buttonStyle(.plain)
+                }
+            }
+            .padding(3)
+            .background(Stoneink.surfacePress, in: Capsule())
+            .fixedSize()
+
+            Text("Glass makes the window a frosted sheet over your desktop. Your captures stay opaque paper on top of it.")
                 .font(StoneFont.body())
                 .foregroundStyle(ground.onGround72)
         }

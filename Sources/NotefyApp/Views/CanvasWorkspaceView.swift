@@ -554,7 +554,9 @@ private struct CaptureGridView: View {
     /// columns, filled round-robin.
     private func masonry(width: CGFloat) -> some View {
         let available = width - CanvasPalette.pageMargin * 2
-        let columns = available >= 1280 - 96 ? 3 : (available >= 900 - 96 ? 2 : 1)
+        // Denser than the brief's breakpoints: reordering only means
+        // something when you can see enough plates at once to compare them.
+        let columns = available >= 940 ? 3 : (available >= 620 ? 2 : 1)
         let ordered = Array(appState.steps.reversed())
         return HStack(alignment: .top, spacing: CanvasPalette.gutter) {
             ForEach(0..<columns, id: \.self) { column in
@@ -731,6 +733,7 @@ private struct GridCaptureTile: View {
 
     @FocusState private var noteFocused: Bool
     @State private var hovering = false
+    @AppStorage(GroundSurface.storageKey) private var surfaceRaw = GroundSurface.paper.rawValue
 
     // Split into parts deliberately: as one expression the plate body blew
     // past the type-checker's budget.
@@ -743,12 +746,25 @@ private struct GridCaptureTile: View {
         }
         .padding(CanvasPalette.platePad)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CanvasPalette.paperPlate)
+        // On glass a plate is a SECOND pane — more opaque than the window,
+        // and a selected one lifts by getting more solid still rather than
+        // by growing a shadow.
+        .background(plateFill)
         .clipShape(RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous))
         .overlay(
             RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous)
                 .stroke(borderColor, lineWidth: selected ? 1.5 : 1)
         )
+        // The glass edge: a 1px top highlight. This inset is the only shadow
+        // anywhere in the app.
+        .overlay(alignment: .top) {
+            if glass {
+                Rectangle()
+                    .fill(GlassTokens.plateEdge)
+                    .frame(height: 1)
+                    .padding(.horizontal, 1)
+            }
+        }
         // Hover moves the hairline and nothing else. No lift, no scale, no
         // shadow — those are what made these read as a SaaS card kit.
         .onHover { hovering = $0 }
@@ -772,36 +788,66 @@ private struct GridCaptureTile: View {
         if let path = step.screenshotPath, let image = NSImage(contentsOfFile: path) {
             // Images bleed to the plate's inner width, framed by the same
             // hairline as the plate and with no radius of their own.
+            // Capped, so a tall screenshot cannot run a column off the
+            // screen and push every other plate out of view. The user's own
+            // note is never capped — only the captured material is.
             Image(nsImage: image)
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: .infinity)
+                .frame(maxHeight: 260)
+                .clipped()
                 .overlay(Rectangle().stroke(CanvasPalette.ink12, lineWidth: 1))
         } else if let body = primaryText, !body.isEmpty {
             Text(body)
                 .font(CanvasTypography.text())
                 .lineSpacing(CanvasTypography.bodyLineSpacing)
                 .foregroundStyle(CanvasPalette.ink)
+                .lineLimit(12)
                 .fixedSize(horizontal: false, vertical: true)
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
     }
 
-    /// The annotation is a caption under its plate, in italic.
+    /// Your words, marked as yours. Italic alone did not separate them from
+    /// the captured material — they read as more of the same fragment. They
+    /// now sit in the accent wash behind a marginal rule, which is how an
+    /// annotation is set on a printed page: the reader's hand in the margin,
+    /// distinct from the text it comments on.
+    ///
+    /// Never truncated. This is the one thing on the plate the user wrote.
     @ViewBuilder
     private var caption: some View {
-        if noteFocused {
-            TextField("", text: $note, axis: .vertical)
-                .textFieldStyle(.plain)
-                .focused($noteFocused)
+        if !note.isEmpty || noteFocused {
+            HStack(alignment: .top, spacing: 10) {
+                Rectangle()
+                    .fill(CanvasPalette.accent.opacity(0.45))
+                    .frame(width: 1.5)
+                Group {
+                    if noteFocused {
+                        TextField("", text: $note, axis: .vertical)
+                            .textFieldStyle(.plain)
+                            .focused($noteFocused)
+                            .lineLimit(1...12)
+                    } else {
+                        Text(note)
+                            .fixedSize(horizontal: false, vertical: true)
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .contentShape(Rectangle())
+                            .onTapGesture { noteFocused = true }
+                    }
+                }
                 .font(CanvasTypography.meta(14))
-                .foregroundStyle(CanvasPalette.ink70)
-                .lineLimit(1...6)
+                .foregroundStyle(CanvasPalette.ink)
+            }
+            .padding(.vertical, 9)
+            .padding(.horizontal, 11)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(CanvasPalette.accentWash)
         } else {
-            Text(note.isEmpty ? "Add a note…" : note)
+            Text("Add a note…")
                 .font(CanvasTypography.meta(14))
-                .foregroundStyle(note.isEmpty ? CanvasPalette.ink30 : CanvasPalette.ink70)
-                .fixedSize(horizontal: false, vertical: true)
+                .foregroundStyle(CanvasPalette.ink30)
                 .frame(maxWidth: .infinity, alignment: .leading)
                 .contentShape(Rectangle())
                 .onTapGesture { noteFocused = true }
@@ -835,9 +881,17 @@ private struct GridCaptureTile: View {
         }
     }
 
+    private var glass: Bool { (GroundSurface(rawValue: surfaceRaw) ?? .paper) == .glass }
+
+    private var plateFill: Color {
+        guard glass else { return CanvasPalette.paperPlate }
+        return selected ? GlassTokens.paperPlateSelected : GlassTokens.paperPlate
+    }
+
     private var borderColor: Color {
         if selected { return CanvasPalette.accent }
-        return hovering ? CanvasPalette.ink30 : CanvasPalette.ink12
+        let rest = glass ? GlassTokens.ink12 : CanvasPalette.ink12
+        return hovering ? CanvasPalette.ink30 : rest
     }
 
     private var primaryText: String? { step.selectedText ?? step.pageText }
@@ -1545,7 +1599,7 @@ private enum CanvasPalette {
     static let warmShadow = ink30
 
     // Layout
-    static let pageMargin: CGFloat = 48
+    static let pageMargin: CGFloat = 40
     static let gutter: CGFloat = 24
     static let platePad: CGFloat = 24
     static let plateRadius: CGFloat = 6
@@ -1927,13 +1981,20 @@ private struct InkPillShape: Shape {
 private struct CanvasClayBackground: View {
     let focused: Bool
     let zoom: CGFloat
+    @AppStorage(GroundSurface.storageKey) private var surfaceRaw = GroundSurface.paper.rawValue
+
+    private var surface: GroundSurface { GroundSurface(rawValue: surfaceRaw) ?? .paper }
 
     var body: some View {
         ZStack {
-            CanvasPalette.paper
-            PaperGrain()
+            GroundSurfaceView(surface: surface, paper: CanvasPalette.paper)
+            // Grain is a paper property. A frosted pane has no tooth, so on
+            // glass it is removed entirely rather than merely faded — the
+            // sheen is the only surface cue there.
+            if surface == .paper { PaperGrain() }
         }
         .ignoresSafeArea()
+        .overlay(WindowSurfaceBridge(glass: surface == .glass).allowsHitTesting(false))
     }
 }
 
