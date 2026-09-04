@@ -61,7 +61,7 @@ struct CanvasWorkspaceView: View {
         ZStack {
             CanvasClayBackground(focused: true, zoom: 1)
 
-            CaptureReadingView(zoom: zoom, layoutRaw: layoutRaw)
+            CaptureReadingView(zoom: zoom, layoutRaw: layoutRaw, setLayout: setLayout)
                 .environmentObject(appState)
 
             VStack(spacing: 0) {
@@ -70,9 +70,7 @@ struct CanvasWorkspaceView: View {
                     subtitle: pickerSubtitle,
                     foldersOpen: $foldersOpen,
                     settingsOpen: $settingsOpen,
-                    zoom: $zoom,
-                    layout: ReaderLayout(rawValue: layoutRaw) ?? .panel,
-                    setLayout: setLayout
+                    zoom: $zoom
                 )
                 Spacer()
             }
@@ -188,8 +186,6 @@ private struct CanvasToolbar: View {
     @Binding var foldersOpen: Bool
     @Binding var settingsOpen: Bool
     @Binding var zoom: CGFloat
-    let layout: ReaderLayout
-    let setLayout: (ReaderLayout) -> Void
 
     var body: some View {
         HStack(alignment: .center) {
@@ -246,17 +242,14 @@ private struct CanvasToolbar: View {
     /// Two rows, right-aligned to the same edge: zoom and settings above,
     /// the posture toggles directly beneath them.
     private var chrome: some View {
-        VStack(alignment: .trailing, spacing: 10) {
-            HStack(alignment: .center, spacing: 22) {
-                lineButton("minus", label: "Zoom out") { zoom = max(0.60, zoom - 0.10) }
-                Text("\(Int(zoom * 100))%")
-                    .font(CanvasTypography.data())
-                    .foregroundStyle(CanvasPalette.ink45)
-                    .monospacedDigit()
-                lineButton("plus", label: "Zoom in") { zoom = min(1.40, zoom + 0.10) }
-                lineButton("gearshape", label: "Settings") { settingsOpen = true }
-            }
-            ReaderLayoutToggle(layout: layout, setLayout: setLayout)
+        HStack(alignment: .center, spacing: 22) {
+            lineButton("minus", label: "Zoom out") { zoom = max(0.60, zoom - 0.10) }
+            Text("\(Int(zoom * 100))%")
+                .font(CanvasTypography.data())
+                .foregroundStyle(CanvasPalette.ink45)
+                .monospacedDigit()
+            lineButton("plus", label: "Zoom in") { zoom = min(1.40, zoom + 0.10) }
+            lineButton("gearshape", label: "Settings") { settingsOpen = true }
         }
         .frame(maxWidth: 420, alignment: .trailing)
     }
@@ -292,6 +285,7 @@ private struct CaptureReadingView: View {
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
     let zoom: CGFloat
     let layoutRaw: String
+    let setLayout: (ReaderLayout) -> Void
     @State private var activeCaptureID: UUID?
     @State private var tab: ReaderTab = .raw
     @State private var captureTick = 0
@@ -358,9 +352,16 @@ private struct CaptureReadingView: View {
             .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: layoutRaw)
             .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.88), value: zoom)
 
-            ReaderTabBar(selection: $tab)
-                .padding(.top, 78)
-                .zIndex(2)
+            ZStack {
+                ReaderTabBar(selection: $tab)
+                HStack {
+                    Spacer()
+                    ReaderLayoutToggle(layout: layout, setLayout: setLayout)
+                }
+                .padding(.horizontal, CanvasPalette.pageMargin)
+            }
+            .padding(.top, 104)
+            .zIndex(2)
 
             // Where a new capture arrives — the top of the stream.
             InkCaptureBloom(trigger: captureTick)
