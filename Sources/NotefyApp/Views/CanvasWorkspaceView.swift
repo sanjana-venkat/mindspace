@@ -371,7 +371,12 @@ private struct CaptureReadingView: View {
             // posture switch stay the size the pointer expects them to be.
             .scaleEffect(zoom, anchor: .top)
             .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: tab)
-            .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: layoutRaw)
+            // No animation on the layout swap. The ink covers the screen
+            // completely at the wipe's midpoint, which is when layoutRaw
+            // changes — so a 280ms crossfade here was invisible for its first
+            // half and then dissolved underneath the ink pulling back. That
+            // was the slowness, not the wipe: the wipe is ~110ms and this was
+            // stacked on top of it.
             .animation(reduceMotion ? nil : .spring(response: 0.34, dampingFraction: 0.88), value: zoom)
 
             ZStack {
@@ -859,15 +864,18 @@ private struct GridCaptureTile: View {
         if let path = step.screenshotPath, let image = NSImage(contentsOfFile: path) {
             // Images bleed to the plate's inner width, framed by the same
             // hairline as the plate and with no radius of their own.
-            // Capped, so a tall screenshot cannot run a column off the
-            // screen and push every other plate out of view. The user's own
-            // note is never capped — only the captured material is.
+            // No height cap and no clipping: the capture is the thing being
+            // looked at, so it takes the plate's full width and whatever
+            // height its aspect ratio asks for.
+            //
+            // The cap was doing two kinds of damage. It cropped tall captures
+            // outright, and because the frame stayed full-width while the
+            // image shrank to fit 260pt, the hairline traced an empty box
+            // with the capture floating in the middle of it.
             Image(nsImage: image)
                 .resizable()
                 .scaledToFit()
                 .frame(maxWidth: .infinity)
-                .frame(maxHeight: 260)
-                .clipped()
                 .overlay(Rectangle().stroke(CanvasPalette.ink12, lineWidth: 1))
         } else if let body = primaryText, !body.isEmpty {
             Text(body)
