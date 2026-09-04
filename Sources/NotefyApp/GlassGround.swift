@@ -45,7 +45,7 @@ enum GlassTokens {
     /// appearance is a brightened, desaturated material whose floor is light
     /// whatever the wallpaper is, and the window is pinned to light. The
     /// title therefore keeps a light backing at this alpha.
-    static let paper = Color(hex: 0xF4F0E8, opacity: 0.42)
+    static let paper = Color(hex: 0xF4F0E8, opacity: 0.38)
     /// Plates are a second pane, deliberately more opaque than the window.
     static let paperPlate = Color(hex: 0xF8F5EF, opacity: 0.86)
     /// A selected plate lifts by getting MORE SOLID, never by a shadow.
@@ -141,14 +141,47 @@ struct GroundSurfaceView: View {
                 VisualEffectGround()
                 GlassTokens.paper
                 GlassSheen()
+                GlassEdge()
             }
         }
         .ignoresSafeArea()
     }
 }
 
-/// assets/glass-sheen.svg: one soft diagonal highlight at 4%. Grain is a
-/// paper property and is removed on glass — a frosted pane has no tooth.
+/// The rim of the pane.
+///
+/// This is what was missing: a sheet of glass is read at its EDGE, where the
+/// thickness catches light, far more than across its face. Without it the
+/// window was a tinted rectangle; with it the whole surface resolves as a
+/// slab. Brighter along the top where light would land, fading down the
+/// sides, and inset by half a point so it sits on the window's own rounded
+/// corner rather than beside it.
+struct GlassEdge: View {
+    /// macOS window corner radius.
+    private let corner: CGFloat = 11
+
+    var body: some View {
+        RoundedRectangle(cornerRadius: corner, style: .continuous)
+            .strokeBorder(
+                LinearGradient(
+                    stops: [
+                        .init(color: .white.opacity(0.62), location: 0.00),
+                        .init(color: .white.opacity(0.28), location: 0.28),
+                        .init(color: .white.opacity(0.10), location: 0.62),
+                        .init(color: .white.opacity(0.22), location: 1.00),
+                    ],
+                    startPoint: .top, endPoint: .bottom
+                ),
+                lineWidth: 1
+            )
+            .allowsHitTesting(false)
+    }
+}
+
+/// assets/glass-sheen.svg: one soft diagonal highlight. Grain is a paper
+/// property and is removed on glass — a frosted pane has no tooth. Raised
+/// from the spec's 4% because at 4% over a 38% tint it was not readable as
+/// light on a surface.
 struct GlassSheen: View {
     var body: some View {
         LinearGradient(
@@ -161,7 +194,7 @@ struct GlassSheen: View {
             startPoint: .topLeading,
             endPoint: .bottomTrailing
         )
-        .opacity(0.04)
+        .opacity(0.07)
         .allowsHitTesting(false)
     }
 }
