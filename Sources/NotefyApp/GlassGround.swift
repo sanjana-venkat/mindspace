@@ -57,41 +57,27 @@ enum GlassTokens {
     static let ink12 = Color(hex: 0x1C1B19, opacity: 0.14)
 }
 
-/// `NSVisualEffectView` blending with what is behind the WINDOW. `.withinWindow`
-/// would only frost the app's own background and look like a flat fill.
-struct VisualEffectGround: NSViewRepresentable {
-    func makeNSView(context: Context) -> NSVisualEffectView {
-        let view = NSVisualEffectView()
-        view.material = .underWindowBackground
-        view.blendingMode = .behindWindow
-        // Keeps the pane frosted when Noted is not frontmost. Without it the
-        // window goes grey and flat the moment you click away, which is the
-        // opposite of a pane of glass.
-        view.state = .active
-        view.isEmphasized = false
-        return view
-    }
-
-    func updateNSView(_ view: NSVisualEffectView, context: Context) {
-        view.state = .active
-    }
-}
-
-/// A window cannot show anything behind it while it is opaque and painting
-/// its own background.
+/// Installs the frost directly into the window.
 ///
-/// The first version of this poked the window from `DispatchQueue.main.async`
-/// inside `makeNSView`, which is a race: at that moment the view usually has
-/// no window yet, and SwiftUI does not reliably call `updateNSView` again
-/// afterwards, so the poke silently did nothing. `viewDidMoveToWindow` fires
-/// exactly when the window becomes available, which is the whole point of it.
+/// The SwiftUI route did not work and the diagnostics said so plainly: with
+/// `VisualEffectGround` declared inside the canvas's ZStack, a dump of the
+/// window's view hierarchy contained no `NSVisualEffectView` at all, at
+/// launch or three seconds later. SwiftUI was drawing the ground's colours
+/// into a layer and never realising the representable in that position, so
+/// there was never any blur — what looked like glass was just a
+/// non-opaque window behind a 38% tint, which is why it read as "too
+/// subtle and not frosted".
 ///
-/// SwiftUI also resets the background when the scene re-renders, so the
-/// configuration is reapplied on every update rather than assumed to stick.
+/// So the effect view is added to the window's contentView as the
+/// bottom-most subview, by hand. No SwiftUI involved, nothing to be
+/// optimised away, and it survives re-renders because we look for an
+/// existing one before adding another.
 private final class WindowConfiguringView: NSView {
     var glass: Bool = false {
         didSet { configure() }
     }
+
+    private static let tag = 0x6E074D
 
     override func viewDidMoveToWindow() {
         super.viewDidMoveToWindow()
@@ -99,16 +85,46 @@ private final class WindowConfiguringView: NSView {
     }
 
     func configure() {
-        guard let window else { return }
+        guard let window, let content = window.contentView else { return }
+
         window.isOpaque = !glass
         window.backgroundColor = glass ? .clear : .windowBackgroundColor
         window.hasShadow = true
-        // The content view's own backing layer will happily paint an opaque
-        // colour over the vibrancy if it has one.
-        window.contentView?.wantsLayer = true
-        window.contentView?.layer?.backgroundColor = glass
-            ? NSColor.clear.cgColor
-            : NSColor.windowBackgroundColor.cgColor
+        content.wantsLayer = true
+        content.layer?.backgroundColor = glass ? NSColor.clear.cgColor
+                                               : NSColor.windowBackgroundColor.cgColor
+
+        // The window's contentView IS SwiftUI's hosting view, and SwiftUI
+        // draws into that view's LAYER while representables become its
+        // subviews. So a subview added here lands on top of the whole app —
+        // which is exactly what happened: the frost worked and hid every
+        // plate behind it. The frost has to go into the hosting view's
+        // superview, beneath the hosting view itself.
+        guard let frameView = content.superview else { return }
+
+        let existing = frameView.subviews.first { $0.tag == Self.tag } as? NSVisualEffectView
+
+        guard glass else {
+            existing?.removeFromSuperview()
+            return
+        }
+
+        let effect = existing ?? {
+            let v = TaggedVisualEffectView()
+            v.autoresizingMask = [.width, .height]
+            frameView.addSubview(v, positioned: .below, relativeTo: content)
+            return v
+        }()
+        // `.sidebar` frosts harder than `.underWindowBackground`; the point
+        // here is that the blur is visible, not that it is tasteful.
+        effect.material = .sidebar
+        effect.blendingMode = .behindWindow
+        effect.state = .active
+        effect.frame = content.frame
+    }
+
+    private final class TaggedVisualEffectView: NSVisualEffectView {
+        override var tag: Int { 0x6E074D }
     }
 }
 
@@ -138,7 +154,8 @@ struct GroundSurfaceView: View {
             case .paper:
                 paper
             case .glass:
-                VisualEffectGround()
+                // The frost itself is installed into the window by
+                // WindowConfiguringView and sits beneath all of this.
                 GlassTokens.paper
                 GlassSheen()
                 GlassEdge()
