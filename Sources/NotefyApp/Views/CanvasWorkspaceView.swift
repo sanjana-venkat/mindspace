@@ -172,6 +172,10 @@ struct CanvasWorkspaceView: View {
     }
 }
 
+/// Chrome with the containers removed. The pills, the capsule toolbars and
+/// the filled toggle were generic app chrome — they belong to any Electron
+/// app. What is left is line icons on the page, and a printer's mark under
+/// whichever one is active.
 private struct CanvasToolbar: View {
     let title: String
     let subtitle: String
@@ -180,66 +184,86 @@ private struct CanvasToolbar: View {
     @Binding var zoom: CGFloat
 
     var body: some View {
-        ZStack {
-            HStack(spacing: 12) {
-                // The note switcher. Two lines because the folder is context
-                // for the title, not a peer of it — and the chevron is pinned
-                // to the pill's trailing edge rather than trailing the title,
-                // so it reads as the control's affordance instead of drifting
-                // with whatever the note happens to be called.
-                Button {
-                    withAnimation(.spring(response: 0.36, dampingFraction: 0.86)) { foldersOpen.toggle() }
-                } label: {
-                    HStack(spacing: 10) {
-                        CanvasBrandIcon()
-                        VStack(alignment: .leading, spacing: 1) {
-                            Text(subtitle.uppercased())
-                                .font(CanvasTypography.mark(8)).tracking(1.1)
-                                .opacity(0.45)
-                            Text(title)
-                                .font(.system(size: 13, weight: .semibold))
-                                .lineLimit(1)
-                        }
-                        Spacer(minLength: 10)
-                        Image(systemName: "chevron.down")
-                            .font(.system(size: 9, weight: .bold))
-                            .rotationEffect(.degrees(foldersOpen ? 180 : 0))
-                            .opacity(0.55)
-                    }
-                    .padding(.horizontal, 15).frame(height: 46)
-                    .frame(width: 250, alignment: .leading)
-                    .background(CanvasPalette.paper.opacity(0.72), in: Capsule())
-                    .overlay(Capsule().stroke(CanvasPalette.ink.opacity(0.10)))
-                }
-                .buttonStyle(.plain)
-                .help("Switch note")
-
-                Spacer()
-
-                // Zoom belongs with the captures now that they are what the
-                // window actually holds.
-                HStack(spacing: 8) {
-                    Button { zoom = max(0.60, zoom - 0.10) } label: { Image(systemName: "minus") }
-                        .help("Zoom out")
-                    Text("\(Int(zoom * 100))%")
-                        .font(CanvasTypography.mark(10))
-                        .frame(width: 38)
-                    Button { zoom = min(1.40, zoom + 0.10) } label: { Image(systemName: "plus") }
-                        .help("Zoom in")
-                    Divider().frame(height: 18).opacity(0.25)
-                    Button { settingsOpen = true } label: { Image(systemName: "gearshape") }
-                        .help("Settings")
-                        .accessibilityLabel("Settings")
-                }
-                .buttonStyle(.plain)
-                .padding(.horizontal, 13).frame(height: 46)
-                .background(CanvasPalette.paper.opacity(0.72), in: Capsule())
-                .overlay(Capsule().stroke(CanvasPalette.ink.opacity(0.10)))
-            }
-
-            CanvasBrandMark()
+        HStack(alignment: .center) {
+            breadcrumb
+            Spacer()
+            wordmark
+            Spacer()
+            chrome
         }
-        .padding(.horizontal, 24).padding(.top, 20)
+        .padding(.horizontal, CanvasPalette.pageMargin)
+        .padding(.top, 26)
+    }
+
+    /// No pill. The folder sits in meta italic, the note in the text face, a
+    /// caret after it — set on the page rather than in a container.
+    private var breadcrumb: some View {
+        Button {
+            withAnimation(.easeOut(duration: 0.16)) { foldersOpen.toggle() }
+        } label: {
+            HStack(alignment: .firstTextBaseline, spacing: 9) {
+                Text(subtitle)
+                    .font(CanvasTypography.meta())
+                    .foregroundStyle(CanvasPalette.ink55)
+                Text(title)
+                    .font(CanvasTypography.text(15))
+                    .foregroundStyle(CanvasPalette.ink)
+                    .lineLimit(1)
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .regular))
+                    .foregroundStyle(CanvasPalette.ink55)
+                    .rotationEffect(.degrees(foldersOpen ? 180 : 0))
+            }
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .frame(maxWidth: 320, alignment: .leading)
+    }
+
+    private var wordmark: some View {
+        Text("noted")
+            .font(CanvasTypography.wordmark)
+            .tracking(-0.02 * 28)
+            .foregroundStyle(CanvasPalette.ink)
+            .accessibilityLabel("Noted")
+    }
+
+    private var chrome: some View {
+        HStack(spacing: 22) {
+            lineButton("minus", label: "Zoom out") { zoom = max(0.60, zoom - 0.10) }
+            Text("\(Int(zoom * 100))%")
+                .font(CanvasTypography.data())
+                .foregroundStyle(CanvasPalette.ink45)
+                .monospacedDigit()
+            lineButton("plus", label: "Zoom in") { zoom = min(1.40, zoom + 0.10) }
+            lineButton("gearshape", label: "Settings") { settingsOpen = true }
+        }
+        .frame(maxWidth: 320, alignment: .trailing)
+    }
+
+    private func lineButton(_ system: String, label: String, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Image(systemName: system)
+                .font(.system(size: 13, weight: .light))
+                .foregroundStyle(CanvasPalette.ink70)
+                .frame(width: 32, height: 32)
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .help(label)
+        .accessibilityLabel(label)
+    }
+}
+
+/// The active-state mark: a 6px ink dot beneath the control, the way a
+/// printer marks a plate. Not a filled button.
+private struct PrintersMark: View {
+    let active: Bool
+    var body: some View {
+        Circle()
+            .fill(CanvasPalette.ink)
+            .frame(width: 6, height: 6)
+            .opacity(active ? 1 : 0)
     }
 }
 
@@ -342,69 +366,85 @@ private struct CaptureReadingView: View {
         }
     }
 
+    /// A typeset text column: title, a short drop rule, then body on a 62ch
+    /// measure. No eyebrow — the title's size is the hierarchy.
     private var rawNoteColumn: some View {
-        VStack(alignment: .leading, spacing: 16) {
-            Text(appState.activeNoteURL.map { appState.folderPath(for: appState.folderID(for: $0)) }.flatMap { $0.isEmpty ? nil : $0.uppercased() } ?? "NOTE")
-                .font(CanvasTypography.mark(10)).tracking(1.5).opacity(0.48)
+        VStack(alignment: .leading, spacing: 14) {
             TextField("Untitled note", text: $appState.noteTitle)
                 .textFieldStyle(.plain)
-                .font(CanvasTypography.noteTitle)
-                .tracking(CanvasTypography.titleTracking)
-                .lineSpacing(CanvasTypography.titleLineSpacing)
+                .font(CanvasTypography.noteTitleReader)
+                .tracking(-0.02 * 56)
+                .foregroundStyle(CanvasPalette.ink)
                 .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
+
+            Rectangle()
+                .fill(CanvasPalette.ink)
+                .frame(width: 56, height: 1.5)
 
             ZStack(alignment: .topLeading) {
                 if activeNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                     Text("Write the note you want to keep beside these captures…")
-                        .font(CanvasTypography.noteBody).italic().opacity(0.42)
-                        .padding(.top, 7).padding(.leading, 5).allowsHitTesting(false)
+                        .font(CanvasTypography.meta(14))
+                        .foregroundStyle(CanvasPalette.ink30)
+                        .padding(.top, 8).padding(.leading, 5)
+                        .allowsHitTesting(false)
                 }
                 TextEditor(text: activeNoteBinding)
                     .id(activeCaptureID)
-                    .font(CanvasTypography.noteBody)
-                    .lineSpacing(7).scrollContentBackground(.hidden)
+                    .font(CanvasTypography.text())
+                    .lineSpacing(CanvasTypography.bodyLineSpacing)
+                    .foregroundStyle(CanvasPalette.ink)
+                    .scrollContentBackground(.hidden)
                     .background(.clear)
             }
             .frame(maxHeight: .infinity)
-            .animation(reduceMotion ? .linear(duration: 0.10) : .easeInOut(duration: 0.24), value: activeCaptureID)
         }
-        .padding(.horizontal, 38).padding(.top, 108).padding(.bottom, 32)
-        .background(CanvasPalette.paper.opacity(0.32))
-        // The gutter rule. A magazine spread separates its standing column
-        // from the running material with a hairline, not with a colour block.
+        .frame(maxWidth: CanvasPalette.measure, alignment: .leading)
+        .padding(.horizontal, CanvasPalette.pageMargin)
+        .padding(.top, 108).padding(.bottom, 32)
+        // The column divider is a single hairline, not a fill.
         .overlay(alignment: .trailing) {
-            Rectangle()
-                .fill(CanvasPalette.inkBlue.opacity(0.14))
-                .frame(width: 0.75)
-                .padding(.vertical, 96)
+            Rectangle().fill(CanvasPalette.ink12).frame(width: 1)
         }
     }
 
+    /// Fragments as marginalia: the same plates as grid view, narrower.
     private var captureColumn: some View {
-        GeometryReader { proxy in
+        Group {
             if appState.steps.isEmpty {
-                ContentUnavailableView(
-                    "No captures yet",
-                    systemImage: "viewfinder",
-                    description: Text("Use Kami or a capture shortcut to add the first source.")
-                )
-                .foregroundStyle(CanvasPalette.ink)
+                VStack(spacing: 10) {
+                    Text("Nothing captured yet")
+                        .font(CanvasTypography.display(24, 300))
+                        .foregroundStyle(CanvasPalette.ink)
+                    Text("Use Kami or a capture shortcut to add the first fragment.")
+                        .font(CanvasTypography.meta(14))
+                        .foregroundStyle(CanvasPalette.ink55)
+                }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
             } else {
                 ScrollView {
-                    LazyVStack(spacing: 28) {
+                    LazyVStack(spacing: CanvasPalette.gutter) {
                         ForEach(Array(appState.steps.reversed())) { step in
-                            LiveCaptureCard(step: step, height: min(proxy.size.height * 0.74, 610))
-                                .id(step.id)
-                                .onAppear {
-                                    withAnimation(.easeInOut(duration: 0.28)) { activeCaptureID = step.id }
-                                }
+                            GridCaptureTile(
+                                step: step,
+                                selected: step.id == activeCaptureID,
+                                note: Binding(
+                                    get: { appState.stepAnnotations[step.id] ?? "" },
+                                    set: {
+                                        appState.stepAnnotations[step.id] = $0
+                                        appState.scheduleActiveNoteAutosave()
+                                    }
+                                )
+                            )
+                            .id(step.id)
+                            .onAppear {
+                                withAnimation(.easeOut(duration: 0.16)) { activeCaptureID = step.id }
+                            }
                         }
                     }
-                    .scrollTargetLayout()
-                    .padding(.horizontal, 38).padding(.vertical, proxy.size.height * 0.13)
+                    .padding(.horizontal, CanvasPalette.pageMargin)
+                    .padding(.vertical, 40)
                 }
-                .scrollTargetBehavior(.viewAligned)
                 .scrollIndicators(.hidden)
             }
         }
@@ -416,45 +456,30 @@ private struct CaptureReadingView: View {
 /// the app is doing.
 private struct ReaderLayoutToggle: View {
     let layout: ReaderLayout
-    /// The switch is wrapped in the ink wipe by the workspace, so this only
-    /// reports intent.
     let setLayout: (ReaderLayout) -> Void
-    @Namespace private var inkSelection
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: 18) {
             ForEach(ReaderLayout.allCases) { option in
                 let active = option == layout
                 Button {
                     guard !active else { return }
                     setLayout(option)
                 } label: {
-                    // Icon only. The label was carrying the same two words on
-                    // every screen for a control you use once and then leave
-                    // alone, and it made a persistent chip wider than the tab
-                    // bar it sits opposite. The name lives in the tooltip.
-                    Image(systemName: option.icon)
-                        .font(.system(size: 13, weight: .semibold))
-                        .foregroundStyle(active ? CanvasPalette.paper : CanvasPalette.ink.opacity(0.54))
-                        .frame(width: 40, height: 34)
-                        .background {
-                            if active {
-                                InkPillShape(variation: option == .grid ? 0 : 1)
-                                    .fill(CanvasPalette.inkBlue)
-                                    .matchedGeometryEffect(id: "ink-layout", in: inkSelection)
-                            }
-                        }
-                        .contentShape(Rectangle())
+                    VStack(spacing: 5) {
+                        Image(systemName: option.icon)
+                            .font(.system(size: 13, weight: .light))
+                            .foregroundStyle(active ? CanvasPalette.ink : CanvasPalette.ink70)
+                            .frame(width: 32, height: 24)
+                        PrintersMark(active: active)
+                    }
+                    .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help(option.rawValue)
                 .accessibilityLabel(option.rawValue)
             }
         }
-        .padding(4)
-        .background(CanvasPalette.paper.opacity(0.88), in: InkTabShape(dispersion: 0.22, seed: 5.4))
-        .overlay(InkTabShape(dispersion: 0.22, seed: 5.4).stroke(CanvasPalette.inkBlue.opacity(0.13)))
-        .shadow(color: CanvasPalette.clay.opacity(0.95), radius: 16, y: 5)
     }
 }
 
@@ -466,165 +491,138 @@ private struct CaptureGridView: View {
     @EnvironmentObject private var appState: AppState
     @Binding var activeCaptureID: UUID?
 
-    /// The capture currently under the pointer's drag. Held here rather than
-    /// read out of the drop payload so reordering can happen on hover.
     @State private var draggingID: UUID?
     @FocusState private var titleFocused: Bool
 
-    private let columns = [GridItem(.adaptive(minimum: 300, maximum: 380), spacing: 24)]
+    var body: some View {
+        GeometryReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 40) {
+                    head
+                    masonry(width: proxy.size.width)
+                }
+                .padding(.horizontal, CanvasPalette.pageMargin)
+                .padding(.bottom, 80)
+            }
+            .scrollIndicators(.hidden)
+            .focusable()
+            .onKeyPress(.leftArrow) { nudge(-1) }
+            .onKeyPress(.rightArrow) { nudge(1) }
+            .onDrop(of: [.utf8PlainText, .plainText, .text], isTargeted: nil) { _ in
+                draggingID = nil
+                return false
+            }
+        }
+        .overlay {
+            if appState.steps.isEmpty { emptyState }
+        }
+    }
 
-    /// Moves the selected capture one place along the grid. With nothing
-    /// selected yet, the first arrow press selects rather than moves — so the
-    /// key does something visible instead of nothing.
+    /// Headline, then a short drop rule. No eyebrow: the title's size IS the
+    /// hierarchy, which is the whole correction here.
+    private var head: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            TextField("Untitled note", text: $appState.noteTitle)
+                .textFieldStyle(.plain)
+                .font(CanvasTypography.noteTitleGrid)
+                .tracking(CanvasTypography.titleTracking)
+                .foregroundStyle(CanvasPalette.ink)
+                .focused($titleFocused)
+                .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
+
+            Rectangle()
+                .fill(CanvasPalette.ink)
+                .frame(width: 56, height: 1.5)
+
+            TextField("", text: Binding(
+                get: { appState.rawDraft },
+                set: { appState.rawDraft = $0; appState.scheduleActiveNoteAutosave() }
+            ), axis: .vertical)
+            .textFieldStyle(.plain)
+            .font(CanvasTypography.text())
+            .lineSpacing(CanvasTypography.bodyLineSpacing)
+            .foregroundStyle(CanvasPalette.ink)
+            .lineLimit(1...10)
+            .frame(maxWidth: CanvasPalette.measure, alignment: .leading)
+        }
+        .padding(.top, 8)
+    }
+
+    /// Content-sized plates in columns, so a two-line fragment is a two-line
+    /// plate instead of a tall empty box. SwiftUI has no masonry, and a
+    /// LazyVGrid row is only as short as its tallest cell — hence real
+    /// columns, filled round-robin.
+    private func masonry(width: CGFloat) -> some View {
+        let available = width - CanvasPalette.pageMargin * 2
+        let columns = available >= 1280 - 96 ? 3 : (available >= 900 - 96 ? 2 : 1)
+        let ordered = Array(appState.steps.reversed())
+        return HStack(alignment: .top, spacing: CanvasPalette.gutter) {
+            ForEach(0..<columns, id: \.self) { column in
+                VStack(alignment: .leading, spacing: CanvasPalette.gutter) {
+                    ForEach(Array(ordered.enumerated()).filter { $0.offset % columns == column },
+                            id: \.element.id) { _, step in
+                        plate(step)
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .top)
+            }
+        }
+    }
+
+    private func plate(_ step: ExplorationStep) -> some View {
+        GridCaptureTile(
+            step: step,
+            selected: step.id == activeCaptureID,
+            note: binding(for: step)
+        )
+        .id(step.id)
+        .opacity(draggingID == step.id ? 0.35 : 1)
+        .simultaneousGesture(TapGesture().onEnded { activeCaptureID = step.id })
+        .onDrag {
+            draggingID = step.id
+            return NSItemProvider(object: step.id.uuidString as NSString)
+        }
+        .onDrop(
+            of: [.utf8PlainText, .plainText, .text],
+            delegate: CaptureReorderDelegate(
+                target: step.id,
+                dragging: $draggingID,
+                move: appState.moveCapture
+            )
+        )
+    }
+
+    private func binding(for step: ExplorationStep) -> Binding<String> {
+        Binding(
+            get: { appState.stepAnnotations[step.id] ?? "" },
+            set: {
+                appState.stepAnnotations[step.id] = $0
+                appState.scheduleActiveNoteAutosave()
+            }
+        )
+    }
+
+    private var emptyState: some View {
+        VStack(spacing: 10) {
+            Text("Nothing captured yet")
+                .font(CanvasTypography.display(26, 300))
+                .foregroundStyle(CanvasPalette.ink)
+            Text("Use Kami or a capture shortcut to add the first fragment.")
+                .font(CanvasTypography.meta(14))
+                .foregroundStyle(CanvasPalette.ink55)
+        }
+    }
+
     private func nudge(_ delta: Int) -> KeyPress.Result {
         guard !appState.steps.isEmpty else { return .ignored }
         guard let id = activeCaptureID else {
             activeCaptureID = appState.steps.reversed().first?.id
             return .handled
         }
-        withAnimation(.spring(response: 0.40, dampingFraction: 0.82)) {
+        withAnimation(.easeOut(duration: 0.16)) {
             _ = appState.nudgeCapture(id, by: delta)
         }
         return .handled
-    }
-
-    private var runningHeadLeft: String {
-        let folder = appState.activeNoteURL
-            .map { appState.folderPath(for: appState.folderID(for: $0)) } ?? ""
-        return (folder.isEmpty ? "UNFILED" : folder.uppercased())
-    }
-
-    private var runningHeadRight: String {
-        let count = appState.steps.count
-        let plates = count == 1 ? "1 CAPTURE" : "\(count) CAPTURES"
-        let date = (appState.steps.last?.timestamp ?? Date())
-            .formatted(.dateTime.month(.abbreviated).day())
-            .uppercased()
-        return "\(plates) · \(date)"
-    }
-
-    var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 14) {
-                VStack(alignment: .leading, spacing: 4) {
-                    // The running head. Every magazine page carries one:
-                    // where you are on the left, the folio on the right, a
-                    // rule under both. All of it is information the app
-                    // already had — it was just never set like print.
-                    VStack(spacing: 5) {
-                        Rectangle().fill(CanvasPalette.ink.opacity(0.55)).frame(height: 1.5)
-                        HStack {
-                            Text(runningHeadLeft)
-                                .font(CanvasTypography.mark(9)).tracking(1.6)
-                            Spacer()
-                            Text(runningHeadRight)
-                                .font(CanvasTypography.mark(9)).tracking(1.6)
-                        }
-                        .opacity(0.55)
-                        Rectangle().fill(CanvasPalette.ink.opacity(0.18)).frame(height: 0.5)
-                    }
-                    .padding(.bottom, 10)
-
-                    VStack(alignment: .leading, spacing: 0) {
-                        TextField("Untitled note", text: $appState.noteTitle)
-                            .textFieldStyle(.plain)
-                            .font(CanvasTypography.noteTitle)
-                            .tracking(CanvasTypography.titleTracking)
-                            .focused($titleFocused)
-                            .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
-                        InkUnderline(active: titleFocused)
-                    }
-
-                    // A vertical TextField rather than a TextEditor: it grows
-                    // with what you write instead of reserving a fixed block
-                    // of empty height, so an empty note costs one line rather
-                    // than a gap the width of the page. No placeholder — the
-                    // heading above already says what this is.
-                    TextField("", text: Binding(
-                        get: { appState.rawDraft },
-                        set: { appState.rawDraft = $0; appState.scheduleActiveNoteAutosave() }
-                    ), axis: .vertical)
-                    .textFieldStyle(.plain)
-                    .font(CanvasTypography.noteBody)
-                    .lineLimit(1...8)
-
-                    // The rule that closes the deck and opens the plates.
-                    Rectangle()
-                        .fill(CanvasPalette.ink.opacity(0.55))
-                        .frame(height: 1.5)
-                        .padding(.top, 12)
-                }
-                .frame(maxWidth: 620, alignment: .leading)
-
-                LazyVGrid(columns: columns, alignment: .leading, spacing: 24) {
-                ForEach(Array(appState.steps.reversed().enumerated()), id: \.element.id) { index, step in
-                    GridCaptureTile(
-                        step: step,
-                        plate: index + 1,
-                        selected: step.id == activeCaptureID,
-                        note: Binding(
-                            get: { appState.stepAnnotations[step.id] ?? "" },
-                            set: {
-                                appState.stepAnnotations[step.id] = $0
-                                appState.scheduleActiveNoteAutosave()
-                            }
-                        )
-                    )
-                        .id(step.id)
-                        .opacity(draggingID == step.id ? 0.35 : 1)
-                        // simultaneousGesture, not onTapGesture: a plain tap
-                        // gesture claims the mouse-down and the drag session
-                        // never starts, which is why these tiles could not be
-                        // moved at all. A simultaneous recogniser lets the
-                        // drag through and still selects on a clean click.
-                        .simultaneousGesture(
-                            TapGesture().onEnded { activeCaptureID = step.id }
-                        )
-                        // onDrag/onDrop rather than draggable/dropDestination:
-                        // the newer pair silently refuses to start a drag on
-                        // macOS when the dragged view holds rich content like
-                        // an NSImage and its own tap targets, which is exactly
-                        // what a capture tile is.
-                        .onDrag {
-                            draggingID = step.id
-                            return NSItemProvider(object: step.id.uuidString as NSString)
-                        }
-                        .onDrop(
-                            of: [.utf8PlainText, .plainText, .text],
-                            delegate: CaptureReorderDelegate(
-                                target: step.id,
-                                dragging: $draggingID,
-                                move: appState.moveCapture
-                            )
-                        )
-                }
-                }
-            }
-            .padding(.horizontal, 38)
-            .padding(.bottom, 60)
-        }
-        .scrollIndicators(.hidden)
-        .focusable()
-        // Same reordering the drag performs, from the keyboard. Left and
-        // right follow the grid's reading order, not storage order.
-        .onKeyPress(.leftArrow) { nudge(-1) }
-        .onKeyPress(.rightArrow) { nudge(1) }
-        .onDrop(of: [.utf8PlainText, .plainText, .text], isTargeted: nil) { _ in
-            // Released over the gaps between tiles: nothing to reorder
-            // against, but the drag is over, so stop dimming the source.
-            draggingID = nil
-            return false
-        }
-        .overlay {
-            if appState.steps.isEmpty {
-                ContentUnavailableView(
-                    "No captures yet",
-                    systemImage: "square.grid.2x2",
-                    description: Text("Use Kami or a capture shortcut to add the first source.")
-                )
-                .foregroundStyle(CanvasPalette.ink)
-            }
-        }
     }
 }
 
@@ -662,201 +660,220 @@ private struct CaptureReorderDelegate: DropDelegate {
 /// above and the source below — the same rule the panel-view card follows.
 /// The editor's slip: the note you wrote, laid on the clipping and taped
 /// down. Paper a shade lighter than the card it sits on, a fraction off
-/// square, with two pieces of tape over the corners. Same field, same place,
-/// same behaviour — only the material changed.
-private struct SlipBacking: ViewModifier {
-    let taped: Bool
-    let seed: Int
-
-    func body(content: Content) -> some View {
-        if taped {
-            TapedSlip(tilt: seed % 2 == 0 ? -0.7 : 0.6, seed: seed) { content }
-                .padding(.top, 10)
-        } else {
-            // Nothing written yet: a bare rule, so an untouched clipping
-            // stays a clipping and the grid keeps its unevenness.
-            content
-                .padding(.top, 8)
-                .overlay(alignment: .top) {
-                    Rectangle()
-                        .fill(CanvasPalette.inkBlue.opacity(0.14))
-                        .frame(height: 0.75)
-                }
-        }
-    }
-}
-
-private struct TapedSlip<Content: View>: View {
-    let tilt: Double
-    let seed: Int
-    @ViewBuilder var content: Content
+/// The fragment marks from assets/fragment-glyphs.svg, drawn as paths at a
+/// 1px stroke on a 14x14 box. Line icons only — the brief bans filled icons,
+/// and a filled glyph beside italic meta would read as a badge.
+private struct FragmentGlyph: View {
+    enum Kind { case voice, capture, text, audio }
+    let kind: Kind
 
     var body: some View {
-        content
-            .padding(.horizontal, 11)
-            .padding(.vertical, 9)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(CanvasPalette.slip)
-            .overlay(Rectangle().stroke(CanvasPalette.ink.opacity(0.07), lineWidth: 0.5))
-            .shadow(color: CanvasPalette.warmShadow.opacity(0.11), radius: 2.5, y: 1.5)
-            .overlay(alignment: .topLeading) {
-                tape.rotationEffect(.degrees(-21 + Double(seed % 5))).offset(x: -9, y: -6)
+        Canvas { context, size in
+            let s = min(size.width, size.height) / 14
+            func p(_ build: (inout Path) -> Void) -> Path {
+                var path = Path(); build(&path)
+                return path.applying(CGAffineTransform(scaleX: s, y: s))
             }
-            .overlay(alignment: .topTrailing) {
-                tape.rotationEffect(.degrees(16 - Double(seed % 4))).offset(x: 9, y: -6)
-            }
-            .rotationEffect(.degrees(tilt))
-    }
+            let stroke = StrokeStyle(lineWidth: 1, lineCap: .round, lineJoin: .round)
+            let shading = GraphicsContext.Shading.color(CanvasPalette.ink70)
 
-    /// Matte tape: warm, barely opaque, with a slightly darker edge where it
-    /// doubles over. No gloss — gloss would make it a sticker.
-    private var tape: some View {
-        Rectangle()
-            .fill(CanvasPalette.tape)
-            .frame(width: 32, height: 12)
-            .overlay(Rectangle().stroke(CanvasPalette.warmShadow.opacity(0.10), lineWidth: 0.5))
+            switch kind {
+            case .voice:
+                context.stroke(p { path in
+                    for (x, half) in [(2.5, 0.5), (5.0, 2.5), (7.0, 4.0), (9.0, 2.5), (11.5, 0.5)] {
+                        path.move(to: CGPoint(x: x, y: 7 - half))
+                        path.addLine(to: CGPoint(x: x, y: 7 + half))
+                    }
+                }, with: shading, style: stroke)
+            case .capture:
+                context.stroke(p { path in
+                    path.move(to: CGPoint(x: 2, y: 4.5)); path.addLine(to: CGPoint(x: 2, y: 2)); path.addLine(to: CGPoint(x: 4.5, y: 2))
+                    path.move(to: CGPoint(x: 9.5, y: 2)); path.addLine(to: CGPoint(x: 12, y: 2)); path.addLine(to: CGPoint(x: 12, y: 4.5))
+                    path.move(to: CGPoint(x: 12, y: 9.5)); path.addLine(to: CGPoint(x: 12, y: 12)); path.addLine(to: CGPoint(x: 9.5, y: 12))
+                    path.move(to: CGPoint(x: 4.5, y: 12)); path.addLine(to: CGPoint(x: 2, y: 12)); path.addLine(to: CGPoint(x: 2, y: 9.5))
+                    path.addEllipse(in: CGRect(x: 5.4, y: 5.4, width: 3.2, height: 3.2))
+                }, with: shading, style: stroke)
+            case .text:
+                context.stroke(p { path in
+                    for (y, x2) in [(3.5, 11.5), (7.0, 11.5), (10.5, 8.0)] {
+                        path.move(to: CGPoint(x: 2.5, y: y)); path.addLine(to: CGPoint(x: x2, y: y))
+                    }
+                }, with: shading, style: stroke)
+            case .audio:
+                context.stroke(p { path in
+                    path.move(to: CGPoint(x: 2.5, y: 5.5)); path.addLine(to: CGPoint(x: 4.5, y: 5.5))
+                    path.addLine(to: CGPoint(x: 7.5, y: 3)); path.addLine(to: CGPoint(x: 7.5, y: 11))
+                    path.addLine(to: CGPoint(x: 4.5, y: 8.5)); path.addLine(to: CGPoint(x: 2.5, y: 8.5))
+                    path.closeSubpath()
+                    path.move(to: CGPoint(x: 9.5, y: 5.2))
+                    path.addQuadCurve(to: CGPoint(x: 9.5, y: 8.8), control: CGPoint(x: 11.2, y: 7))
+                    path.move(to: CGPoint(x: 11.2, y: 3.5))
+                    path.addQuadCurve(to: CGPoint(x: 11.2, y: 10.5), control: CGPoint(x: 14.4, y: 7))
+                }, with: shading, style: stroke)
+            }
+        }
+        .frame(width: 14, height: 14)
+        .accessibilityHidden(true)
     }
 }
 
+/// A plate on a page, not a card.
+///
+/// No shadow, no fixed height, no dead space: it sizes to its content so a
+/// two-line fragment is a two-line plate. Hierarchy is size and position, so
+/// there is no eyebrow and no plate number. Rules appear inside it only where
+/// both sides have content, which is the difference between a rule that
+/// encodes structure and a rule that decorates.
 private struct GridCaptureTile: View {
     let step: ExplorationStep
-    /// Plate number. A magazine numbers its figures, and these ARE numbered:
-    /// it is the capture's place in the note, which the grid already lets you
-    /// change by dragging or with the arrow keys.
-    let plate: Int
     let selected: Bool
-    /// The note you wrote against THIS capture. In panel view it lives in the
-    /// left column and swaps as you scroll; here every capture carries its own
-    /// alongside it, which is the whole point of seeing them all at once.
     @Binding var note: String
 
     @FocusState private var noteFocused: Bool
+    @State private var hovering = false
 
+    // Split into parts deliberately: as one expression the plate body blew
+    // past the type-checker's budget.
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
-            HStack(spacing: 8) {
-                Text(String(format: "%02d", plate))
-                    .font(CanvasTypography.mark(9))
-                    .foregroundStyle(CanvasPalette.inkBlue)
-                    .opacity(0.85)
-                Rectangle().fill(CanvasPalette.ink.opacity(0.18))
-                    .frame(width: 14, height: 0.75)
-                Text("\(kindLabel) · \(step.timestamp.formatted(date: .omitted, time: .shortened))".uppercased())
-                    .opacity(0.45)
-                Spacer()
-                Image(systemName: kindIcon).opacity(0.45)
-            }
-            .font(CanvasTypography.mark(9)).tracking(1.0)
-
-            if let path = step.screenshotPath, let image = NSImage(contentsOfFile: path) {
-                Image(nsImage: image)
-                    .resizable().scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 4))
-                    // A clipping has a cut edge. One hairline and no shadow,
-                    // so the image sits IN the page rather than on top of it.
-                    .overlay(
-                        RoundedRectangle(cornerRadius: 4)
-                            .stroke(CanvasPalette.ink.opacity(0.12), lineWidth: 0.75)
-                    )
-            } else if let text = primaryText, !text.isEmpty {
-                // A magazine sets its material by length, not by type. A short
-                // fragment is a pull quote and takes the editorial face; a
-                // transcript is article copy and takes the reading face. Same
-                // data, same place, same behaviour — only the setting changes.
-                if text.count <= 120 {
-                    Text(text)
-                        .font(CanvasTypography.cardTitle)
-                        .tracking(-0.6)
-                        .lineSpacing(-2)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                } else {
-                    Text(text)
-                        .font(CanvasTypography.cardBody)
-                        .lineSpacing(5)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                }
-            }
-
-            ZStack(alignment: .topLeading) {
-                if noteFocused {
-                    TextEditor(text: $note)
-                        .focused($noteFocused)
-                        .font(CanvasTypography.cardBody)
-                        .lineSpacing(3)
-                        .scrollContentBackground(.hidden)
-                        .background(.clear)
-                } else if note.isEmpty {
-                    Text("ADD A NOTE")
-                        .font(CanvasTypography.mark(8)).tracking(1.2)
-                        .opacity(0.30)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                        .contentShape(Rectangle())
-                        .onTapGesture { noteFocused = true }
-                } else {
-                    Text(note)
-                        .font(CanvasTypography.cardBody)
-                        .lineSpacing(3)
-                        .lineLimit(3)
-                        .truncationMode(.tail)
-                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
-                        .contentShape(Rectangle())
-                        .onTapGesture { noteFocused = true }
-                }
-            }
-            .frame(height: 50)
-            .modifier(SlipBacking(taped: !note.isEmpty || noteFocused,
-                                  seed: abs(step.id.hashValue)))
-
-            VStack(alignment: .leading, spacing: 6) {
-                // A hairline over the caption, the way a printed caption sits
-                // under its rule. Ink, not grey — same pen as the rest.
-                Rectangle()
-                    .fill(CanvasPalette.inkBlue.opacity(0.16))
-                    .frame(height: 0.75)
-                Text(sourceLabel)
-                    .font(CanvasTypography.markRegular(9)).tracking(0.8)
-                    .opacity(0.50)
-                    .lineLimit(1).truncationMode(.middle)
-            }
+        VStack(alignment: .leading, spacing: 12) {
+            header
+            content
+            caption
+            footer
         }
-        .padding(18)
-        .frame(height: 420)
+        .padding(CanvasPalette.platePad)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CanvasPalette.sheet(for: step.id), in: RoundedRectangle(cornerRadius: 12))
-        .overlay {
-            if selected {
-                InkEdgeRect(corner: 12, amplitude: 1.0, seed: CGFloat(abs(step.id.hashValue % 17)))
-                    .stroke(CanvasPalette.inkBlue.opacity(0.42), lineWidth: 1.2)
-            } else {
-                RoundedRectangle(cornerRadius: 12)
-                    .stroke(CanvasPalette.ink.opacity(0.07), lineWidth: 1)
-            }
+        .background(CanvasPalette.paperPlate)
+        .clipShape(RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous))
+        .overlay(
+            RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous)
+                .stroke(borderColor, lineWidth: selected ? 1.5 : 1)
+        )
+        // Hover moves the hairline and nothing else. No lift, no scale, no
+        // shadow — those are what made these read as a SaaS card kit.
+        .onHover { hovering = $0 }
+        .animation(.easeOut(duration: 0.12), value: hovering)
+        .animation(.easeOut(duration: 0.12), value: selected)
+    }
+
+    private var header: some View {
+        HStack(spacing: 8) {
+            FragmentGlyph(kind: glyphKind)
+            Text(metaLine)
+                .font(CanvasTypography.meta())
+                .foregroundStyle(CanvasPalette.ink55)
+                .monospacedDigit()
+            Spacer(minLength: 0)
         }
-        // Barely there. A card should sit ON the paper, not hover above it —
-        // the old 14pt shadow was the single most SaaS thing on the screen.
-        .shadow(color: CanvasPalette.warmShadow.opacity(selected ? 0.10 : 0.05),
-                radius: selected ? 10 : 6, y: 2)
+    }
+
+    @ViewBuilder
+    private var content: some View {
+        if let path = step.screenshotPath, let image = NSImage(contentsOfFile: path) {
+            // Images bleed to the plate's inner width, framed by the same
+            // hairline as the plate and with no radius of their own.
+            Image(nsImage: image)
+                .resizable()
+                .scaledToFit()
+                .frame(maxWidth: .infinity)
+                .overlay(Rectangle().stroke(CanvasPalette.ink12, lineWidth: 1))
+        } else if let body = primaryText, !body.isEmpty {
+            Text(body)
+                .font(CanvasTypography.text())
+                .lineSpacing(CanvasTypography.bodyLineSpacing)
+                .foregroundStyle(CanvasPalette.ink)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
+    /// The annotation is a caption under its plate, in italic.
+    @ViewBuilder
+    private var caption: some View {
+        if noteFocused {
+            TextField("", text: $note, axis: .vertical)
+                .textFieldStyle(.plain)
+                .focused($noteFocused)
+                .font(CanvasTypography.meta(14))
+                .foregroundStyle(CanvasPalette.ink70)
+                .lineLimit(1...6)
+        } else {
+            Text(note.isEmpty ? "Add a note…" : note)
+                .font(CanvasTypography.meta(14))
+                .foregroundStyle(note.isEmpty ? CanvasPalette.ink30 : CanvasPalette.ink70)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .contentShape(Rectangle())
+                .onTapGesture { noteFocused = true }
+        }
+    }
+
+    /// The footer rule exists only when there is a footer to separate.
+    @ViewBuilder
+    private var footer: some View {
+        if !sourceLabel.isEmpty || urlString != nil {
+            VStack(alignment: .leading, spacing: 0) {
+                Rectangle().fill(CanvasPalette.ink12).frame(height: 1)
+                HStack(alignment: .firstTextBaseline, spacing: 12) {
+                    Text(sourceLabel)
+                        .font(CanvasTypography.meta())
+                        .foregroundStyle(CanvasPalette.ink55)
+                    Spacer(minLength: 8)
+                    if let urlString {
+                        // Mono survives here and nowhere else: a URL is
+                        // literally machine data.
+                        Text(urlString)
+                            .font(CanvasTypography.data())
+                            .foregroundStyle(CanvasPalette.ink45)
+                            .lineLimit(1)
+                            .truncationMode(.middle)
+                    }
+                }
+                .padding(.top, 12)
+            }
+            .padding(.top, 4)
+        }
+    }
+
+    private var borderColor: Color {
+        if selected { return CanvasPalette.accent }
+        return hovering ? CanvasPalette.ink30 : CanvasPalette.ink12
     }
 
     private var primaryText: String? { step.selectedText ?? step.pageText }
 
-    private var kindLabel: String {
-        step.screenshotPath != nil ? "Capture"
-            : (step.appName.localizedCaseInsensitiveContains("audio") ? "Voice" : "Text")
+    private var glyphKind: FragmentGlyph.Kind {
+        if step.screenshotPath != nil { return .capture }
+        if step.appName.localizedCaseInsensitiveContains("audio") { return .audio }
+        if step.appName == "Notefy Voice" { return .voice }
+        return .text
     }
-    private var kindIcon: String {
-        step.screenshotPath != nil ? "photo"
-            : (step.appName.localizedCaseInsensitiveContains("audio") ? "waveform" : "text.alignleft")
+
+    /// Sentence case, no middle dots, tabular time.
+    private var metaLine: String {
+        let kind: String
+        switch glyphKind {
+        case .capture: kind = "Capture"
+        case .audio: kind = "Audio"
+        case .voice: kind = "Voice"
+        case .text: kind = "Text"
+        }
+        let time = step.timestamp
+            .formatted(.dateTime.hour(.defaultDigits(amPM: .abbreviated)).minute())
+            .lowercased()
+        return "\(kind), \(time)"
     }
+
+    private var urlString: String? {
+        guard let url = step.url, let host = URL(string: url)?.host, !host.isEmpty else { return nil }
+        return host
+    }
+
     private var sourceLabel: String {
-        if let host = step.url.flatMap(URL.init(string:))?.host, !host.isEmpty { return host.uppercased() }
-        if step.appName == "Audio" { return "COMPUTER AUDIO" }
-        if ["Notefy", "Noted", "notefy-app"].contains(step.appName) { return "SCREEN REGION" }
+        if step.appName == "Audio" { return "Computer audio" }
+        if ["Notefy", "Noted", "notefy-app"].contains(step.appName) { return "Screen region" }
         let title = step.windowTitle.isEmpty ? step.appName : step.windowTitle
-        return title.uppercased()
+        return title
     }
 }
 
@@ -910,7 +927,6 @@ private struct ReaderTabBar: View {
         .padding(4)
         .background(CanvasPalette.paper.opacity(0.88), in: InkPillShape(variation: 2))
         .overlay(InkPillShape(variation: 2).stroke(CanvasPalette.inkBlue.opacity(0.13)))
-        .shadow(color: CanvasPalette.clay.opacity(0.95), radius: 16, y: 5)
         .frame(maxWidth: .infinity, alignment: .center)
     }
 }
@@ -960,9 +976,8 @@ private struct OrganizedEssayView: View {
                 }
                 .padding(.horizontal, 58).padding(.vertical, 48)
                 .frame(maxWidth: 820, minHeight: proxy.size.height - 48, alignment: .topLeading)
-                .background(CanvasPalette.paper.opacity(0.94), in: RoundedRectangle(cornerRadius: 12))
-                .overlay(RoundedRectangle(cornerRadius: 12).stroke(CanvasPalette.inkBlue.opacity(0.10)))
-                .shadow(color: CanvasPalette.ink.opacity(0.11), radius: 18, y: 10)
+                .background(CanvasPalette.paperPlate, in: RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous).stroke(CanvasPalette.ink12))
                 .padding(.horizontal, max(32, (proxy.size.width - 820) / 2)).padding(.vertical, 28)
             }
             .scrollIndicators(.hidden)
@@ -1020,7 +1035,7 @@ private struct OrganizationPicker: View {
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
-                    Text("SHAPE THIS NOTE")
+                    Text("Shape this note")
                         .font(.system(size: 9, weight: .black, design: .monospaced)).tracking(1.4)
                         .foregroundStyle(CanvasPalette.inkBlue.opacity(0.58))
                     Spacer()
@@ -1045,7 +1060,7 @@ private struct OrganizationPicker: View {
                         }
                         .foregroundStyle(appState.organizedTemplate == template ? CanvasPalette.paper : CanvasPalette.ink)
                         .padding(.horizontal, 11).frame(height: 42)
-                        .background(appState.organizedTemplate == template ? CanvasPalette.inkBlue : .clear, in: RoundedRectangle(cornerRadius: 11))
+                        .background(appState.organizedTemplate == template ? CanvasPalette.inkBlue : .clear, in: RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous))
                     }
                     .buttonStyle(.plain)
                 }
@@ -1131,99 +1146,6 @@ private struct InkWritingLoader: View {
     }
 }
 
-private struct LiveCaptureCard: View {
-    let step: ExplorationStep
-    let height: CGFloat
-
-    var body: some View {
-        // The card IS the capture. Everything else is a caption around it:
-        // one mono line above, one below. The thought field is deliberately
-        // absent — a note belongs beside its capture, not inside it, and
-        // while it lived here it pushed the screenshot down to under half
-        // the card.
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("\(kindLabel) · \(step.timestamp.formatted(date: .omitted, time: .shortened))".uppercased())
-                Spacer()
-                Image(systemName: kindIcon)
-            }
-            .font(.custom("GeistMono-Medium", size: 10)).tracking(1.1).opacity(0.48)
-
-            if let path = step.screenshotPath, let image = NSImage(contentsOfFile: path) {
-                // Fills the card. `scaledToFit` against an unbounded frame
-                // grows the image until one axis meets the container, so the
-                // whole capture stays visible — scaledToFill would fill too,
-                // but by cropping the screenshot, which loses the thing the
-                // user actually kept.
-                Image(nsImage: image)
-                    .resizable()
-                    .scaledToFit()
-                    .frame(maxWidth: .infinity, maxHeight: .infinity)
-                    .clipShape(RoundedRectangle(cornerRadius: 8))
-            } else if let text = primaryText, !text.isEmpty {
-                // A text or voice capture has no image, so the words are the
-                // capture and they get the same room the screenshot would.
-                ScrollView {
-                    Text(text)
-                        .font(CanvasTypography.noteBody)
-                        .lineSpacing(6)
-                        .frame(maxWidth: .infinity, alignment: .leading)
-                }
-                .scrollIndicators(.hidden)
-                .frame(maxWidth: .infinity, maxHeight: .infinity)
-            }
-
-            HStack(spacing: 8) {
-                if let url = step.url, let destination = URL(string: url) {
-                    Link(sourceLabel, destination: destination)
-                        .font(.custom("GeistMono-Medium", size: 10)).tracking(0.9)
-                        .foregroundStyle(CanvasPalette.inkBlue)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                } else {
-                    Text(sourceLabel)
-                        .font(CanvasTypography.markRegular(10)).tracking(0.9)
-                        .opacity(0.55)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                Spacer(minLength: 8)
-                // When the capture came from a page, the source label is
-                // already that page's host — printing it again as a link
-                // just says the same word twice. Link the full URL instead,
-                // and only when it adds something.
-                if let url = step.url, let destination = URL(string: url),
-                   let host = destination.host(), host.uppercased() != sourceLabel {
-                    Link(host, destination: destination)
-                        .font(.custom("GeistMono-Medium", size: 10))
-                        .foregroundStyle(CanvasPalette.inkBlue)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-            }
-        }
-        .padding(24).frame(maxWidth: .infinity).frame(height: height)
-        .background(CanvasPalette.paper.opacity(0.93), in: RoundedRectangle(cornerRadius: 12))
-        .overlay(RoundedRectangle(cornerRadius: 12).stroke(CanvasPalette.ink.opacity(0.11)))
-        .shadow(color: CanvasPalette.ink.opacity(0.12), radius: 18, y: 10)
-    }
-
-    private var primaryText: String? { step.selectedText ?? step.pageText }
-
-    /// "Notefy" is the app capturing, not the thing captured — showing it
-    /// as the card's headline told the user nothing. Same mapping the
-    /// dashboard and the capture-review panel already use.
-    private var sourceLabel: String {
-        if let host = step.url.flatMap(URL.init(string:))?.host, !host.isEmpty { return host.uppercased() }
-        if step.appName == "Audio" { return "COMPUTER AUDIO" }
-        if ["Notefy", "Noted", "notefy-app"].contains(step.appName) { return "SCREEN REGION" }
-        let title = step.windowTitle.isEmpty ? step.appName : step.windowTitle
-        return title.uppercased()
-    }
-    private var kindLabel: String { step.screenshotPath != nil ? "Capture" : (step.appName.localizedCaseInsensitiveContains("audio") ? "Voice" : "Text") }
-    private var kindIcon: String { step.screenshotPath != nil ? "photo" : (step.appName.localizedCaseInsensitiveContains("audio") ? "waveform" : "text.alignleft") }
-}
-
 /// The folder list, expandable. Choosing a folder used to filter the canvas
 /// and close — which meant the only way to see what was inside a folder was
 /// to dismiss the list and look at the grid. Now a folder opens in place and
@@ -1254,7 +1176,7 @@ private struct CanvasFolderOverlay: View {
             Color.black.opacity(0.06).ignoresSafeArea().onTapGesture { withAnimation { isOpen = false } }
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
-                    Text("FOLDERS")
+                    Text("Folders")
                         .font(CanvasTypography.mark(10)).tracking(1.5).opacity(0.48)
                     Spacer()
                     Button {
@@ -1288,7 +1210,7 @@ private struct CanvasFolderOverlay: View {
                         .disabled(newFolderName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
                     }
                     .padding(.horizontal, 12).frame(height: 42)
-                    .background(CanvasPalette.inkBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: 11))
+                    .background(CanvasPalette.inkBlue.opacity(0.08), in: RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous))
                     .transition(.opacity.combined(with: .move(edge: .top)))
                 }
 
@@ -1312,9 +1234,8 @@ private struct CanvasFolderOverlay: View {
                 .scrollIndicators(.hidden)
             }
             .padding(16).frame(width: 300)
-            .background(CanvasPalette.paper.opacity(0.98), in: RoundedRectangle(cornerRadius: 20))
-            .overlay(RoundedRectangle(cornerRadius: 20).stroke(CanvasPalette.ink.opacity(0.10)))
-            .shadow(color: CanvasPalette.ink.opacity(0.18), radius: 26, y: 13)
+            .background(CanvasPalette.paperPlate, in: RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous).stroke(CanvasPalette.ink12))
             .padding(.leading, 24).padding(.top, 70)
         }
         .onAppear {
@@ -1358,7 +1279,7 @@ private struct CanvasFolderOverlay: View {
             }
             .buttonStyle(.plain)
             .background(filter == value ? CanvasPalette.inkBlue.opacity(0.11) : .clear,
-                        in: RoundedRectangle(cornerRadius: 11))
+                        in: RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous))
 
             if isExpanded {
                 VStack(alignment: .leading, spacing: 1) {
@@ -1585,64 +1506,70 @@ private struct InkOpenTransition: View {
     }
 }
 
-/// Editorial Ink: warm ivory paper, near-black indigo ink, and almost
-/// nothing else. The grounds shed the peach cast the clay ramp carried —
-/// archival paper is warm but not pink, and the pink was reading as a
-/// product colour rather than as a material.
+/// Editorial ink tokens, taken from tokens.css. These are the only colours
+/// in the app — no invented hexes, no tints, no gradients, no washes beyond
+/// the one accent wash.
 private enum CanvasPalette {
-    static let clay = Color(hex: 0xF3ECDE)      // ivory ground
-    static let clayLight = Color(hex: 0xFAF5EB) // the lift within it
-    static let clayMid = Color(hex: 0xEBE2D1)
-    static let clayLow = Color(hex: 0xE0D5C0)
-    static let paper = Color(hex: 0xFDFAF4)     // the sheet a card is cut from
-    static let paperDim = Color(hex: 0xF8F2E7)
-    static let paperEdge = Color(hex: 0xE9DFCC)
-    /// The editor's slip — a whiter, cooler paper than the card, so it reads
-    /// as a different sheet rather than a panel of the same one.
-    static let slip = Color(hex: 0xFFFDF8)
-    /// Matte tape. Warm, barely there, never glossy.
-    static let tape = Color(hex: 0xE8DEC8, opacity: 0.72)
+    static let paper = Color(hex: 0xF1EDE4)
+    /// A 2% lift for plates. Never white — white would make them dialogs.
+    static let paperPlate = Color(hex: 0xF4F0E8)
 
-    static let ink = Color(hex: 0x17142B)       // near-black indigo
-    static let inkBlue = Color(hex: 0x2A2456)
-    static let inkBlueDeep = Color(hex: 0x1F1A42)
-    /// Faded indigo — secondary states, quiet marks. Not grey: a grey here
-    /// reads as disabled, a faded indigo reads as further from the pen.
-    static let inkBlueLight = Color(hex: 0x6B6688)
-    static let warmShadow = Color(hex: 0x6E5B3E)
+    /// Warm print black, never #000 and never #111.
+    static let ink = Color(hex: 0x1C1B19)
+    static let ink70 = Color(hex: 0x1C1B19, opacity: 0.70)
+    static let ink55 = Color(hex: 0x1C1B19, opacity: 0.55)
+    static let ink45 = Color(hex: 0x1C1B19, opacity: 0.45)
+    static let ink30 = Color(hex: 0x1C1B19, opacity: 0.30)
+    /// Hairlines. Structure is carried by these, not by shadow.
+    static let ink12 = Color(hex: 0x1C1B19, opacity: 0.12)
 
-    /// Cards are cut from the same sheet but not the same part of it. A tiny
-    /// deterministic tonal shift per card keeps a grid from looking printed
-    /// in one pass — felt only as slight unevenness, never as colour.
-    static func sheet(for id: UUID) -> Color {
-        let tones: [UInt32] = [0xFDFAF4, 0xFCF8F1, 0xFBF6EE, 0xFDF9F2]
-        let bucket = abs(id.hashValue) % tones.count
-        return Color(hex: tones[bucket])
-    }
+    /// The one accent. It appears in the ink blob, the active plate's
+    /// hairline, and links — nowhere else, and never above ~10% of the
+    /// visual weight of a screen.
+    static let accent = Color(hex: 0x2B2A63)
+    static let accentWash = Color(hex: 0x2B2A63, opacity: 0.08)
+
+    // Names the rest of the file still reaches for, mapped onto the tokens
+    // rather than left as a second, competing palette.
+    static let clay = paper
+    static let clayLight = paper
+    static let clayMid = paper
+    static let clayLow = paperPlate
+    static let paperDim = paperPlate
+    static let paperEdge = ink12
+    static let slip = paperPlate
+    static let tape = ink12
+    static let inkBlue = accent
+    static let inkBlueDeep = accent
+    static let inkBlueLight = ink55
+    static let warmShadow = ink30
+
+    // Layout
+    static let pageMargin: CGFloat = 48
+    static let gutter: CGFloat = 24
+    static let platePad: CGFloat = 24
+    static let plateRadius: CGFloat = 6
+    /// 62ch at the body size — the measure a typeset column holds.
+    static let measure: CGFloat = 560
 }
 
-/// Three voices, each with a job.
+/// Four roles, four settings — and the discipline is in what each one is NOT
+/// allowed to do.
 ///
-/// Bodoni Moda carries the editorial moments — wordmark, note titles, essay
-/// headings, empty states — set at weight 900 with the optical-size axis
-/// pushed to display. That combination is the point: a Didone's whole
-/// identity is the jump between hairline and stem, and the opsz axis widens
-/// that jump as the size goes up. It is what a magazine masthead is made of,
-/// and it is what Libre Caslon could not do — Caslon is a book face, evenly
-/// weighted by design, so bolding it produced something heavy but never
-/// graphic.
+/// Display is Fraunces at LIGHT weight and a display optical size, which is
+/// the correction that matters most here: a Black Didone at 120px was the
+/// loudest thing on the page and competed with the ink blob. Premium
+/// editorial display is high-contrast but light, set smaller, tracked tight.
 ///
-/// Archivo is the interface. A grotesque drawn for editorial settings: flat
-/// terminals, tight apertures, no rounded softness. Geist read generic
-/// beside a display serif; Archivo reads like the caption text in a printed
-/// magazine, which is exactly the job.
+/// Text is Newsreader for everything a person reads. Meta is that same face
+/// in ITALIC — not mono, not caps — because tracked-out mono eyebrows on
+/// every card are the single clearest tell of generated UI.
 ///
-/// IBM Plex Mono is the record: timestamps, source labels, system marks.
+/// Data is mono, and mono appears nowhere except literal machine strings:
+/// URLs, file paths, region names.
 ///
-/// These are real variable-font instances, not synthetic weights. SwiftUI's
-/// `Font.custom(_:).weight()` can fake a bold by smearing outlines; building
-/// the CTFont with an explicit variation dictionary asks the file for the
-/// master that was actually drawn.
+/// All faces are the free fallbacks named in the brief, and all four were
+/// already bundled — nothing here needs a licence.
 private enum CanvasTypography {
     private static let wght: UInt32 = 0x77676874
     private static let opsz: UInt32 = 0x6F70737A
@@ -1659,45 +1586,49 @@ private enum CanvasTypography {
         return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
     }
 
-    /// Display Didone. `opsz` 96 is what makes the hairlines thin enough to
-    /// read as printed rather than drawn.
-    private static func editorial(_ size: CGFloat, _ weight: CGFloat = 900) -> Font {
-        varied("BodoniModa-Regular", size, [wght: weight, opsz: 96])
+    /// Fraunces, display optical size, softness off, wonk off. Never Black,
+    /// never Bold.
+    static func display(_ size: CGFloat, _ weight: CGFloat = 300) -> Font {
+        varied("Fraunces-9ptBlack", size, [wght: weight, opsz: 144, soft: 0, wonk: 0])
     }
-    private static func ui(_ size: CGFloat, _ weight: CGFloat = 400) -> Font {
-        varied("Archivo-SemiBold", size, [wght: weight])
+    static func text(_ size: CGFloat = 15.5, _ weight: CGFloat = 400) -> Font {
+        varied("NewsreaderRoman-Regular", size, [wght: weight, opsz: 16])
+    }
+    /// Meta is the text face in italic. Sentence case, always.
+    static func meta(_ size: CGFloat = 12.5) -> Font {
+        .custom("NewsreaderItalic-Italic", size: size)
+    }
+    /// Machine strings only.
+    static func data(_ size: CGFloat = 11) -> Font {
+        .custom("GeistMono-Regular", size: size)
     }
 
-    /// Reading copy. A magazine sets article text in a SERIF, and that is the
-    /// single biggest reason an all-sans app reads as software however good
-    /// the headline is. Fraunces at a text optical size, with a little
-    /// softness and its wonk axis open, keeps the warmth of ink on paper
-    /// without the coldness of a Didone at body size.
-    private static func reading(_ size: CGFloat, _ weight: CGFloat = 400) -> Font {
-        varied("Fraunces-9ptBlack", size, [wght: weight, opsz: 14, soft: 20, wonk: 1])
-    }
+    // Roles the rest of the file names.
+    static let wordmark = display(28, 400)
+    static let loaderWordmark = display(44, 300)
+    static let noteTitleReader = display(56, 300)
+    static let noteTitleGrid = display(44, 300)
+    static let noteTitle = display(44, 300)
+    static let essayTitle = display(56, 300)
+    static let essayHeading = display(28, 400)
+    static let emptyTitle = display(26, 300)
+    static let cardTitle = text(15.5, 500)
 
-    static let wordmark = editorial(36)
-    static let loaderWordmark = editorial(52)
-    static let noteTitle = editorial(58)
-    static let essayTitle = editorial(58)
-    static let essayHeading = editorial(30, 800)
-    static let emptyTitle = editorial(26, 800)
-    static let cardTitle = editorial(30, 800)
+    static let noteBody = text(15.5)
+    static let essayBody = text(15.5)
+    static let cardBody = text(15.5)
+    static let control = text(15)
 
-    /// A Didone at display size needs the tracking pulled in and the leading
-    /// pulled under 1.0, or it sets as a row of separate letters.
-    static let titleTracking: CGFloat = -1.8
-    static let titleLineSpacing: CGFloat = -8
+    /// −0.02em at the sizes above, and leading pulled to 1.0.
+    static let titleTracking: CGFloat = -0.02 * 44
+    static let titleLineSpacing: CGFloat = -10
+    static let bodyLineSpacing: CGFloat = 15.5 * 0.55
 
-    // Reading copy is serif; only the chrome stays sans.
-    static let noteBody = reading(17)
-    static let essayBody = reading(17)
-    static let cardBody = reading(14.5)
-    static let control = ui(13, 500)
-
-    static func mark(_ size: CGFloat = 10) -> Font { .custom("IBMPlexMono-Medium", size: size) }
-    static func markRegular(_ size: CGFloat = 10) -> Font { .custom("IBMPlexMono-Regular", size: size) }
+    // Kept so existing metadata call sites compile while they are converted
+    // to `meta`; both now resolve to the text face in italic rather than to
+    // tracked-out mono.
+    static func mark(_ size: CGFloat = 12.5) -> Font { meta(size) }
+    static func markRegular(_ size: CGFloat = 12.5) -> Font { meta(size) }
 }
 
 private enum NotedInkAssets {
@@ -1990,43 +1921,39 @@ private struct InkPillShape: Shape {
 /// fill — without ever becoming an object: a quiet warm gradient, a fine
 /// grain that reads as paper tooth rather than as shapes, and a vignette
 /// that lets the corners fall away so the cards sit on a surface.
+/// Flat paper and one texture. The gradient lift and the vignette are gone:
+/// a printed page is evenly lit, and the tonal shading was doing the job a
+/// hairline should do.
 private struct CanvasClayBackground: View {
     let focused: Bool
     let zoom: CGFloat
 
     var body: some View {
-        GeometryReader { proxy in
-            let diagonal = sqrt(proxy.size.width * proxy.size.width + proxy.size.height * proxy.size.height)
-            ZStack {
-                LinearGradient(
-                    colors: [CanvasPalette.clayLight, CanvasPalette.clay],
-                    startPoint: .topLeading, endPoint: .bottomTrailing
-                )
-
-                // A single wide warm lift, well off-centre and far too soft to
-                // have an edge you could point at. Felt, not seen.
-                RadialGradient(
-                    colors: [CanvasPalette.paper.opacity(0.55), CanvasPalette.paper.opacity(0)],
-                    center: UnitPoint(x: 0.30, y: 0.16),
-                    startRadius: 0,
-                    endRadius: diagonal * 0.72
-                )
-
-                CanvasGrain()
-
-                RadialGradient(
-                    colors: [.clear, CanvasPalette.warmShadow.opacity(0.10)],
-                    center: .center,
-                    startRadius: diagonal * 0.30,
-                    endRadius: diagonal * 0.74
-                )
-            }
-            // Reading dims the ground so the sheet in front of it carries the
-            // eye; the canvas gets it at full strength.
-            .opacity(focused ? 0.82 : 1)
-            .animation(.easeOut(duration: 0.44), value: focused)
+        ZStack {
+            CanvasPalette.paper
+            PaperGrain()
         }
         .ignoresSafeArea()
+    }
+}
+
+/// assets/paper-grain.svg, as a multiply overlay at 3%. It is the one
+/// texture in the app; nothing else gets one.
+private struct PaperGrain: View {
+    var body: some View {
+        Canvas { context, size in
+            var generator = SeededGenerator(seed: 23)
+            let count = Int(size.width * size.height / 8)
+            for _ in 0..<count {
+                let x = CGFloat.random(in: 0...size.width, using: &generator)
+                let y = CGFloat.random(in: 0...size.height, using: &generator)
+                context.fill(Path(CGRect(x: x, y: y, width: 1, height: 1)),
+                             with: .color(CanvasPalette.ink))
+            }
+        }
+        .blendMode(.multiply)
+        .opacity(0.03)
+        .allowsHitTesting(false)
     }
 }
 

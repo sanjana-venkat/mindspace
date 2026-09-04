@@ -1,0 +1,74 @@
+/* Noted — editorial ink tokens. Replace existing theme variables with these. */
+:root {
+  /* Paper & ink */
+  --paper:        #F1EDE4;              /* keep existing cream if it differs by <2% */
+  --paper-plate:  #F4F0E8;              /* 2% lift for plates, never white */
+  --ink:          #1C1B19;              /* warm print black */
+  --ink-70:       rgba(28, 27, 25, 0.70);
+  --ink-55:       rgba(28, 27, 25, 0.55);
+  --ink-45:       rgba(28, 27, 25, 0.45);
+  --ink-30:       rgba(28, 27, 25, 0.30);
+  --ink-12:       rgba(28, 27, 25, 0.12); /* hairlines */
+  --accent:       #2B2A63;              /* existing blob indigo — match the splatter component exactly */
+  --accent-wash:  rgba(43, 42, 99, 0.08);
+
+  /* Type */
+  --font-display: "Editorial New", "Fraunces", "Instrument Serif", Georgia, serif;
+  --font-text:    "Tiempos Text", "Newsreader", Georgia, serif;
+  --font-data:    "JetBrains Mono", "Geist Mono", ui-monospace, monospace;
+
+  --fs-wordmark:  28px;
+  --fs-title-rd:  56px;   /* reader view */
+  --fs-title-gr:  44px;   /* grid view   */
+  --fs-body:      15.5px;
+  --fs-meta:      12.5px;
+  --fs-data:      11px;
+
+  --lh-display:   1.0;
+  --lh-body:      1.55;
+  --lh-meta:      1.4;
+
+  --track-display: -0.02em;
+  --track-body:    0;
+  --measure:       62ch;
+
+  /* Layout */
+  --page-margin:  48px;
+  --gutter:       24px;
+  --plate-pad:    24px;
+  --radius-plate: 6px;
+  --hairline:     1px solid var(--ink-12);
+  --hairline-hover: 1px solid var(--ink-30);
+  --drop-rule:    1.5px solid var(--ink);
+  --rule-active:  1.5px solid var(--accent);
+
+  /* Motion */
+  --t-fast: 120ms cubic-bezier(.2,.7,.2,1);
+  --t-enter: 160ms ease-out;
+}
+
+/* Global type hygiene */
+html { font-family: var(--font-text); color: var(--ink); background: var(--paper);
+       font-feature-settings: "kern", "liga"; -webkit-font-smoothing: antialiased; }
+.display { font-family: var(--font-display); font-weight: 400; line-height: var(--lh-display);
+           letter-spacing: var(--track-display); }
+.text    { font-size: var(--fs-body); line-height: var(--lh-body); max-width: var(--measure); }
+.meta    { font-size: var(--fs-meta); line-height: var(--lh-meta); font-style: italic; color: var(--ink-55);
+           font-variant-numeric: tabular-nums; }
+.data    { font-family: var(--font-data); font-size: var(--fs-data); color: var(--ink-45); letter-spacing: 0; }
+
+/* Plate */
+.plate { background: var(--paper-plate); border: var(--hairline); border-radius: var(--radius-plate);
+         padding: var(--plate-pad); box-shadow: none; break-inside: avoid; transition: border-color var(--t-fast); }
+.plate:hover  { border-color: var(--ink-30); }
+.plate.active { border: var(--rule-active); }
+.plate > * + * { margin-top: 12px; }
+.plate .rule  { border-top: var(--hairline); margin: 16px 0 0; padding-top: 12px; }
+
+/* Grid view: content-sized masonry */
+.fragments { columns: 3; column-gap: var(--gutter); }
+@media (max-width: 1280px) { .fragments { columns: 2; } }
+@media (max-width: 900px)  { .fragments { columns: 1; } }
+.fragments .plate { margin-bottom: var(--gutter); display: inline-block; width: 100%; }
+
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
