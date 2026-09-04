@@ -194,7 +194,7 @@ private struct CanvasToolbar: View {
                         CanvasBrandIcon()
                         VStack(alignment: .leading, spacing: 1) {
                             Text(subtitle.uppercased())
-                                .font(.custom("GeistMono-Medium", size: 8)).tracking(1.1)
+                                .font(CanvasTypography.mark(8)).tracking(1.1)
                                 .opacity(0.45)
                             Text(title)
                                 .font(.system(size: 13, weight: .semibold))
@@ -222,7 +222,7 @@ private struct CanvasToolbar: View {
                     Button { zoom = max(0.60, zoom - 0.10) } label: { Image(systemName: "minus") }
                         .help("Zoom out")
                     Text("\(Int(zoom * 100))%")
-                        .font(.custom("GeistMono-Medium", size: 10))
+                        .font(CanvasTypography.mark(10))
                         .frame(width: 38)
                     Button { zoom = min(1.40, zoom + 0.10) } label: { Image(systemName: "plus") }
                         .help("Zoom in")
@@ -457,7 +457,7 @@ private struct CaptureGridView: View {
             VStack(alignment: .leading, spacing: 14) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text("NOTE")
-                        .font(.custom("GeistMono-Medium", size: 10)).tracking(1.4)
+                        .font(CanvasTypography.mark(10)).tracking(1.4)
                         .opacity(0.45)
 
                     TextField("Untitled note", text: $appState.noteTitle)
@@ -595,7 +595,7 @@ private struct GridCaptureTile: View {
                 Spacer()
                 Image(systemName: kindIcon)
             }
-            .font(.custom("GeistMono-Medium", size: 9)).tracking(1.0).opacity(0.45)
+            .font(CanvasTypography.mark(9)).tracking(1.0).opacity(0.45)
 
             if let path = step.screenshotPath, let image = NSImage(contentsOfFile: path) {
                 Image(nsImage: image)
@@ -604,7 +604,7 @@ private struct GridCaptureTile: View {
                     .clipShape(RoundedRectangle(cornerRadius: 7))
             } else if let text = primaryText, !text.isEmpty {
                 Text(text)
-                    .font(.custom("NewsreaderRoman-Regular", size: 14))
+                    .font(CanvasTypography.cardBody)
                     .lineSpacing(5)
                     .truncationMode(.tail)
                     .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -614,13 +614,13 @@ private struct GridCaptureTile: View {
                 if noteFocused {
                     TextEditor(text: $note)
                         .focused($noteFocused)
-                        .font(.custom("NewsreaderRoman-Regular", size: 13))
+                        .font(CanvasTypography.cardBody)
                         .lineSpacing(3)
                         .scrollContentBackground(.hidden)
                         .background(.clear)
                 } else {
                     Text(note.isEmpty ? "Add a note…" : note)
-                        .font(.custom("NewsreaderRoman-Regular", size: 13))
+                        .font(CanvasTypography.cardBody)
                         .lineSpacing(3)
                         .lineLimit(3)
                         .truncationMode(.tail)
@@ -639,20 +639,23 @@ private struct GridCaptureTile: View {
             )
 
             Text(sourceLabel)
-                .font(.custom("GeistMono-Regular", size: 9)).tracking(0.8)
+                .font(CanvasTypography.markRegular(9)).tracking(0.8)
                 .opacity(0.50)
                 .lineLimit(1).truncationMode(.middle)
         }
         .padding(18)
         .frame(height: 420)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(CanvasPalette.paper.opacity(0.93), in: RoundedRectangle(cornerRadius: 14))
+        .background(CanvasPalette.sheet(for: step.id), in: RoundedRectangle(cornerRadius: 12))
         .overlay(
-            RoundedRectangle(cornerRadius: 14)
-                .stroke(selected ? CanvasPalette.inkBlue.opacity(0.55) : CanvasPalette.ink.opacity(0.11),
-                        lineWidth: selected ? 2 : 1)
+            RoundedRectangle(cornerRadius: 12)
+                .stroke(selected ? CanvasPalette.inkBlue.opacity(0.42) : CanvasPalette.ink.opacity(0.07),
+                        lineWidth: 1)
         )
-        .shadow(color: CanvasPalette.ink.opacity(selected ? 0.16 : 0.09), radius: selected ? 20 : 14, y: 8)
+        // Barely there. A card should sit ON the paper, not hover above it —
+        // the old 14pt shadow was the single most SaaS thing on the screen.
+        .shadow(color: CanvasPalette.warmShadow.opacity(selected ? 0.10 : 0.05),
+                radius: selected ? 10 : 6, y: 2)
     }
 
     private var primaryText: String? { step.selectedText ?? step.pageText }
@@ -685,7 +688,7 @@ private struct ReaderTabBar: View {
                     withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) { selection = tab }
                 } label: {
                     Text(tab.rawValue.uppercased())
-                        .font(.system(size: 10, weight: .black, design: .monospaced)).tracking(1.2)
+                        .font(CanvasTypography.mark(10)).tracking(1.2)
                         .foregroundStyle(selection == tab ? CanvasPalette.paper : CanvasPalette.ink.opacity(0.54))
                         .frame(width: 96, height: 34)
                         .background {
@@ -974,7 +977,7 @@ private struct LiveCaptureCard: View {
                         .truncationMode(.middle)
                 } else {
                     Text(sourceLabel)
-                        .font(.custom("GeistMono-Regular", size: 10)).tracking(0.9)
+                        .font(CanvasTypography.markRegular(10)).tracking(0.9)
                         .opacity(0.55)
                         .lineLimit(1)
                         .truncationMode(.middle)
@@ -1047,7 +1050,7 @@ private struct CanvasFolderOverlay: View {
             VStack(alignment: .leading, spacing: 4) {
                 HStack {
                     Text("FOLDERS")
-                        .font(.custom("GeistMono-Medium", size: 10)).tracking(1.5).opacity(0.48)
+                        .font(CanvasTypography.mark(10)).tracking(1.5).opacity(0.48)
                     Spacer()
                     Button {
                         withAnimation(.spring(response: 0.34, dampingFraction: 0.84)) { creatingFolder = true }
@@ -1169,7 +1172,7 @@ private struct CanvasFolderOverlay: View {
                                 Spacer()
                                 if note.captureCount > 0 {
                                     Text("\(note.captureCount)")
-                                        .font(.custom("GeistMono-Regular", size: 10))
+                                        .font(CanvasTypography.markRegular(10))
                                         .opacity(0.40)
                                 }
                             }
@@ -1377,35 +1380,76 @@ private struct InkOpenTransition: View {
     }
 }
 
+/// Editorial Ink: warm ivory paper, near-black indigo ink, and almost
+/// nothing else. The grounds shed the peach cast the clay ramp carried —
+/// archival paper is warm but not pink, and the pink was reading as a
+/// product colour rather than as a material.
 private enum CanvasPalette {
-    static let clay = Color(hex: 0xFBE4D6)
-    static let clayLight = Color(hex: 0xFDF2EA)
-    static let clayMid = Color(hex: 0xF7D4C1)
-    static let clayLow = Color(hex: 0xF1C3AB)
-    static let paper = Color(hex: 0xFFFBF7)
-    static let paperDim = Color(hex: 0xFCF2EA)
-    static let paperEdge = Color(hex: 0xF3DFD1)
-    static let ink = Color(hex: 0x17142B)
+    static let clay = Color(hex: 0xF3ECDE)      // ivory ground
+    static let clayLight = Color(hex: 0xFAF5EB) // the lift within it
+    static let clayMid = Color(hex: 0xEBE2D1)
+    static let clayLow = Color(hex: 0xE0D5C0)
+    static let paper = Color(hex: 0xFDFAF4)     // the sheet a card is cut from
+    static let paperDim = Color(hex: 0xF8F2E7)
+    static let paperEdge = Color(hex: 0xE9DFCC)
+
+    static let ink = Color(hex: 0x17142B)       // near-black indigo
     static let inkBlue = Color(hex: 0x2A2456)
     static let inkBlueDeep = Color(hex: 0x1F1A42)
-    static let inkBlueLight = Color(hex: 0x5A5568)
-    static let warmShadow = Color(hex: 0x7A4A2E)
+    /// Faded indigo — secondary states, quiet marks. Not grey: a grey here
+    /// reads as disabled, a faded indigo reads as further from the pen.
+    static let inkBlueLight = Color(hex: 0x6B6688)
+    static let warmShadow = Color(hex: 0x6E5B3E)
+
+    /// Cards are cut from the same sheet but not the same part of it. A tiny
+    /// deterministic tonal shift per card keeps a grid from looking printed
+    /// in one pass — felt only as slight unevenness, never as colour.
+    static func sheet(for id: UUID) -> Color {
+        let tones: [UInt32] = [0xFDFAF4, 0xFCF8F1, 0xFBF6EE, 0xFDF9F2]
+        let bucket = abs(id.hashValue) % tones.count
+        return Color(hex: tones[bucket])
+    }
 }
 
-/// One typographic voice across the product mark and the user's writing.
-/// Avenir Next is crisp and contemporary, while its rounded geometry still
-/// belongs with the soft clay and fluid ink shapes.
+/// Three voices, each with a job — the Editorial Ink brief's type system.
+///
+/// Instrument Serif carries the editorial moments: note titles, essay
+/// headings, empty states. It is a display face with real personality and
+/// tight fit, which is why it is never asked to set body copy.
+///
+/// Geist Sans is the interface: body, controls, navigation. Neutral on
+/// purpose, so the serif is the only thing raising its voice.
+///
+/// IBM Plex Mono is the record: timestamps, source labels, system marks.
+/// Its slightly mechanical letterforms are what make a metadata line read as
+/// stamped onto the page rather than written on it.
+///
+/// All three are PostScript names, because Font.custom fails silently to San
+/// Francisco on a miss and a typo here looks like a design choice.
 private enum CanvasTypography {
-    static let wordmark = Font.custom("Avenir Next", size: 30, relativeTo: .title).weight(.heavy)
-    static let loaderWordmark = Font.custom("Avenir Next", size: 42, relativeTo: .largeTitle).weight(.heavy)
-    static let cardTitle = Font.custom("Avenir Next", size: 27, relativeTo: .title).weight(.medium)
-    static let cardBody = Font.custom("Avenir Next", size: 14.5, relativeTo: .body)
-    static let noteTitle = Font.custom("Avenir Next", size: 39, relativeTo: .largeTitle).weight(.medium)
-    static let noteBody = Font.custom("Avenir Next", size: 17, relativeTo: .body)
-    static let essayTitle = Font.custom("Avenir Next", size: 43, relativeTo: .largeTitle).weight(.medium)
-    static let essayHeading = Font.custom("Avenir Next", size: 26, relativeTo: .title2).weight(.semibold)
-    static let essayBody = Font.custom("Avenir Next", size: 17.5, relativeTo: .body)
-    static let emptyTitle = Font.custom("Avenir Next", size: 21, relativeTo: .title3).weight(.medium)
+    // Editorial — Instrument Serif. It runs small for its point size, so the
+    // sizes here are larger than the sans they replaced at the same role.
+    static let wordmark = Font.custom("InstrumentSerif-Regular", size: 38, relativeTo: .title)
+    static let loaderWordmark = Font.custom("InstrumentSerif-Regular", size: 52, relativeTo: .largeTitle)
+    static let noteTitle = Font.custom("InstrumentSerif-Regular", size: 46, relativeTo: .largeTitle)
+    static let essayTitle = Font.custom("InstrumentSerif-Regular", size: 50, relativeTo: .largeTitle)
+    static let essayHeading = Font.custom("InstrumentSerif-Regular", size: 30, relativeTo: .title2)
+    static let emptyTitle = Font.custom("InstrumentSerif-Regular", size: 25, relativeTo: .title3)
+    static let cardTitle = Font.custom("InstrumentSerif-Regular", size: 30, relativeTo: .title)
+
+    // Interface — Geist.
+    static let noteBody = Font.custom("Geist-Regular", size: 16, relativeTo: .body)
+    static let essayBody = Font.custom("Geist-Regular", size: 16, relativeTo: .body)
+    static let cardBody = Font.custom("Geist-Regular", size: 14, relativeTo: .body)
+    static let control = Font.custom("Geist-Medium", size: 13)
+
+    // The record — IBM Plex Mono.
+    static func mark(_ size: CGFloat = 10) -> Font {
+        .custom("IBMPlexMono-Medium", size: size)
+    }
+    static func markRegular(_ size: CGFloat = 10) -> Font {
+        .custom("IBMPlexMono-Regular", size: size)
+    }
 }
 
 private enum NotedInkAssets {
@@ -1413,6 +1457,10 @@ private enum NotedInkAssets {
     /// resolves into a lowercase n. Generated from Sanjana's third concept,
     /// keyed off its background and normalised to the app's cobalt so it can
     /// be tinted as a template image on any surface.
+    /// The nib: a fountain pen point, drop removed. A simple bold silhouette
+    /// that still reads at 20pt, which neither the monoline splat nor the
+    /// solid one managed — a mark has to survive the smallest place it runs.
+    static let nib = load("noted-nib", "png")
     static let splat = load("noted-splat", "png")
     static let mark = load("noted-mark", "svg")
 
@@ -1430,7 +1478,7 @@ private struct CanvasBrandMark: View {
     var body: some View {
         Text("noted")
             .font(CanvasTypography.wordmark)
-            .tracking(-1.8)
+            .tracking(-0.5)
             .foregroundStyle(CanvasPalette.ink)
             .frame(width: 112, height: 42)
             .accessibilityLabel("Noted")
@@ -1440,8 +1488,8 @@ private struct CanvasBrandMark: View {
 private struct CanvasBrandIcon: View {
     var body: some View {
         Group {
-            if let splat = NotedInkAssets.splat ?? NotedInkAssets.mark {
-                Image(nsImage: splat)
+            if let mark = NotedInkAssets.nib ?? NotedInkAssets.splat ?? NotedInkAssets.mark {
+                Image(nsImage: mark)
                     .resizable()
                     .renderingMode(.template)
                     .foregroundStyle(CanvasPalette.inkBlue)
