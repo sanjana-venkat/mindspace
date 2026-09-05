@@ -261,8 +261,9 @@ typealias CoilShape = Capsule
 //
 // Three families, everywhere in the app:
 //
-//   Anybody         — display. Squarish, and the counters close up as the
-//                     weight climbs, which is where the inky feel comes from.
+//   Narnia          — display. Faras Dina's art-deco face, Sanjana's own
+//                     file: condensed, high contrast, counters nearly shut.
+//                     One weight, no axes, display sizes only.
 //                     Always uppercase; that is what makes it a masthead.
 //   Hanken Grotesk  — everything read, at Light. Plain and open, so it sits
 //                     under the display face without arguing with it.
@@ -279,7 +280,6 @@ typealias CoilShape = Capsule
 
 enum StoneFont {
     private static let wght: UInt32 = 0x77676874
-    private static let wdth: UInt32 = 0x77647468
 
     private static func varied(_ name: String, _ size: CGFloat, _ axes: [UInt32: CGFloat]) -> Font {
         var variations: [CFNumber: CFNumber] = [:]
@@ -291,16 +291,18 @@ enum StoneFont {
         return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
     }
 
-    private static func display(_ size: CGFloat, _ weight: CGFloat) -> Font {
-        varied("Anybody-Thin", size, [wght: weight, wdth: 94])
+    /// Narnia has one weight and no axes; the argument is ignored so no call
+    /// site can ask for a synthetic bold. See CanvasTypography.display.
+    private static func display(_ size: CGFloat, _ weight: CGFloat = 0) -> Font {
+        .custom("Narnia", size: size)
     }
     private static func text(_ size: CGFloat, _ weight: CGFloat = 330) -> Font {
         varied("HankenGrotesk-Regular", size, [wght: weight])
     }
 
-    static func display() -> Font { display(Stoneink.tDisplay, 820) }
-    static func title() -> Font { display(Stoneink.tTitle, 820) }
-    static func heading() -> Font { display(Stoneink.tHeading, 760) }
+    static func display() -> Font { display(Stoneink.tDisplay * 1.12) }
+    static func title() -> Font { display(Stoneink.tTitle * 1.12) }
+    static func heading() -> Font { display(Stoneink.tHeading * 1.12) }
     static func read() -> Font { text(Stoneink.tRead) }
     static func readSmall() -> Font { text(Stoneink.tRead - 2) }
     static func readSemibold() -> Font { text(Stoneink.tSubhead, 600) }

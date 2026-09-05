@@ -305,11 +305,10 @@ extension Color {
 /// Plus one conditional fourth: Caveat, for the user's own annotations only.
 /// Never use it for placeholder copy or machine-captured content.
 enum NotefyFont {
-    // The same three families the rest of the app uses: Anybody for anything
+    // The same three families the rest of the app uses: Narnia for anything
     // that behaves like a masthead, Hanken Grotesk Light for anything read,
     // Geist Mono for machine strings. See StoneFont for the reasoning.
     private static let wght: UInt32 = 0x77676874
-    private static let wdth: UInt32 = 0x77647468
 
     private static func varied(_ name: String, _ size: CGFloat, _ axes: [UInt32: CGFloat]) -> Font {
         var variations: [CFNumber: CFNumber] = [:]
@@ -321,17 +320,17 @@ enum NotefyFont {
         return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
     }
 
-    private static func display(_ size: CGFloat, _ weight: CGFloat) -> Font {
-        varied("Anybody-Thin", size, [wght: weight, wdth: 94])
+    private static func display(_ size: CGFloat) -> Font {
+        .custom("Narnia", size: size)
     }
     private static func text(_ size: CGFloat, _ weight: CGFloat = 330) -> Font {
         varied("HankenGrotesk-Regular", size, [wght: weight])
     }
 
-    static let pageTitle = display(38, 820)
-    static let sectionTitle = display(23, 800)
+    static let pageTitle = display(43)
+    static let sectionTitle = display(26)
 
-    static let wordmark = display(15, 800)
+    static let wordmark = display(17)
     static let title = text(20, 600)
     static let heading = text(14, 620)
     static let body = text(15)

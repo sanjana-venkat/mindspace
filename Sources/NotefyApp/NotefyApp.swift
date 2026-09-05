@@ -9,7 +9,7 @@ private enum BundledFontRegistrar {
                 at: fontsURL,
                 includingPropertiesForKeys: nil
               ) else { return }
-        for url in fontURLs where url.pathExtension.lowercased() == "ttf" {
+        for url in fontURLs where ["ttf", "otf"].contains(url.pathExtension.lowercased()) {
             CTFontManagerRegisterFontsForURL(url as CFURL, .process, nil)
         }
     }()

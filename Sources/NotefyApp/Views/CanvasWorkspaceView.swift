@@ -44,6 +44,9 @@ struct CanvasWorkspaceView: View {
     @State private var inkProgress: CGFloat = 0
     @State private var inkWiping = false
     @State private var zoom: CGFloat = 1.0
+    /// The zoom a pinch started from, so the magnification multiplies against
+    /// a fixed base rather than compounding on every change event.
+    @State private var pinchBase: CGFloat?
     /// Owned here rather than in the reader so switching posture can be
     /// wrapped in the same ink wipe that switching notes uses — the overlay
     /// lives at this level.
@@ -55,7 +58,7 @@ struct CanvasWorkspaceView: View {
     /// from — not which filter the (now removed) card wall was under.
     private var pickerTitle: String {
         let title = appState.noteTitle.trimmingCharacters(in: .whitespacesAndNewlines)
-        return title.isEmpty ? "Untitled note" : title
+        return (title.isEmpty ? "Untitled note" : title).uppercased()
     }
 
     private var pickerSubtitle: String {
@@ -109,6 +112,18 @@ struct CanvasWorkspaceView: View {
                 .allowsHitTesting(inkWiping)
                 .zIndex(20)
         }
+        // Trackpad pinch. Simultaneous so it never takes the gesture away
+        // from a scroll or a plate drag — a magnify only ever fires for an
+        // actual two-finger spread.
+        .simultaneousGesture(
+            MagnifyGesture(minimumScaleDelta: 0.01)
+                .onChanged { value in
+                    let base = pinchBase ?? zoom
+                    if pinchBase == nil { pinchBase = zoom }
+                    zoom = min(1.40, max(0.60, base * value.magnification))
+                }
+                .onEnded { _ in pinchBase = nil }
+        )
         .focusable()
         .focusEffectDisabled()
         .focused($keyboardFocused)
@@ -243,7 +258,7 @@ private struct CanvasToolbar: View {
         Text("noted")
             .font(CanvasTypography.wordmark)
             .textCase(.uppercase)
-            .tracking(0.02 * 26)
+            .tracking(0.035 * 29)
             .foregroundStyle(CanvasPalette.ink)
             .accessibilityLabel("Noted")
     }
@@ -302,7 +317,28 @@ private struct CaptureReadingView: View {
     @State private var tab: ReaderTab = .raw
     @State private var captureTick = 0
 
+
+    /// `.textCase(.uppercase)` is read by `Text`, not by `TextField` — which
+    /// is why the title kept rendering as typed while every other heading
+    /// went to caps. Uppercasing on the way out of the binding is what
+    /// actually reaches the field.
+    ///
+    /// Non-destructive until the title is edited: an existing mixed-case
+    /// title is only DISPLAYED in caps, and the stored string is left alone
+    /// until you type into it.
+    private var uppercasedTitle: Binding<String> {
+        Binding(
+            get: { appState.noteTitle.uppercased() },
+            set: { appState.noteTitle = $0 }
+        )
+    }
+
     private var layout: ReaderLayout { ReaderLayout(rawValue: layoutRaw) ?? .panel }
+
+    /// 1 in the grid, which handles zoom by reflowing; `zoom` everywhere else.
+    private var readingScale: CGFloat {
+        (tab == .raw && layout == .grid) ? 1 : zoom
+    }
 
     private var activeStep: ExplorationStep? {
         appState.steps.first { $0.id == activeCaptureID } ?? appState.steps.last
@@ -345,7 +381,7 @@ private struct CaptureReadingView: View {
                         }
                         .transition(.opacity)
                     case .grid:
-                        CaptureGridView(activeCaptureID: $activeCaptureID)
+                        CaptureGridView(activeCaptureID: $activeCaptureID, zoom: zoom)
                             .environmentObject(appState)
                             .padding(.top, 146)
                             .transition(.opacity)
@@ -359,7 +395,13 @@ private struct CaptureReadingView: View {
             }
             // Zoom scales the work, never the chrome — the tab bar and the
             // posture switch stay the size the pointer expects them to be.
-            .scaleEffect(zoom, anchor: .top)
+            //
+            // The grid is the exception, and it is exempt here rather than
+            // scaled: a grid is a canvas, so zooming it reflows the columns
+            // instead of shrinking them. Panel and the organized essay are
+            // single-measure reading views, where zoom sensibly means "make
+            // the text bigger".
+            .scaleEffect(readingScale, anchor: .top)
             .animation(reduceMotion ? .linear(duration: 0.12) : .easeInOut(duration: 0.28), value: tab)
             // No animation on the layout swap. The ink covers the screen
             // completely at the wipe's midpoint, which is when layoutRaw
@@ -396,10 +438,9 @@ private struct CaptureReadingView: View {
     /// measure. No eyebrow — the title's size is the hierarchy.
     private var rawNoteColumn: some View {
         VStack(alignment: .leading, spacing: 14) {
-            TextField("Untitled note", text: $appState.noteTitle)
+            TextField("Untitled note", text: uppercasedTitle)
                 .textFieldStyle(.plain)
                 .font(CanvasTypography.noteTitleReader)
-                .textCase(.uppercase)
                 .tracking(CanvasTypography.titleTracking)
                 .foregroundStyle(CanvasPalette.ink)
                 .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
@@ -543,9 +584,27 @@ private struct ReaderLayoutToggle: View {
 private struct CaptureGridView: View {
     @EnvironmentObject private var appState: AppState
     @Binding var activeCaptureID: UUID?
+    /// Zoom reaches the grid as a column width, not as a scale factor — see
+    /// `masonry(width:)`.
+    var zoom: CGFloat = 1
 
     @State private var draggingID: UUID?
     @FocusState private var titleFocused: Bool
+
+    /// `.textCase(.uppercase)` is read by `Text`, not by `TextField` — which
+    /// is why the title kept rendering as typed while every other heading
+    /// went to caps. Uppercasing on the way out of the binding is what
+    /// actually reaches the field.
+    ///
+    /// Non-destructive until the title is edited: an existing mixed-case
+    /// title is only DISPLAYED in caps, and the stored string is left alone
+    /// until you type into it.
+    private var uppercasedTitle: Binding<String> {
+        Binding(
+            get: { appState.noteTitle.uppercased() },
+            set: { appState.noteTitle = $0 }
+        )
+    }
 
     var body: some View {
         GeometryReader { proxy in
@@ -579,10 +638,9 @@ private struct CaptureGridView: View {
     /// hierarchy, which is the whole correction here.
     private var head: some View {
         VStack(alignment: .leading, spacing: 14) {
-            TextField("Untitled note", text: $appState.noteTitle)
+            TextField("Untitled note", text: uppercasedTitle)
                 .textFieldStyle(.plain)
                 .font(CanvasTypography.noteTitleGrid)
-                .textCase(.uppercase)
                 .tracking(CanvasTypography.titleTracking)
                 .foregroundStyle(CanvasPalette.ink)
                 .focused($titleFocused)
@@ -612,9 +670,17 @@ private struct CaptureGridView: View {
     /// columns, filled round-robin.
     private func masonry(width: CGFloat) -> some View {
         let available = width - CanvasPalette.pageMargin * 2
-        // Denser than the brief's breakpoints: reordering only means
-        // something when you can see enough plates at once to compare them.
-        let columns = available >= 940 ? 3 : (available >= 620 ? 2 : 1)
+        // Zooming out on a canvas fits more on the canvas. Scaling the grid
+        // did the opposite: everything got smaller and the same three columns
+        // sat in the middle of a widening grey margin. So zoom sets the
+        // column WIDTH and the column count falls out of it — zoom out and
+        // plates get narrower and more of them fit per row, which is the
+        // thing you actually wanted to see.
+        //
+        // 430pt is the plate width at 100%; at the 60-140% range the toolbar
+        // allows that runs from about 258 to 602.
+        let target = 430 * zoom
+        let columns = min(6, max(1, Int((available + CanvasPalette.gutter) / (target + CanvasPalette.gutter))))
         let ordered = Array(appState.steps.reversed())
         return HStack(alignment: .top, spacing: CanvasPalette.gutter) {
             ForEach(0..<columns, id: \.self) { column in
@@ -1319,7 +1385,7 @@ private struct InkWritingLoader: View {
                     Text("noted")
                         .font(CanvasTypography.loaderWordmark)
                         .textCase(.uppercase)
-                        .tracking(0.02 * 40)
+                        .tracking(0.035 * 45)
                         .foregroundStyle(CanvasPalette.inkBlue)
                     Image(systemName: "pencil.tip")
                         .font(.system(size: 17, weight: .semibold))
@@ -1733,7 +1799,6 @@ private enum CanvasPalette {
 /// already bundled — nothing here needs a licence.
 private enum CanvasTypography {
     private static let wght: UInt32 = 0x77676874
-    private static let wdth: UInt32 = 0x77647468
 
     private static func varied(_ name: String, _ size: CGFloat, _ axes: [UInt32: CGFloat]) -> Font {
         var variations: [CFNumber: CFNumber] = [:]
@@ -1745,18 +1810,23 @@ private enum CanvasTypography {
         return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
     }
 
-    /// Anybody, heavy and very slightly narrowed.
+    /// Narnia, by Faras Dina — Sanjana's own file, not a substitution.
     ///
-    /// Sanjana asked for DOSS Problem — "inky and bold and sharp". DOSS is a
-    /// Sharp Type retail release, so this is the nearest thing that ships
-    /// under the OFL: a squarish grotesque whose counters close up as the
-    /// weight climbs, which is exactly where the inky quality comes from.
-    /// Pulling the width axis in a touch tightens them further.
+    /// A single-weight art-deco display face: condensed, high contrast, wedge
+    /// terminals, and the counters nearly closed. It is the inky half of the
+    /// DOSS Problem brief far more literally than any grotesque was going to
+    /// manage. Set uppercase, which is where it is strongest.
     ///
-    /// Headings set from this face are uppercase. Squarish caps are what
-    /// makes it read as a masthead rather than as a UI label.
-    static func display(_ size: CGFloat, _ weight: CGFloat = 800) -> Font {
-        varied("Anybody-Thin", size, [wght: weight, wdth: 94])
+    /// It has ONE weight and no axes, so the `weight` argument is deliberately
+    /// ignored rather than passed through — asking for a bold Narnia would get
+    /// a synthetic smear, which on a face with strokes this thin is very
+    /// visible. Sizes ran up about 12% from the Anybody settings to pay for
+    /// how much narrower it sets.
+    ///
+    /// Display only. At 16pt it is barely legible, so nothing that is actually
+    /// read is set in it — see `text` below.
+    static func display(_ size: CGFloat, _ weight: CGFloat = 0) -> Font {
+        .custom("Narnia", size: size)
     }
 
     /// Hanken Grotesk Light — the Sharp Earth half of the brief: a plain,
@@ -1775,14 +1845,14 @@ private enum CanvasTypography {
     }
 
     // Roles the rest of the file names.
-    static let wordmark = display(26, 800)
-    static let loaderWordmark = display(40, 800)
-    static let noteTitleReader = display(50, 820)
-    static let noteTitleGrid = display(40, 820)
-    static let noteTitle = display(40, 820)
-    static let essayTitle = display(50, 820)
-    static let essayHeading = display(24, 700)
-    static let emptyTitle = display(23, 800)
+    static let wordmark = display(29)
+    static let loaderWordmark = display(45)
+    static let noteTitleReader = display(56)
+    static let noteTitleGrid = display(46)
+    static let noteTitle = display(46)
+    static let essayTitle = display(56)
+    static let essayHeading = display(27)
+    static let emptyTitle = display(26)
     static let cardTitle = text(15.5, 520)
 
     static let noteBody = text(15.5)
@@ -1790,11 +1860,11 @@ private enum CanvasTypography {
     static let cardBody = text(15.5)
     static let control = text(15, 420)
 
-    /// Heavy squarish caps set solid. Tracking stays a hair positive rather
-    /// than negative — at 800 weight the counters are already tight, and
-    /// pulling the letters together turns the word into a block.
-    static let titleTracking: CGFloat = 0.005 * 40
-    static let titleLineSpacing: CGFloat = -8
+    /// Condensed deco caps need air between them or the wedges collide and
+    /// the word reads as one dark mass. +0.03em, not the negative tracking a
+    /// wide grotesque wanted.
+    static let titleTracking: CGFloat = 0.03 * 46
+    static let titleLineSpacing: CGFloat = -6
     /// line-height 1.55 expressed as SwiftUI's extra leading. Every text
     /// element inside a plate uses this; display titles are the only
     /// exception, and they set their own negative leading.
@@ -1835,7 +1905,7 @@ private struct CanvasBrandMark: View {
         Text("noted")
             .font(CanvasTypography.wordmark)
             .textCase(.uppercase)
-            .tracking(0.02 * 26)
+            .tracking(0.035 * 29)
             .foregroundStyle(CanvasPalette.ink)
             .frame(width: 112, height: 42)
             .accessibilityLabel("Noted")

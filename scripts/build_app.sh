@@ -24,6 +24,7 @@ cp "$ROOT_DIR/AppResources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 cp "$ROOT_DIR/AppResources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon.icns"
 cp "$ROOT_DIR/AppResources/NotedLogo.png" "$APP_BUNDLE/Contents/Resources/NotedLogo.png"
 cp "$ROOT_DIR"/AppResources/Fonts/*.ttf "$APP_BUNDLE/Contents/Resources/Fonts/"
+cp "$ROOT_DIR"/AppResources/Fonts/*.otf "$APP_BUNDLE/Contents/Resources/Fonts/" 2>/dev/null || true
 if [ -d "$BIN_DIR/Notefy_NotefyApp.bundle" ]; then
     cp -R "$BIN_DIR/Notefy_NotefyApp.bundle" "$APP_BUNDLE/Contents/Resources/"
 fi
