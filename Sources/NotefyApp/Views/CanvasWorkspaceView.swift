@@ -207,6 +207,9 @@ private struct CanvasToolbar: View {
     @Binding var foldersOpen: Bool
     @Binding var settingsOpen: Bool
     @Binding var zoom: CGFloat
+    @AppStorage(GroundSurface.storageKey) private var surfaceRaw = GroundSurface.paper.rawValue
+
+    private var glass: Bool { (GroundSurface(rawValue: surfaceRaw) ?? .paper) == .glass }
 
     var body: some View {
         // The wordmark owns the window's actual centre. Left in the HStack it
@@ -269,13 +272,23 @@ private struct CanvasToolbar: View {
     /// Two rows, right-aligned to the same edge: zoom and settings above,
     /// the posture toggles directly beneath them.
     private var chrome: some View {
-        HStack(alignment: .center, spacing: 22) {
-            lineButton("minus", label: "Zoom out") { zoom = max(0.60, zoom - 0.10) }
-            Text("\(Int(zoom * 100))%")
-                .font(CanvasTypography.data())
-                .foregroundStyle(CanvasPalette.ink45)
-                .monospacedDigit()
-            lineButton("plus", label: "Zoom in") { zoom = min(1.40, zoom + 0.10) }
+        HStack(alignment: .center, spacing: 14) {
+            // Zoom is one hairline group, not three loose glyphs. On the
+            // frosted layer everything is a 1px light border over a thin
+            // light fill at a crisp radius — chrome, never pigment.
+            HStack(spacing: 6) {
+                lineButton("minus", label: "Zoom out") { zoom = max(0.60, zoom - 0.10) }
+                Text("\(Int(zoom * 100))%")
+                    .font(CanvasTypography.data())
+                    .foregroundStyle(CanvasPalette.ink45)
+                    .monospacedDigit()
+                    .frame(width: 42)
+                lineButton("plus", label: "Zoom in") { zoom = min(1.40, zoom + 0.10) }
+            }
+            .padding(.horizontal, 4)
+            .background(glass ? CanvasPalette.glassFill : CanvasPalette.paperPlate.opacity(0.75), in: Capsule())
+            .overlay(Capsule().strokeBorder(glass ? CanvasPalette.glassHairline : CanvasPalette.paperLine, lineWidth: 1))
+
             lineButton("gearshape", label: "Settings") { settingsOpen = true }
         }
         .frame(maxWidth: 420, alignment: .trailing)
@@ -445,9 +458,9 @@ private struct CaptureReadingView: View {
                 .foregroundStyle(CanvasPalette.ink)
                 .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
 
-            Rectangle()
-                .fill(CanvasPalette.ink)
-                .frame(width: 56, height: 1.5)
+            BrushStroke()
+                .stroke(CanvasPalette.ink, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .frame(width: 120, height: 14)
 
             ZStack(alignment: .topLeading) {
                 if activeNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -535,6 +548,9 @@ private struct ReaderLayoutToggle: View {
     let layout: ReaderLayout
     let setLayout: (ReaderLayout) -> Void
     @Namespace private var inkSelection
+    @AppStorage(GroundSurface.storageKey) private var surfaceRaw = GroundSurface.paper.rawValue
+
+    private var glass: Bool { (GroundSurface(rawValue: surfaceRaw) ?? .paper) == .glass }
 
     var body: some View {
         HStack(spacing: 4) {
@@ -546,7 +562,7 @@ private struct ReaderLayoutToggle: View {
                 } label: {
                     Image(systemName: option.icon)
                         .font(.system(size: 12, weight: .regular))
-                        .foregroundStyle(active ? CanvasPalette.paperPlate : CanvasPalette.ink55)
+                        .foregroundStyle(active ? CanvasPalette.ink : CanvasPalette.ink55)
                         .frame(width: 38, height: 26)
                         .background {
                             if active {
@@ -557,8 +573,14 @@ private struct ReaderLayoutToggle: View {
                                 // Clean pills here: this is chrome, and the
                                 // wandering edge is reserved for the tab bar,
                                 // which is the brand moment.
+                                //
+                                // The wash, not full ink. Only one control on
+                                // a screen gets full pigment — on the canvas
+                                // that is the Raw/Organized pill, and two
+                                // solid navy pills side by side read as two
+                                // competing primary controls.
                                 Capsule()
-                                    .fill(CanvasPalette.accent)
+                                    .fill(CanvasPalette.inkWash)
                                     .matchedGeometryEffect(id: "ink-layout", in: inkSelection)
                             }
                         }
@@ -571,9 +593,9 @@ private struct ReaderLayoutToggle: View {
             }
         }
         .padding(3)
-        .background(CanvasPalette.paperPlate.opacity(0.55), in: Capsule())
-        .overlay(Capsule().stroke(CanvasPalette.ink12, lineWidth: 1))
-        .animation(.spring(response: 0.34, dampingFraction: 0.84), value: layout)
+        .background(glass ? CanvasPalette.glassFill : CanvasPalette.paperPlate.opacity(0.75), in: Capsule())
+        .overlay(Capsule().strokeBorder(glass ? CanvasPalette.glassHairline : CanvasPalette.paperLine, lineWidth: 1))
+        .animation(CanvasPalette.dry(CanvasPalette.travelSeconds), value: layout)
     }
 }
 
@@ -646,9 +668,9 @@ private struct CaptureGridView: View {
                 .focused($titleFocused)
                 .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
 
-            Rectangle()
-                .fill(CanvasPalette.ink)
-                .frame(width: 56, height: 1.5)
+            BrushStroke()
+                .stroke(CanvasPalette.ink, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                .frame(width: 120, height: 14)
 
             TextField("", text: Binding(
                 get: { appState.rawDraft },
@@ -1034,7 +1056,11 @@ private struct GridCaptureTile: View {
     @ViewBuilder
     private func marginalia<C: View>(bar: Color, @ViewBuilder content: () -> C) -> some View {
         HStack(alignment: .top, spacing: 12) {
-            Rectangle().fill(bar).frame(width: 1.5)
+            // The brush stroke on its end. A 1.5pt rectangle was a rule;
+            // this is a mark someone made down the margin.
+            BrushStroke(vertical: true)
+                .stroke(bar, style: StrokeStyle(lineWidth: 3, lineCap: .round))
+                .frame(width: 10)
             content()
                 .frame(maxWidth: CanvasPalette.measure, alignment: .leading)
         }
@@ -1105,48 +1131,54 @@ private struct GridCaptureTile: View {
     }
 }
 
+/// Raw / Organized, on the frosted layer.
+///
+/// Three stacked layers sharing one geometry: a blurred bloom, the crisp
+/// pill, and the labels. The bloom is what makes ink on glass read as
+/// pigment suspended IN the pane rather than a chip stuck on top of it —
+/// full ink as a flat fill up here always looked pasted on.
+///
+/// The travel animation is unchanged. What changed is the resting state: the
+/// pill used to sit permanently blobby, with two specks thrown off it, which
+/// broke the rule that nothing at rest has an organic edge. Now the wander is
+/// a transient — the ink is wet as it lands and dries to a plain capsule.
 private struct ReaderTabBar: View {
     @Binding var selection: ReaderTab
     @Namespace private var inkSelection
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
+    @AppStorage(GroundSurface.storageKey) private var surfaceRaw = GroundSurface.paper.rawValue
+
+    /// 1 the instant the ink lands, 0 once it has dried. At rest it is 0, and
+    /// `InkTabShape` at dispersion 0 is exactly a capsule.
+    @State private var wetness: CGFloat = 0
+
+    private var glass: Bool { (GroundSurface(rawValue: surfaceRaw) ?? .paper) == .glass }
 
     var body: some View {
         HStack(spacing: 5) {
             ForEach(ReaderTab.allCases) { tab in
                 Button {
                     guard selection != tab else { return }
-                    withAnimation(.spring(response: 0.42, dampingFraction: 0.82)) { selection = tab }
+                    withAnimation(CanvasPalette.dry(CanvasPalette.travelSeconds)) { selection = tab }
+                    dryOnLanding()
                 } label: {
                     Text(tab.rawValue.uppercased())
-                        .font(CanvasTypography.mark(10)).tracking(1.2)
-                        .foregroundStyle(selection == tab ? CanvasPalette.paper : CanvasPalette.ink.opacity(0.54))
+                        .font(CanvasTypography.mark(10)).tracking(1.8)
+                        .foregroundStyle(selection == tab ? Color.white : CanvasPalette.ink.opacity(0.54))
                         .frame(width: 96, height: 34)
                         .background {
                             if selection == tab {
                                 ZStack {
-                                    // Raw is ink that has just landed, edge
-                                    // still wandering. Organized is that same
-                                    // ink resolved into a contained pill —
-                                    // fragment becoming composition, which is
-                                    // the thing the two tabs actually mean.
-                                    InkTabShape(dispersion: tab == .raw ? 1 : 0, seed: 2.1)
-                                        .fill(CanvasPalette.inkBlue)
-                                        .matchedGeometryEffect(id: "ink-tab", in: inkSelection)
-
-                                    // Two specks thrown clear on landing. They
-                                    // belong to Raw only, and they are what the
-                                    // ink gives up when it resolves.
-                                    if tab == .raw {
-                                        Circle()
-                                            .fill(CanvasPalette.inkBlue.opacity(0.55))
-                                            .frame(width: 3.5, height: 3.5)
-                                            .offset(x: -54, y: -15)
-                                        Circle()
-                                            .fill(CanvasPalette.inkBlue.opacity(0.35))
-                                            .frame(width: 2.5, height: 2.5)
-                                            .offset(x: 50, y: 16)
-                                    }
+                                    // The ink glowing inside the glass.
+                                    Capsule()
+                                        .fill(CanvasPalette.inkBloom)
+                                        .blur(radius: 14)
+                                    // The same geometry, crisp — except for
+                                    // the half-second after it arrives.
+                                    InkTabShape(dispersion: wetness, seed: 2.1)
+                                        .fill(CanvasPalette.accent)
                                 }
-                                .transition(.opacity)
+                                .matchedGeometryEffect(id: "ink-tab", in: inkSelection)
                             }
                         }
                 }
@@ -1154,9 +1186,20 @@ private struct ReaderTabBar: View {
             }
         }
         .padding(4)
-        .background(CanvasPalette.paper.opacity(0.88), in: InkPillShape(variation: 2))
-        .overlay(InkPillShape(variation: 2).stroke(CanvasPalette.inkBlue.opacity(0.13)))
+        .background(glass ? CanvasPalette.glassFill : CanvasPalette.paperPlate.opacity(0.75), in: Capsule())
+        .overlay(Capsule().strokeBorder(glass ? CanvasPalette.glassHairline : CanvasPalette.paperLine, lineWidth: 1))
         .frame(maxWidth: .infinity, alignment: .center)
+    }
+
+    /// Wet on arrival, then 520ms of drying. Nothing happens during the
+    /// travel itself — the wander would just read as a wobble in transit.
+    private func dryOnLanding() {
+        guard !reduceMotion else { return }
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(CanvasPalette.landingSeconds))
+            wetness = 1
+            withAnimation(CanvasPalette.dry()) { wetness = 0 }
+        }
     }
 }
 
@@ -1171,8 +1214,12 @@ private struct OrganizedEssayView: View {
                         Label(appState.organizedTemplate.rawValue, systemImage: appState.organizedTemplate.icon)
                             .font(CanvasTypography.meta())
                             .foregroundStyle(CanvasPalette.ink55)
-                            .padding(.horizontal, 12).frame(height: 30)
-                            .background(CanvasPalette.inkBlue.opacity(0.09), in: InkPillShape(variation: 1))
+                            .padding(.horizontal, 14).frame(height: 32)
+                            // Crisp pill, wash fill. It sits beside
+                            // Reorganize, and a blobby pill next to the one
+                            // full-ink control read as a second attempt at
+                            // the same button.
+                            .background(CanvasPalette.inkWash, in: Capsule())
                         Spacer()
                         OrganizationPicker()
                             .environmentObject(appState)
@@ -1254,21 +1301,30 @@ private struct OrganizedEssayView: View {
 
 private struct OrganizationPicker: View {
     @EnvironmentObject private var appState: AppState
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
     @State private var isOpen = false
+    @State private var wetness: CGFloat = 0
 
     var body: some View {
-        Button { isOpen.toggle() } label: {
-            // The blob shape stays — it echoes the splatter. The label now
-            // matches the Raw/Organized labels in face and case, and the
-            // filled sparkle is gone: no filled icons anywhere.
+        Button {
+            isOpen.toggle()
+            wetOnPress()
+        } label: {
+            // This is the one full-ink control on the plate. It used to sit
+            // permanently blobby; now the blob is what happens when you touch
+            // it — wet on press, dry a half-second later.
             Text(appState.organizedDraft.isEmpty ? "ORGANIZE" : "REORGANIZE")
                 .font(CanvasTypography.data(11))
                 .tracking(1.3)
                 .padding(.horizontal, 18).frame(height: 38)
                 .foregroundStyle(CanvasPalette.paper)
-                .background(CanvasPalette.accent, in: InkTabShape(dispersion: 1, seed: 2.1))
+                .background(
+                    appState.isOrganizing ? CanvasPalette.inkWash : CanvasPalette.accent,
+                    in: InkTabShape(dispersion: wetness, seed: 3.0)
+                )
         }
         .buttonStyle(.plain)
+        .disabled(appState.isOrganizing)
         .popover(isPresented: $isOpen, arrowEdge: .bottom) {
             VStack(alignment: .leading, spacing: 5) {
                 HStack {
@@ -1309,11 +1365,16 @@ private struct OrganizationPicker: View {
             }
             .padding(12).frame(width: 248)
             .background(CanvasPalette.paper)
-            .overlay(alignment: .bottomTrailing) {
-                CanvasInkBlob().fill(CanvasPalette.inkBlue.opacity(0.07)).frame(width: 90, height: 70).offset(x: 16, y: 16).clipped()
-                    .allowsHitTesting(false)
-            }
+            // The decorative corner blob is gone: the brush stroke is the
+            // only organic shape in the product, and this was a second one
+            // sitting at rest inside the Reorganize menu.
         }
+    }
+
+    private func wetOnPress() {
+        guard !reduceMotion else { return }
+        wetness = 1
+        withAnimation(CanvasPalette.dry()) { wetness = 0 }
     }
 }
 
@@ -1372,36 +1433,46 @@ private struct EssayBlockView: View {
     }
 }
 
+/// The loading state: the brush stroke drawing itself.
+///
+/// The wordmark is gone from here. The header already carries one, and two
+/// NOTEDs on screen at once made the plate read as a splash screen rather
+/// than as a page that is thinking. What is left is the one organic mark in
+/// the product, drawn and then lifted, with the status line under it.
 private struct InkWritingLoader: View {
     let status: String
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
+    private static let cycle: Double = 1.6
+    /// The stroke is complete at 70% of the cycle and fades over the rest —
+    /// a stroke laid down and the hand taken away, not a looping scrub.
+    private static let drawn: Double = 0.7
+
     var body: some View {
         TimelineView(.animation(minimumInterval: reduceMotion ? 1 : 1 / 30)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            let progress = reduceMotion ? 0.7 : (sin(t * 2.4) + 1) / 2
-            VStack(spacing: 18) {
-                ZStack {
-                    Text("noted")
-                        .font(CanvasTypography.loaderWordmark)
-                        .textCase(.uppercase)
-                        .tracking(0.035 * 40)
-                        .foregroundStyle(CanvasPalette.inkBlue)
-                    Image(systemName: "pencil.tip")
-                        .font(.system(size: 17, weight: .semibold))
-                        .foregroundStyle(CanvasPalette.inkBlue)
-                        .rotationEffect(.degrees(-38))
-                        .offset(x: CGFloat(progress) * 74 - 37, y: 30)
-                    Capsule()
-                        .fill(CanvasPalette.inkBlue.opacity(0.75))
-                        .frame(width: CGFloat(progress) * 92 + 18, height: 3)
-                        .offset(y: 31)
-                }
-                .frame(height: 62)
+            let phase = reduceMotion
+                ? 0.5
+                : timeline.date.timeIntervalSinceReferenceDate
+                    .truncatingRemainder(dividingBy: Self.cycle) / Self.cycle
+            let raw = min(1, phase / Self.drawn)
+            // The drying curve, so the stroke decelerates into its end the
+            // way a drawn line does.
+            let progress = 1 - pow(1 - raw, 3)
+            let fade = phase <= Self.drawn ? 1 : 1 - (phase - Self.drawn) / (1 - Self.drawn)
+
+            VStack(spacing: 14) {
+                BrushStroke()
+                    .trim(from: 0, to: reduceMotion ? 1 : progress)
+                    .stroke(CanvasPalette.accent, style: StrokeStyle(lineWidth: 4, lineCap: .round))
+                    .frame(width: 150, height: 18)
+                    .opacity(reduceMotion ? 1 : fade)
+
                 Text(status)
-                    .font(CanvasTypography.meta())
+                    .font(CanvasTypography.meta(15))
                     .foregroundStyle(CanvasPalette.ink55)
             }
+            .accessibilityElement(children: .combine)
+            .accessibilityLabel(status)
         }
     }
 }
@@ -1750,8 +1821,33 @@ private enum CanvasPalette {
     /// The one accent. It appears in the ink blob, the active plate's
     /// hairline, and links — nowhere else, and never above ~10% of the
     /// visual weight of a screen.
-    static let accent = Color(hex: 0x2B2A63)
-    static let accentWash = Color(hex: 0x2B2A63, opacity: 0.08)
+    static let accent = Color(hex: 0x2B2A6B)
+    static let accentWash = Color(hex: 0x2B2A6B, opacity: 0.08)
+
+    /// Ink on glass, per NOTED-INK-SPEC. Full-density `accent` is the loud
+    /// register and belongs to one control per screen; everything else that
+    /// wants to look active takes the wash. `inkBloom` is never used on its
+    /// own — it is the blurred halo that sits UNDER the pill so ink on the
+    /// glass layer reads as pigment suspended in it rather than a sticker.
+    static let inkWash = Color(hex: 0x2B2A6B, opacity: 0.14)
+    static let inkBloom = Color(hex: 0x2B2A6B, opacity: 0.34)
+    static let paperLine = Color(hex: 0x1E1C3C, opacity: 0.10)
+
+    /// Hairline chrome. Anything drawn on the frosted layer is a 1px light
+    /// border over a thin light fill and a crisp radius — no pigment, no
+    /// wandering edge. The paper variants keep the same weight on cream.
+    static let glassHairline = Color.white.opacity(0.55)
+    static let glassFill = Color.white.opacity(0.28)
+
+    /// Ink is wet while it moves and dry when it lands: 520ms for the edge to
+    /// settle from organic back to crisp, on the spec's drying curve.
+    static let wetSeconds: Double = 0.52
+    static let travelSeconds: Double = 0.45
+    /// The pill is wet as it ARRIVES, not as it leaves.
+    static let landingSeconds: Double = 0.38
+    static func dry(_ duration: Double = wetSeconds) -> Animation {
+        .timingCurve(0.2, 0.8, 0.2, 1, duration: duration)
+    }
     /// On glass the marginalia needs a whisper of separation; on paper the
     /// bar alone carries it.
     static let accentWashGlass = Color(hex: 0x2B2A63, opacity: 0.06)
@@ -2025,6 +2121,30 @@ private struct InkUnderline: View {
         }
         .frame(height: 7)
         .allowsHitTesting(false)
+    }
+}
+
+/// The only hand-drawn shape in the product. One path — `M3 9 C 30 4, 70 11,
+/// 117 6` in a 120x14 box — reused at three sizes: the title underline, the
+/// loading indicator, and the annotation bar. Nothing else is allowed to be
+/// organic at rest, so this mark is what carries the whole handmade register.
+private struct BrushStroke: Shape {
+    /// The annotation bar is the same stroke stood on its end, not a second
+    /// drawing: the box transposes and the points come with it.
+    var vertical = false
+
+    func path(in rect: CGRect) -> Path {
+        let sx = (vertical ? rect.width / 14 : rect.width / 120)
+        let sy = (vertical ? rect.height / 120 : rect.height / 14)
+        func at(_ x: CGFloat, _ y: CGFloat) -> CGPoint {
+            vertical
+                ? CGPoint(x: rect.minX + y * sx, y: rect.minY + x * sy)
+                : CGPoint(x: rect.minX + x * sx, y: rect.minY + y * sy)
+        }
+        var path = Path()
+        path.move(to: at(3, 9))
+        path.addCurve(to: at(117, 6), control1: at(30, 4), control2: at(70, 11))
+        return path
     }
 }
 

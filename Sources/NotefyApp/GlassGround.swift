@@ -45,7 +45,13 @@ enum GlassTokens {
     /// appearance is a brightened, desaturated material whose floor is light
     /// whatever the wallpaper is, and the window is pinned to light. The
     /// title therefore keeps a light backing at this alpha.
-    static let paper = Color(hex: 0xF4F0E8, opacity: 0.13)
+    /// Shifted off the cream (#F4F0E8) to the spec's cooler neutral. The
+    /// warm tint was pulling the navy toward brown wherever ink sat on the
+    /// pane; #ECECF0 leaves it navy. The ALPHA is deliberately not the
+    /// spec's 0.62 — that number is for the web reference, which has no real
+    /// vibrancy layer under it. Here there is one, and 0.62 would undo the
+    /// see-through Sanjana asked for three times.
+    static let paper = Color(hex: 0xECECF0, opacity: 0.13)
     /// Plates are a second pane, deliberately more opaque than the window.
     static let paperPlate = Color(hex: 0xF8F5EF, opacity: 0.86)
     /// A selected plate lifts by getting MORE SOLID, never by a shadow.
