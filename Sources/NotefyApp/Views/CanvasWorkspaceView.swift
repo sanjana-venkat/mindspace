@@ -67,6 +67,11 @@ struct CanvasWorkspaceView: View {
         return path.isEmpty ? "Unfiled" : path
     }
 
+    private var pickerStock: FolderStock {
+        guard let url = appState.activeNoteURL else { return FolderStock.stable(for: nil) }
+        return FolderStock.stable(for: appState.folderID(for: url))
+    }
+
     var body: some View {
         ZStack {
             CanvasClayBackground(focused: true, zoom: 1)
@@ -78,6 +83,7 @@ struct CanvasWorkspaceView: View {
                 CanvasToolbar(
                     title: pickerTitle,
                     subtitle: pickerSubtitle,
+                    stock: pickerStock,
                     foldersOpen: $foldersOpen,
                     settingsOpen: $settingsOpen,
                     zoom: $zoom
@@ -204,6 +210,9 @@ struct CanvasWorkspaceView: View {
 private struct CanvasToolbar: View {
     let title: String
     let subtitle: String
+    /// The stock of the folder the open note is filed in, so the breadcrumb
+    /// previews the same object the chooser below it opens onto.
+    let stock: FolderStock
     @Binding var foldersOpen: Bool
     @Binding var settingsOpen: Bool
     @Binding var zoom: CGFloat
@@ -235,6 +244,9 @@ private struct CanvasToolbar: View {
             withAnimation(.easeOut(duration: 0.16)) { foldersOpen.toggle() }
         } label: {
             HStack(alignment: .firstTextBaseline, spacing: 9) {
+                FolderChip(stock: stock, width: 13)
+                    .frame(width: 13, height: 16)
+                    .alignmentGuide(.firstTextBaseline) { $0[.bottom] - 1 }
                 Text(subtitle)
                     .font(CanvasTypography.meta())
                     .foregroundStyle(CanvasPalette.ink55)
@@ -487,6 +499,10 @@ private struct CaptureReadingView: View {
         .frame(maxWidth: CanvasPalette.measure, alignment: .leading)
         .padding(.horizontal, CanvasPalette.pageMargin)
         .padding(.top, 108).padding(.bottom, 32)
+        // The aurora. Attached here rather than further out so it takes
+        // exactly the box the divider below takes — the tint ends on the
+        // hairline, which is what keeps the right side of the window neutral.
+        .background(AuroraPanelBackground())
         // The column divider is a single hairline, not a fill.
         .overlay(alignment: .trailing) {
             Rectangle().fill(CanvasPalette.ink12).frame(width: 1)
@@ -1083,9 +1099,13 @@ private struct GridCaptureTile: View {
         guard glass else {
             // Marginal plates sit back: the fill still has to carry the text,
             // but it stops competing with the capture inside it.
+            //
+            // The full plate now takes the card token rather than the plate
+            // token — a warmer, more opaque cream, so it reads as paper
+            // against the tinted panel instead of as another grey pane.
             return placement == .marginal
-                ? CanvasPalette.paperPlate.opacity(0.62)
-                : CanvasPalette.paperPlate
+                ? CanvasPalette.cardPlate.opacity(0.62)
+                : CanvasPalette.cardPlate
         }
         if selected { return GlassTokens.paperPlateSelected }
         // On glass the fill is legibility, not decoration, so it barely
@@ -1096,8 +1116,10 @@ private struct GridCaptureTile: View {
     }
 
     private var borderColor: Color {
+        // Selected keeps cobalt at 1.5px and gains nothing else — no shadow,
+        // no lift. Contrast comes from the cream, not from depth.
         if selected { return CanvasPalette.accent }
-        let base = glass ? GlassTokens.ink12 : CanvasPalette.ink12
+        let base = glass ? GlassTokens.ink12 : CanvasPalette.cardHairline
         let rest = placement == .marginal ? base.opacity(0.5) : base
         return hovering ? CanvasPalette.ink30 : rest
     }
@@ -1264,7 +1286,16 @@ private struct OrganizedEssayView: View {
                 }
                 .padding(.horizontal, 58).padding(.vertical, 48)
                 .frame(maxWidth: 820, minHeight: proxy.size.height - 48, alignment: .topLeading)
-                .background(CanvasPalette.paperPlate, in: RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous))
+                .background {
+                    // The plate, and the panel's dot field repeated inside it
+                    // at half strength — masked to the left 30% so it reads as
+                    // the page's margin rather than as a background.
+                    ZStack {
+                        CanvasPalette.paperPlate
+                        PlateMarginDots()
+                    }
+                    .clipShape(RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous))
+                }
                 .overlay(RoundedRectangle(cornerRadius: CanvasPalette.plateRadius, style: .continuous).stroke(CanvasPalette.ink12))
                 .padding(.horizontal, max(32, (proxy.size.width - 820) / 2)).padding(.vertical, 28)
             }
@@ -1596,6 +1627,15 @@ private struct CanvasFolderOverlay: View {
     @ViewBuilder
     private func folderSection(_ title: String, value: CanvasFolderFilter, notes folderNotes: [CanvasNoteSnapshot]) -> some View {
         let isExpanded = expanded.contains(value)
+        // "All notes" is a filter, not a folder, so it gets no object — but it
+        // still reserves the object's width so the names stay on one axis.
+        let stock: FolderStock? = {
+            switch value {
+            case .all: return nil
+            case .unfiled: return FolderStock.stable(for: nil)
+            case .folder(let id): return FolderStock.stable(for: id)
+            }
+        }()
         VStack(alignment: .leading, spacing: 2) {
             Button {
                 filter = value
@@ -1608,6 +1648,13 @@ private struct CanvasFolderOverlay: View {
                         .font(.system(size: 8, weight: .light))
                         .rotationEffect(.degrees(isExpanded ? 90 : 0))
                         .foregroundStyle(CanvasPalette.ink45)
+                    // The folder as the object it is, at row size. Same
+                    // drawing as the full-size one, so a folder is
+                    // recognisable here before its name is read.
+                    Group {
+                        if let stock { FolderChip(stock: stock) }
+                    }
+                    .frame(width: 24, height: 30)
                     // Section headers are italic meta, not bold sans.
                     Text(title)
                         .font(CanvasTypography.meta())
@@ -1812,7 +1859,7 @@ private struct InkWipeShape: Shape {
 /// Editorial ink tokens, taken from tokens.css. These are the only colours
 /// in the app — no invented hexes, no tints, no gradients, no washes beyond
 /// the one accent wash.
-private enum CanvasPalette {
+enum CanvasPalette {
     static let paper = Color(hex: 0xF1EDE4)
     /// A 2% lift for plates. Never white — white would make them dialogs.
     static let paperPlate = Color(hex: 0xF4F0E8)
@@ -1860,6 +1907,45 @@ private enum CanvasPalette {
     /// bar alone carries it.
     static let accentWashGlass = Color(hex: 0x2B2A63, opacity: 0.06)
 
+    // ---- Aurora (left panel only) ----
+    // The one place the sky shows through. Four low-saturation fields drift
+    // behind the panel's frost so it reads faintly pink/violet/green rather
+    // than grey. A tint, never a wallpaper — and never on the right side of
+    // the window, which stays neutral so the cream plates read as the
+    // brightest thing on screen.
+    static let auroraPink = Color(hex: 0xE8A3D3)
+    static let auroraGreen = Color(hex: 0x7FD6A8)
+    static let auroraViolet = Color(hex: 0x9F8FE0)
+
+    /// The night-sky dot field on the panel, and the handful of larger, darker
+    /// dots that keep it from reading as a grid.
+    static let dot = Color(hex: 0x1B2140, opacity: 0.12)
+    static let dotStar = Color(hex: 0x1B2140, opacity: 0.35)
+    /// Half strength, for the margin inside the Organized plate.
+    static let dotPlate = Color(hex: 0x1B2140, opacity: 0.06)
+
+    // ---- Paper stocks ----
+    // The four folder stocks. These and cobalt are the only saturated colour
+    // in the app; they never appear on a button, a chip, or any chrome.
+    static let stockTag = Color(hex: 0xF5B942)
+    static let stockEnvelope = Color(hex: 0xC8623E)
+    static let stockReceipt = Color(hex: 0xD9D8D3)
+    static let stockCard = Color(hex: 0xF1EBDD)
+
+    /// The only shadow permitted anywhere in the app: under a folder on hover.
+    static let folderLift = Color(hex: 0x1E1C19, opacity: 0.10)
+
+    // ---- Cards ----
+    // A 2% warmer, more opaque cream than the plate token, so a card reads as
+    // paper against the tinted panel rather than as a grey pane.
+    static let cardPlate = Color(hex: 0xF7F4EE, opacity: 0.96)
+    static let cardHairline = Color(hex: 0x1B2140, opacity: 0.08)
+
+    /// `--ease` from the brief. Everything the visual pass animates uses it.
+    static func ease(_ duration: Double) -> Animation {
+        .timingCurve(0.2, 0, 0, 1, duration: duration)
+    }
+
     // Names the rest of the file still reaches for, mapped onto the tokens
     // rather than left as a second, competing palette.
     static let clay = paper
@@ -1901,7 +1987,7 @@ private enum CanvasPalette {
 ///
 /// All faces are the free fallbacks named in the brief, and all four were
 /// already bundled — nothing here needs a licence.
-private enum CanvasTypography {
+enum CanvasTypography {
     private static let wght: UInt32 = 0x77676874
 
     private static func varied(_ name: String, _ size: CGFloat, _ axes: [UInt32: CGFloat]) -> Font {
