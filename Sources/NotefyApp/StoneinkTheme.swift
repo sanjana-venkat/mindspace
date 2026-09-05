@@ -261,9 +261,9 @@ typealias CoilShape = Capsule
 //
 // Three families, everywhere in the app:
 //
-//   Narnia          — display. Faras Dina's art-deco face, Sanjana's own
-//                     file: condensed, high contrast, counters nearly shut.
-//                     One weight, no axes, display sizes only.
+//   Boldonse        — display. Condensed, very heavy, sharp corners with a
+//                     slight deco flare. One weight, no axes, display sizes
+//                     only. OFL.
 //                     Always uppercase; that is what makes it a masthead.
 //   Hanken Grotesk  — everything read, at Light. Plain and open, so it sits
 //                     under the display face without arguing with it.
@@ -291,18 +291,18 @@ enum StoneFont {
         return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
     }
 
-    /// Narnia has one weight and no axes; the argument is ignored so no call
-    /// site can ask for a synthetic bold. See CanvasTypography.display.
+    /// Boldonse has one weight and no axes; the argument is ignored so no
+    /// call site can ask for a synthetic bold. See CanvasTypography.display.
     private static func display(_ size: CGFloat, _ weight: CGFloat = 0) -> Font {
-        .custom("Narnia", size: size)
+        .custom("Boldonse-Regular", size: size)
     }
     private static func text(_ size: CGFloat, _ weight: CGFloat = 330) -> Font {
         varied("HankenGrotesk-Regular", size, [wght: weight])
     }
 
-    static func display() -> Font { display(Stoneink.tDisplay * 1.12) }
-    static func title() -> Font { display(Stoneink.tTitle * 1.12) }
-    static func heading() -> Font { display(Stoneink.tHeading * 1.12) }
+    static func display() -> Font { display(Stoneink.tDisplay) }
+    static func title() -> Font { display(Stoneink.tTitle) }
+    static func heading() -> Font { display(Stoneink.tHeading) }
     static func read() -> Font { text(Stoneink.tRead) }
     static func readSmall() -> Font { text(Stoneink.tRead - 2) }
     static func readSemibold() -> Font { text(Stoneink.tSubhead, 600) }

@@ -258,7 +258,7 @@ private struct CanvasToolbar: View {
         Text("noted")
             .font(CanvasTypography.wordmark)
             .textCase(.uppercase)
-            .tracking(0.035 * 29)
+            .tracking(0.035 * 26)
             .foregroundStyle(CanvasPalette.ink)
             .accessibilityLabel("Noted")
     }
@@ -1385,7 +1385,7 @@ private struct InkWritingLoader: View {
                     Text("noted")
                         .font(CanvasTypography.loaderWordmark)
                         .textCase(.uppercase)
-                        .tracking(0.035 * 45)
+                        .tracking(0.035 * 40)
                         .foregroundStyle(CanvasPalette.inkBlue)
                     Image(systemName: "pencil.tip")
                         .font(.system(size: 17, weight: .semibold))
@@ -1810,23 +1810,19 @@ private enum CanvasTypography {
         return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
     }
 
-    /// Narnia, by Faras Dina — Sanjana's own file, not a substitution.
+    /// Boldonse — a single-weight display grotesque, OFL.
     ///
-    /// A single-weight art-deco display face: condensed, high contrast, wedge
-    /// terminals, and the counters nearly closed. It is the inky half of the
-    /// DOSS Problem brief far more literally than any grotesque was going to
-    /// manage. Set uppercase, which is where it is strongest.
+    /// Condensed, very heavy, with sharp corners and a slight deco flare on
+    /// the stems. It is the closest free face to the DOSS Problem brief, and
+    /// unlike the four uploads it survives a 24pt heading: the counters stay
+    /// open enough to read a whole line of caps, which the deco faces did not.
     ///
-    /// It has ONE weight and no axes, so the `weight` argument is deliberately
-    /// ignored rather than passed through — asking for a bold Narnia would get
-    /// a synthetic smear, which on a face with strokes this thin is very
-    /// visible. Sizes ran up about 12% from the Anybody settings to pay for
-    /// how much narrower it sets.
+    /// One weight, no axes, so the `weight` argument is deliberately ignored —
+    /// a synthetic bold on top of a face this heavy just fills the counters in.
     ///
-    /// Display only. At 16pt it is barely legible, so nothing that is actually
-    /// read is set in it — see `text` below.
+    /// Display only. Set uppercase; the caps are where it is strongest.
     static func display(_ size: CGFloat, _ weight: CGFloat = 0) -> Font {
-        .custom("Narnia", size: size)
+        .custom("Boldonse-Regular", size: size)
     }
 
     /// Hanken Grotesk Light — the Sharp Earth half of the brief: a plain,
@@ -1845,14 +1841,16 @@ private enum CanvasTypography {
     }
 
     // Roles the rest of the file names.
-    static let wordmark = display(29)
-    static let loaderWordmark = display(45)
-    static let noteTitleReader = display(56)
-    static let noteTitleGrid = display(46)
-    static let noteTitle = display(46)
-    static let essayTitle = display(56)
-    static let essayHeading = display(27)
-    static let emptyTitle = display(26)
+    static let wordmark = display(26)
+    static let loaderWordmark = display(40)
+    // Boldonse has a big cap height, so it reads a size larger than it is —
+    // these run about 8% under the Narnia settings to land in the same place.
+    static let noteTitleReader = display(40)
+    static let noteTitleGrid = display(34)
+    static let noteTitle = display(34)
+    static let essayTitle = display(40)
+    static let essayHeading = display(24)
+    static let emptyTitle = display(23)
     static let cardTitle = text(15.5, 520)
 
     static let noteBody = text(15.5)
@@ -1860,10 +1858,9 @@ private enum CanvasTypography {
     static let cardBody = text(15.5)
     static let control = text(15, 420)
 
-    /// Condensed deco caps need air between them or the wedges collide and
-    /// the word reads as one dark mass. +0.03em, not the negative tracking a
-    /// wide grotesque wanted.
-    static let titleTracking: CGFloat = 0.03 * 46
+    /// Heavy condensed caps need air between them or the word reads as one
+    /// dark mass. +0.03em, not the negative tracking a wide grotesque wanted.
+    static let titleTracking: CGFloat = 0.03 * 34
     static let titleLineSpacing: CGFloat = -6
     /// line-height 1.55 expressed as SwiftUI's extra leading. Every text
     /// element inside a plate uses this; display titles are the only
@@ -1905,7 +1902,7 @@ private struct CanvasBrandMark: View {
         Text("noted")
             .font(CanvasTypography.wordmark)
             .textCase(.uppercase)
-            .tracking(0.035 * 29)
+            .tracking(0.035 * 26)
             .foregroundStyle(CanvasPalette.ink)
             .frame(width: 112, height: 42)
             .accessibilityLabel("Noted")

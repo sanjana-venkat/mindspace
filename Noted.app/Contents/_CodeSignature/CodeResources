@@ -8,6 +8,10 @@
 		<data>
 		gksPbwoSKH7yURbXZfVSvnwDcr4=
 		</data>
+		<key>Resources/Fonts/Boldonse-Regular.ttf</key>
+		<data>
+		wCz7qEBsJQzs/Y41MZpKsDr8Wcg=
+		</data>
 		<key>Resources/Fonts/Caveat-Variable.ttf</key>
 		<data>
 		fuvCvyu/vVGw26fq7o/Y97UaOCo=
@@ -31,10 +35,6 @@
 		<key>Resources/Fonts/HankenGroteskItalic-VF.ttf</key>
 		<data>
 		w9yXqi9G2vI1tOGsln1tOiMCp1M=
-		</data>
-		<key>Resources/Fonts/Narnia.otf</key>
-		<data>
-		JMONdr33V4cSP6DASQMIHYnqlKU=
 		</data>
 		<key>Resources/NotedLogo.png</key>
 		<data>
@@ -90,6 +90,13 @@
 			s0ns886UcqvmytCxR7TT5FBr8dLl7nFOOjcNwsUF2gs=
 			</data>
 		</dict>
+		<key>Resources/Fonts/Boldonse-Regular.ttf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			9WbFcqhf7iW0HMqxqNGO+AOaMOPKRPMQ7hYomeptX8c=
+			</data>
+		</dict>
 		<key>Resources/Fonts/Caveat-Variable.ttf</key>
 		<dict>
 			<key>hash2</key>
@@ -130,13 +137,6 @@
 			<key>hash2</key>
 			<data>
 			rlcxcm/3UwGjy2Py6Y0bq8d9VasJ+44inKdfW9RvvjI=
-			</data>
-		</dict>
-		<key>Resources/Fonts/Narnia.otf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			2cmJIzJU7YLn0TqQhhmQ9vAsOrJpV0Y1leM13ZsCH1s=
 			</data>
 		</dict>
 		<key>Resources/NotedLogo.png</key>
