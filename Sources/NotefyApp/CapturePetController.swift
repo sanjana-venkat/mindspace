@@ -126,11 +126,14 @@ private struct CaptureRailView: View {
                 Button {
                     onDismiss()
                 } label: {
-                    // The current mark, not the retired splat one — the rail
-                    // was still drawing the old logo.
-                    NotedCanvasMark(size: 20, tint: NotefyTheme.ink)
-                        .frame(width: 46, height: 38)
-                        .clipShape(RoundedRectangle(cornerRadius: 19, style: .continuous))
+                    // No logo here. The mark was doing double duty as the
+                    // dismiss control, which made the one piece of branding
+                    // on screen also the button that makes it go away.
+                    Image(systemName: "xmark")
+                        .font(.system(size: 11, weight: .light))
+                        .foregroundStyle(NotefyTheme.ink.opacity(0.45))
+                        .frame(width: 46, height: 30)
+                        .contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("Hide Kami's capture rail")
@@ -141,11 +144,20 @@ private struct CaptureRailView: View {
                 railButton(.meeting, icon: .meeting, help: "Meeting notes — ⌘⇧M") { perform(toggleMeeting) }
             }
             .padding(.horizontal, 6)
-            .padding(.top, 5)
+            .padding(.top, 7)
             .padding(.bottom, 8)
-            .background(NotefyTheme.cardPaper)
-            .clipShape(Capsule())
-            .overlay(Capsule().stroke(NotefyTheme.ink.opacity(0.12), lineWidth: 1))
+            .background {
+                // The rail is a pane of glass laid on the desktop, not a
+                // white pill sitting on it. `.behindWindow` frosts whatever
+                // is actually behind the panel; the grain is the same etch
+                // the main window uses, so the two read as one material.
+                ZStack {
+                    RailGlass()
+                    FrostGrain()
+                }
+                .clipShape(Capsule())
+            }
+            .overlay(Capsule().stroke(Color.white.opacity(0.5), lineWidth: 1))
         }
         .padding(.trailing, 10)
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .trailing)
@@ -260,8 +272,14 @@ private struct CaptureRailView: View {
             .foregroundStyle(NotefyTheme.ink)
             .padding(.horizontal, 15)
             .padding(.vertical, 9)
-            .background(NotefyTheme.cardPaper, in: Capsule())
-            .overlay(Capsule().stroke(NotefyTheme.ink.opacity(0.12), lineWidth: 1))
+            .background {
+                ZStack {
+                    RailGlass()
+                    FrostGrain()
+                }
+                .clipShape(Capsule())
+            }
+            .overlay(Capsule().stroke(Color.white.opacity(0.5), lineWidth: 1))
         }
         .buttonStyle(RailPressStyle())
     }
@@ -332,5 +350,47 @@ struct OverlayIcon: View {
             }
         }
         .foregroundStyle(NotefyTheme.ink)
+    }
+}
+
+
+/// Frosted backing for the floating rail.
+///
+/// `.behindWindow` blending is what makes it real glass: the material samples
+/// the desktop behind the panel rather than the panel's own contents. The
+/// panel is already non-opaque with a clear background, which is the
+/// precondition — without that the effect view has nothing to sample.
+///
+/// The shape comes from `maskImage` rather than a SwiftUI clip, because a
+/// clip applied over an NSViewRepresentable does not reliably reach the
+/// effect view's own layer.
+private struct RailGlass: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .active
+        // Pinned light, like the main window: the rail's glyphs are ink, and
+        // a dark material under them would leave them unreadable on a dark
+        // desktop.
+        view.appearance = NSAppearance(named: .aqua)
+        return view
+    }
+
+    func updateNSView(_ view: NSVisualEffectView, context: Context) {
+        let radius = max(1, min(view.bounds.width, view.bounds.height) / 2)
+        view.maskImage = Self.capsuleMask(radius: radius)
+    }
+
+    private static func capsuleMask(radius: CGFloat) -> NSImage {
+        let side = radius * 2 + 2
+        let image = NSImage(size: NSSize(width: side, height: side), flipped: false) { rect in
+            NSColor.black.setFill()
+            NSBezierPath(roundedRect: rect, xRadius: radius, yRadius: radius).fill()
+            return true
+        }
+        image.capInsets = NSEdgeInsets(top: radius, left: radius, bottom: radius, right: radius)
+        image.resizingMode = .stretch
+        return image
     }
 }

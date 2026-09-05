@@ -450,7 +450,7 @@ private struct CaptureReadingView: View {
     /// A typeset text column: title, a short drop rule, then body on a 62ch
     /// measure. No eyebrow — the title's size is the hierarchy.
     private var rawNoteColumn: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             TextField("Untitled note", text: uppercasedTitle)
                 .textFieldStyle(.plain)
                 .font(CanvasTypography.noteTitleReader)
@@ -459,8 +459,12 @@ private struct CaptureReadingView: View {
                 .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
 
             BrushStroke()
-                .stroke(CanvasPalette.ink, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                .frame(width: 120, height: 14)
+                .stroke(CanvasPalette.ink, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                .frame(width: 86, height: 11)
+
+            NoteSlug()
+                .environmentObject(appState)
+                .padding(.bottom, 4)
 
             ZStack(alignment: .topLeading) {
                 if activeNoteText.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
@@ -659,7 +663,7 @@ private struct CaptureGridView: View {
     /// Headline, then a short drop rule. No eyebrow: the title's size IS the
     /// hierarchy, which is the whole correction here.
     private var head: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             TextField("Untitled note", text: uppercasedTitle)
                 .textFieldStyle(.plain)
                 .font(CanvasTypography.noteTitleGrid)
@@ -669,8 +673,12 @@ private struct CaptureGridView: View {
                 .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
 
             BrushStroke()
-                .stroke(CanvasPalette.ink, style: StrokeStyle(lineWidth: 4, lineCap: .round))
-                .frame(width: 120, height: 14)
+                .stroke(CanvasPalette.ink, style: StrokeStyle(lineWidth: 3.5, lineCap: .round))
+                .frame(width: 86, height: 11)
+
+            NoteSlug()
+                .environmentObject(appState)
+                .padding(.bottom, 4)
 
             TextField("", text: Binding(
                 get: { appState.rawDraft },
@@ -1924,12 +1932,15 @@ private enum CanvasTypography {
     /// Hanken Grotesk Light — the Sharp Earth half of the brief: a plain,
     /// open sans that gets out of the way underneath the display face. Light
     /// is the point, so the weight sits at 330 rather than at 400.
-    static func text(_ size: CGFloat = 15.5, _ weight: CGFloat = 330) -> Font {
+    /// 285, not 330. Hanken's Light is the whole point of picking it, and at
+    /// 330 it was still setting a shade heavier than "very light and simple".
+    static func text(_ size: CGFloat = 15.5, _ weight: CGFloat = 285) -> Font {
         varied("HankenGrotesk-Regular", size, [wght: weight])
     }
-    /// Meta is the text face in italic. Sentence case, always.
+    /// Meta is the text face in italic, a touch lighter again — it is the
+    /// user's own hand in the margin, not the app's voice.
     static func meta(_ size: CGFloat = 12.5) -> Font {
-        varied("HankenGrotesk-Italic", size, [wght: 330])
+        varied("HankenGrotesk-Italic", size, [wght: 275])
     }
     /// Machine strings only.
     static func data(_ size: CGFloat = 11) -> Font {
@@ -1941,10 +1952,13 @@ private enum CanvasTypography {
     static let loaderWordmark = display(40)
     // Boldonse has a big cap height, so it reads a size larger than it is —
     // these run about 8% under the Narnia settings to land in the same place.
-    static let noteTitleReader = display(40)
-    static let noteTitleGrid = display(34)
-    static let noteTitle = display(34)
-    static let essayTitle = display(40)
+    // Down again. Boldonse at 34 was still taking the whole top of the page
+    // before a single capture showed — and a masthead earns its size from
+    // the lockup around it, not from being the biggest thing on screen.
+    static let noteTitleReader = display(30)
+    static let noteTitleGrid = display(26)
+    static let noteTitle = display(26)
+    static let essayTitle = display(30)
     static let essayHeading = display(24)
     static let emptyTitle = display(23)
     static let cardTitle = text(15.5, 520)
@@ -1956,7 +1970,7 @@ private enum CanvasTypography {
 
     /// Heavy condensed caps need air between them or the word reads as one
     /// dark mass. +0.03em, not the negative tracking a wide grotesque wanted.
-    static let titleTracking: CGFloat = 0.03 * 34
+    static let titleTracking: CGFloat = 0.03 * 26
     static let titleLineSpacing: CGFloat = -6
     /// line-height 1.55 expressed as SwiftUI's extra leading. Every text
     /// element inside a plate uses this; display titles are the only
@@ -2145,6 +2159,31 @@ private struct BrushStroke: Shape {
         path.move(to: at(3, 9))
         path.addCurve(to: at(117, 6), control1: at(30, 4), control2: at(70, 11))
         return path
+    }
+}
+
+/// The masthead slug: what a magazine sets under a title instead of nothing.
+///
+/// Real data — how many captures this note holds and where it is filed — so
+/// the head reads as a filed, organized page rather than one large word
+/// floating at the top of a scroll. The title, the brush stroke and this line
+/// are one lockup; that is where the size the title lost goes.
+private struct NoteSlug: View {
+    @EnvironmentObject private var appState: AppState
+
+    var body: some View {
+        Text(slug)
+            .font(CanvasTypography.data(10))
+            .tracking(1.7)
+            .foregroundStyle(CanvasPalette.ink45)
+    }
+
+    private var slug: String {
+        let count = appState.steps.count
+        let captures = count == 1 ? "1 CAPTURE" : "\(count) CAPTURES"
+        guard let url = appState.activeNoteURL else { return "\(captures) · UNFILED" }
+        let path = appState.folderPath(for: appState.folderID(for: url))
+        return "\(captures) · \(path.isEmpty ? "UNFILED" : path.uppercased())"
     }
 }
 
