@@ -35,11 +35,14 @@ struct CanvasWorkspaceView: View {
     @State private var folderFilter: CanvasFolderFilter = .all
     @State private var foldersOpen = false
     @State private var settingsOpen = false
-    @State private var inkTransitionFrame: Int?
-    /// The frame counts the running wipe was started with, so the overlay
-    /// maps progress against the same numbers the loop is stepping.
-    @State private var inkCoverFrames = 16
-    @State private var inkRevealFrames = 20
+    /// One continuous value, not a frame index: 0 is a clear page, 1 is
+    /// fully covered, 2 is the ink pulled back off again. It drives a Shape's
+    /// animatableData, so SwiftUI interpolates it without re-evaluating this
+    /// view's body — which is what the stepped version was doing twelve times
+    /// per wipe, dragging the whole reader (masonry, images, plates) through a
+    /// full layout pass on every frame. That, not the interval, was the wait.
+    @State private var inkProgress: CGFloat = 0
+    @State private var inkWiping = false
     @State private var zoom: CGFloat = 1.0
     /// Owned here rather than in the reader so switching posture can be
     /// wrapped in the same ink wipe that switching notes uses — the overlay
@@ -97,15 +100,14 @@ struct CanvasWorkspaceView: View {
                 .zIndex(5)
             }
 
-            if let inkTransitionFrame {
-                InkOpenTransition(frame: inkTransitionFrame,
-                                  origin: nil,
-                                  coverFrames: inkCoverFrames,
-                                  revealFrames: inkRevealFrames)
-                    .ignoresSafeArea()
-                    .allowsHitTesting(true)
-                    .zIndex(20)
-            }
+            // Always mounted. At rest the path is empty, so this costs a
+            // path evaluation and nothing else — and staying mounted is what
+            // lets the animation run on the shape instead of on the ZStack.
+            InkWipeShape(progress: inkProgress)
+                .fill(CanvasPalette.inkBlue)
+                .ignoresSafeArea()
+                .allowsHitTesting(inkWiping)
+                .zIndex(20)
         }
         .focusable()
         .focusEffectDisabled()
@@ -130,64 +132,51 @@ struct CanvasWorkspaceView: View {
     /// Switching notes keeps the ink wipe the card wall used to open with —
     /// it is the one moment that still marks "you are now somewhere else".
     private func transitionToReading(_ url: URL) {
-        inkWipe(cover: 16, reveal: 20, interval: Self.noteWipeInterval) {
+        inkWipe(cover: 0.30, reveal: 0.36) {
             appState.openNote(url)
         }
     }
 
     /// Grid and panel are two views of the same note, so the change is worth
     /// the same beat: the ink covers, the layout swaps behind it, the ink
-    /// pulls back. Without it the whole page silently becomes something else.
+    /// pulls back. Flipping posture is something you do constantly while
+    /// working, so it runs about a third as long as opening a note — a third
+    /// of a second end to end, which reads as ink rather than as a wait.
     private func setLayout(_ option: ReaderLayout) {
         guard option.rawValue != layoutRaw else { return }
-        // Twelve frames, not thirty-six. Shaving the interval had stopped
-        // helping: Task.sleep does not deliver 4ms, so the frame COUNT was
-        // setting the duration, not the number I kept lowering.
-        inkWipe(cover: 5, reveal: 7, interval: Self.layoutWipeInterval) {
+        inkWipe(cover: 0.14, reveal: 0.18) {
             layoutRaw = option.rawValue
         }
     }
 
-    /// Cover, change, reveal. The change happens at the midpoint so it is
-    /// never seen happening.
-    /// Opening a note is a rarer, heavier move and keeps the full beat.
-    /// Flipping posture is something you do repeatedly while working, so it
-    /// runs the same 36 frames at a shorter interval — same gesture, roughly
-    /// two-thirds the time, so it still reads as ink rather than a cut.
-    private static let noteWipeInterval = 28
-    /// Flipping posture happens constantly while working, so it runs the
-    /// same gesture at roughly a third of the note-switch duration — about
-    /// 290ms end to end. Any slower and it is a wait, not a transition.
-    private static let layoutWipeInterval = 8
-
-    private func inkWipe(cover: Int, reveal: Int, interval: Int, _ change: @escaping () -> Void) {
-        guard inkTransitionFrame == nil else { return }
+    /// Cover, change, reveal. The change happens at full cover so it is never
+    /// seen happening.
+    ///
+    /// Both halves are single `withAnimation` calls, so this view's body is
+    /// evaluated twice per wipe rather than once per frame; the in-between
+    /// frames are the shape interpolating its own `animatableData`.
+    private func inkWipe(cover: Double, reveal: Double, _ change: @escaping () -> Void) {
+        guard !inkWiping else { return }
 
         guard !reduceMotion else {
             change()
             return
         }
 
-        inkCoverFrames = cover
-        inkRevealFrames = reveal
+        inkWiping = true
+        inkProgress = 0
+        withAnimation(.easeOut(duration: cover)) { inkProgress = 1 }
 
         Task { @MainActor in
-            let coverFrames = cover
-            let revealFrames = reveal
-
-            for frame in 0..<coverFrames {
-                inkTransitionFrame = frame
-                try? await Task.sleep(for: .milliseconds(interval))
-            }
-
+            try? await Task.sleep(for: .seconds(cover))
             change()
-
-            for frame in coverFrames..<(coverFrames + revealFrames) {
-                inkTransitionFrame = frame
-                try? await Task.sleep(for: .milliseconds(interval))
-            }
-
-            inkTransitionFrame = nil
+            // Let the swapped layout take its pass before the reveal starts,
+            // so the two are not competing for the same frame.
+            await Task.yield()
+            withAnimation(.easeIn(duration: reveal)) { inkProgress = 2 }
+            try? await Task.sleep(for: .seconds(reveal))
+            inkProgress = 0
+            inkWiping = false
             keyboardFocused = true
         }
     }
@@ -253,7 +242,8 @@ private struct CanvasToolbar: View {
     private var wordmark: some View {
         Text("noted")
             .font(CanvasTypography.wordmark)
-            .tracking(-0.02 * 28)
+            .textCase(.uppercase)
+            .tracking(0.02 * 26)
             .foregroundStyle(CanvasPalette.ink)
             .accessibilityLabel("Noted")
     }
@@ -409,7 +399,8 @@ private struct CaptureReadingView: View {
             TextField("Untitled note", text: $appState.noteTitle)
                 .textFieldStyle(.plain)
                 .font(CanvasTypography.noteTitleReader)
-                .tracking(-0.02 * 56)
+                .textCase(.uppercase)
+                .tracking(CanvasTypography.titleTracking)
                 .foregroundStyle(CanvasPalette.ink)
                 .onChange(of: appState.noteTitle) { appState.scheduleActiveNoteAutosave() }
 
@@ -591,6 +582,7 @@ private struct CaptureGridView: View {
             TextField("Untitled note", text: $appState.noteTitle)
                 .textFieldStyle(.plain)
                 .font(CanvasTypography.noteTitleGrid)
+                .textCase(.uppercase)
                 .tracking(CanvasTypography.titleTracking)
                 .foregroundStyle(CanvasPalette.ink)
                 .focused($titleFocused)
@@ -1122,6 +1114,8 @@ private struct OrganizedEssayView: View {
 
                     Text(appState.noteTitle)
                         .font(CanvasTypography.essayTitle)
+                        .textCase(.uppercase)
+                        .tracking(CanvasTypography.titleTracking)
 
                     if appState.isOrganizing {
                         InkWritingLoader(status: appState.recordingStatus ?? "Organizing your captures…")
@@ -1130,6 +1124,8 @@ private struct OrganizedEssayView: View {
                         VStack(alignment: .leading, spacing: 14) {
                             Text("This note has not been organized yet.")
                                 .font(CanvasTypography.emptyTitle)
+                                .textCase(.uppercase)
+                                .tracking(0.01 * 23)
                             Text("Choose a structure and Noted will turn the raw note and captures into one readable page using your configured model.")
                                 .font(CanvasTypography.noteBody).lineSpacing(CanvasTypography.leading(15.5)).opacity(0.58)
                             OrganizationPicker()
@@ -1270,6 +1266,8 @@ private struct EssayBlockView: View {
         case .heading(let text):
             Text(inlineMarkdown(text))
                 .font(CanvasTypography.essayHeading)
+                .textCase(.uppercase)
+                .tracking(0.015 * 24)
                 .padding(.top, 14)
         case .paragraph(let text):
             Text(inlineMarkdown(text))
@@ -1320,6 +1318,8 @@ private struct InkWritingLoader: View {
                 ZStack {
                     Text("noted")
                         .font(CanvasTypography.loaderWordmark)
+                        .textCase(.uppercase)
+                        .tracking(0.02 * 40)
                         .foregroundStyle(CanvasPalette.inkBlue)
                     Image(systemName: "pencil.tip")
                         .font(.system(size: 17, weight: .semibold))
@@ -1555,75 +1555,87 @@ private struct CanvasFolderOverlay: View {
     }
 }
 
-/// A code-drawn counterpart to a stepped PNG ink sprite: the mask advances in
-/// deliberate frames, covers the canvas, then breaks apart to reveal the note.
-private struct InkOpenTransition: View {
-    let frame: Int
-    let origin: CGPoint?
-    /// Supplied by the caller: a short wipe and a long one step through
-    /// different numbers of frames, and progress is a fraction of whichever
-    /// is running.
-    var coverFrames: Int = 16
-    var revealFrames: Int = 20
+/// The ink wipe, as a Shape rather than a Canvas.
+///
+/// A Canvas redraws when its owner's body is re-evaluated; a Shape redraws
+/// when its `animatableData` moves, and SwiftUI moves that itself. Making the
+/// wipe a Shape is the whole fix — the geometry below is unchanged.
+private struct InkWipeShape: Shape {
+    /// 0 is a clear page, 1 is fully covered, 2 is the ink withdrawn. At 0 and
+    /// at 2 the path is empty, so the shape can stay mounted between wipes.
+    var progress: CGFloat
 
-    private var coverFrameCount: Int { coverFrames }
-    private var revealFrameCount: Int { revealFrames }
+    var animatableData: CGFloat {
+        get { progress }
+        set { progress = newValue }
+    }
 
-    var body: some View {
-        Canvas { context, size in
-            if frame < coverFrameCount {
-                drawLandingSplashes(in: &context, size: size)
-            } else {
-                drawRecedingInk(in: &context, size: size)
+    func path(in rect: CGRect) -> Path {
+        var path = Path()
+        guard progress > 0, progress < 2 else { return path }
+
+        let center = CGPoint(x: rect.midX, y: rect.midY)
+        let maximumRadius = hypot(rect.width / 2, rect.height / 2) * 1.22
+
+        if progress < 1 {
+            // One continuous bloom. A broad ease-out gives it the fluid
+            // acceleration of pigment dispersing in water.
+            let eased = 1 - pow(1 - progress, 2.55)
+            let impact = sin(progress * .pi) * 0.045
+            let radius = maximumRadius * (eased + impact)
+            appendSplat(to: &path, center: center, radius: radius, seed: 17)
+
+            // Droplets stay tied to the same radial wavefront, so the edge is
+            // organically wet without a second, unrelated animation.
+            for index in 0..<5 where progress > CGFloat(index) * 0.035 {
+                let angle = CGFloat(index) * 1.27 - 0.6
+                let distance = radius * (0.70 + CGFloat(index % 2) * 0.11)
+                let dropletRadius = max(2, radius * (0.018 + CGFloat(index % 3) * 0.004))
+                appendDroplet(to: &path,
+                              at: CGPoint(x: center.x + cos(angle) * distance,
+                                          y: center.y + sin(angle) * distance * 0.82),
+                              radius: dropletRadius)
             }
+            return path
         }
-        .background(Color.clear)
-        .accessibilityHidden(true)
+
+        // The reveal is the cover played backwards: a single body of ink
+        // contracting and drifting off. No layers, no blend modes, and so
+        // nothing that can punch a hole in the middle of the page.
+        let reveal = progress - 1
+        let eased = pow(reveal, 1.7)
+        let radius = maximumRadius * (1 - eased)
+        guard radius > 0.5 else { return path }
+
+        // A slight drift as it goes, so it reads as withdrawing rather than
+        // as a circle shrinking on the spot.
+        let drift = eased * maximumRadius * 0.10
+        let recedingCenter = CGPoint(x: center.x - drift * 0.35, y: center.y + drift)
+        appendSplat(to: &path, center: recedingCenter, radius: radius, seed: 23)
+
+        // Droplets that broke away as it pulled back. They shrink out rather
+        // than being erased, so they never leave a gap behind them.
+        for index in 0..<4 {
+            let angle = CGFloat(index) * 1.61 + 0.4
+            let distance = radius * (0.74 + CGFloat(index % 2) * 0.13)
+            let dropletRadius = radius * (0.020 + CGFloat(index % 3) * 0.005)
+            guard dropletRadius > 0.5 else { continue }
+            appendDroplet(to: &path,
+                          at: CGPoint(x: recedingCenter.x + cos(angle) * distance,
+                                      y: recedingCenter.y + sin(angle) * distance * 0.82),
+                          radius: dropletRadius)
+        }
+        return path
     }
 
-    private func drawLandingSplashes(in context: inout GraphicsContext, size: CGSize) {
-        let progress = CGFloat(frame + 1) / CGFloat(coverFrameCount)
-        let center = CGPoint(
-            x: min(max(origin?.x ?? size.width / 2, 0), size.width),
-            y: min(max(origin?.y ?? size.height / 2, 0), size.height)
-        )
-        let farthestX = max(center.x, size.width - center.x)
-        let farthestY = max(center.y, size.height - center.y)
-        let maximumRadius = hypot(farthestX, farthestY) * 1.22
-
-        // One continuous bloom grows from the chosen card. A broad ease-out
-        // gives it the fluid acceleration of pigment dispersing in water.
-        let eased = 1 - pow(1 - progress, 2.55)
-        let impact = sin(progress * .pi) * 0.045
-        let radius = maximumRadius * (eased + impact)
-        context.fill(
-            organicSplat(center: center, radius: radius, seed: 17),
-            with: .color(CanvasPalette.inkBlue)
-        )
-
-        // Small droplets stay tied to the same radial wavefront, avoiding a
-        // second, unrelated animation while keeping the edge organically wet.
-        for index in 0..<5 where progress > CGFloat(index) * 0.035 {
-            let angle = CGFloat(index) * 1.27 - 0.6
-            let distance = radius * (0.70 + CGFloat(index % 2) * 0.11)
-            let dropletRadius = max(2, radius * (0.018 + CGFloat(index % 3) * 0.004))
-            let dropletCenter = CGPoint(
-                x: center.x + cos(angle) * distance,
-                y: center.y + sin(angle) * distance * 0.82
-            )
-            context.fill(
-                Path(ellipseIn: CGRect(
-                    x: dropletCenter.x - dropletRadius,
-                    y: dropletCenter.y - dropletRadius,
-                    width: dropletRadius * 2,
-                    height: dropletRadius * 1.55
-                )),
-                with: .color(CanvasPalette.inkBlue)
-            )
-        }
+    private func appendDroplet(to path: inout Path, at center: CGPoint, radius: CGFloat) {
+        path.addEllipse(in: CGRect(x: center.x - radius,
+                                   y: center.y - radius,
+                                   width: radius * 2,
+                                   height: radius * 1.55))
     }
 
-    private func organicSplat(center: CGPoint, radius: CGFloat, seed: Int) -> Path {
+    private func appendSplat(to path: inout Path, center: CGPoint, radius: CGFloat, seed: Int) {
         let pointCount = 34
         var points: [CGPoint] = []
         points.reserveCapacity(pointCount)
@@ -1634,16 +1646,13 @@ private struct InkOpenTransition: View {
             let roughness = 0.88
                 + sin(angle * 3 + seedPhase) * 0.08
                 + sin(angle * 7 - seedPhase * 1.4) * 0.045
-            let xRadius = radius * roughness
-            let yRadius = radius * 0.82 * roughness
             points.append(CGPoint(
-                x: center.x + cos(angle) * xRadius,
-                y: center.y + sin(angle) * yRadius
+                x: center.x + cos(angle) * radius * roughness,
+                y: center.y + sin(angle) * radius * 0.82 * roughness
             ))
         }
 
-        var path = Path()
-        guard let first = points.first, let last = points.last else { return path }
+        guard let first = points.first, let last = points.last else { return }
         path.move(to: CGPoint(x: (last.x + first.x) / 2, y: (last.y + first.y) / 2))
         for index in points.indices {
             let point = points[index]
@@ -1652,67 +1661,6 @@ private struct InkOpenTransition: View {
             path.addQuadCurve(to: midpoint, control: point)
         }
         path.closeSubpath()
-        return path
-    }
-
-    /// The reveal used to punch a 6x5 grid of blooms out of the ink with a
-    /// destinationOut layer. Those openings ARE the holes — thirty of them,
-    /// appearing all over the screen at once, each one showing a hard-edged
-    /// patch of the page behind. It also read as a completely different
-    /// gesture from the cover, which is one mass growing.
-    ///
-    /// So the reveal is now the cover played backwards: a single body of ink
-    /// contracting and drifting off, with a couple of droplets outrunning it.
-    /// No layers, no blend modes, and nothing that can open a hole.
-    private func drawRecedingInk(in context: inout GraphicsContext, size: CGSize) {
-        let revealIndex = frame - coverFrameCount + 1
-        let progress = min(1, CGFloat(revealIndex) / CGFloat(revealFrameCount))
-
-        let center = CGPoint(
-            x: min(max(origin?.x ?? size.width / 2, 0), size.width),
-            y: min(max(origin?.y ?? size.height / 2, 0), size.height)
-        )
-        let farthestX = max(center.x, size.width - center.x)
-        let farthestY = max(center.y, size.height - center.y)
-        let maximumRadius = hypot(farthestX, farthestY) * 1.22
-
-        // Holds a beat at full cover, then pulls away quickly — pigment
-        // being drawn off the page rather than fading out.
-        let eased = pow(progress, 1.7)
-        let radius = maximumRadius * (1 - eased)
-        guard radius > 0.5 else { return }
-
-        // A slight drift as it goes, so it reads as withdrawing rather than
-        // as a circle shrinking on the spot.
-        let drift = eased * maximumRadius * 0.10
-        let recedingCenter = CGPoint(x: center.x - drift * 0.35, y: center.y + drift)
-
-        context.fill(
-            organicSplat(center: recedingCenter, radius: radius, seed: 23),
-            with: .color(CanvasPalette.inkBlue)
-        )
-
-        // Droplets that broke away as it pulled back. They shrink out rather
-        // than being erased, so they never leave a gap behind them.
-        for index in 0..<4 {
-            let angle = CGFloat(index) * 1.61 + 0.4
-            let distance = radius * (0.74 + CGFloat(index % 2) * 0.13)
-            let dropletRadius = max(0, radius * (0.020 + CGFloat(index % 3) * 0.005))
-            guard dropletRadius > 0.5 else { continue }
-            let dropletCenter = CGPoint(
-                x: recedingCenter.x + cos(angle) * distance,
-                y: recedingCenter.y + sin(angle) * distance * 0.82
-            )
-            context.fill(
-                Path(ellipseIn: CGRect(
-                    x: dropletCenter.x - dropletRadius,
-                    y: dropletCenter.y - dropletRadius,
-                    width: dropletRadius * 2,
-                    height: dropletRadius * 1.55
-                )),
-                with: .color(CanvasPalette.inkBlue)
-            )
-        }
     }
 }
 
@@ -1785,9 +1733,7 @@ private enum CanvasPalette {
 /// already bundled — nothing here needs a licence.
 private enum CanvasTypography {
     private static let wght: UInt32 = 0x77676874
-    private static let opsz: UInt32 = 0x6F70737A
-    private static let soft: UInt32 = 0x534F4654
-    private static let wonk: UInt32 = 0x574F4E4B
+    private static let wdth: UInt32 = 0x77647468
 
     private static func varied(_ name: String, _ size: CGFloat, _ axes: [UInt32: CGFloat]) -> Font {
         var variations: [CFNumber: CFNumber] = [:]
@@ -1799,21 +1745,29 @@ private enum CanvasTypography {
         return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
     }
 
-    /// Fraunces, display optical size, softness off, wonk off. Never Black,
-    /// never Bold.
-    /// Display weight goes 300 -> 600. The brief said never bold and that
-    /// was right for a Didone; Fraunces at 300 just reads thin, and at 600
-    /// with the display optical size the contrast between stem and hairline
-    /// is what carries it rather than sheer mass.
-    static func display(_ size: CGFloat, _ weight: CGFloat = 600) -> Font {
-        varied("Fraunces-9ptBlack", size, [wght: weight, opsz: 144, soft: 0, wonk: 0])
+    /// Anybody, heavy and very slightly narrowed.
+    ///
+    /// Sanjana asked for DOSS Problem — "inky and bold and sharp". DOSS is a
+    /// Sharp Type retail release, so this is the nearest thing that ships
+    /// under the OFL: a squarish grotesque whose counters close up as the
+    /// weight climbs, which is exactly where the inky quality comes from.
+    /// Pulling the width axis in a touch tightens them further.
+    ///
+    /// Headings set from this face are uppercase. Squarish caps are what
+    /// makes it read as a masthead rather than as a UI label.
+    static func display(_ size: CGFloat, _ weight: CGFloat = 800) -> Font {
+        varied("Anybody-Thin", size, [wght: weight, wdth: 94])
     }
-    static func text(_ size: CGFloat = 15.5, _ weight: CGFloat = 400) -> Font {
-        varied("NewsreaderRoman-Regular", size, [wght: weight, opsz: 16])
+
+    /// Hanken Grotesk Light — the Sharp Earth half of the brief: a plain,
+    /// open sans that gets out of the way underneath the display face. Light
+    /// is the point, so the weight sits at 330 rather than at 400.
+    static func text(_ size: CGFloat = 15.5, _ weight: CGFloat = 330) -> Font {
+        varied("HankenGrotesk-Regular", size, [wght: weight])
     }
     /// Meta is the text face in italic. Sentence case, always.
     static func meta(_ size: CGFloat = 12.5) -> Font {
-        .custom("NewsreaderItalic-Italic", size: size)
+        varied("HankenGrotesk-Italic", size, [wght: 330])
     }
     /// Machine strings only.
     static func data(_ size: CGFloat = 11) -> Font {
@@ -1821,24 +1775,26 @@ private enum CanvasTypography {
     }
 
     // Roles the rest of the file names.
-    static let wordmark = display(28, 600)
-    static let loaderWordmark = display(44, 600)
-    static let noteTitleReader = display(56, 600)
-    static let noteTitleGrid = display(44, 600)
-    static let noteTitle = display(44, 600)
-    static let essayTitle = display(56, 600)
-    static let essayHeading = display(28, 400)
-    static let emptyTitle = display(26, 600)
-    static let cardTitle = text(15.5, 500)
+    static let wordmark = display(26, 800)
+    static let loaderWordmark = display(40, 800)
+    static let noteTitleReader = display(50, 820)
+    static let noteTitleGrid = display(40, 820)
+    static let noteTitle = display(40, 820)
+    static let essayTitle = display(50, 820)
+    static let essayHeading = display(24, 700)
+    static let emptyTitle = display(23, 800)
+    static let cardTitle = text(15.5, 520)
 
     static let noteBody = text(15.5)
     static let essayBody = text(15.5)
     static let cardBody = text(15.5)
-    static let control = text(15)
+    static let control = text(15, 420)
 
-    /// −0.02em at the sizes above, and leading pulled to 1.0.
-    static let titleTracking: CGFloat = -0.02 * 44
-    static let titleLineSpacing: CGFloat = -10
+    /// Heavy squarish caps set solid. Tracking stays a hair positive rather
+    /// than negative — at 800 weight the counters are already tight, and
+    /// pulling the letters together turns the word into a block.
+    static let titleTracking: CGFloat = 0.005 * 40
+    static let titleLineSpacing: CGFloat = -8
     /// line-height 1.55 expressed as SwiftUI's extra leading. Every text
     /// element inside a plate uses this; display titles are the only
     /// exception, and they set their own negative leading.
@@ -1878,7 +1834,8 @@ private struct CanvasBrandMark: View {
     var body: some View {
         Text("noted")
             .font(CanvasTypography.wordmark)
-            .tracking(-1.0)
+            .textCase(.uppercase)
+            .tracking(0.02 * 26)
             .foregroundStyle(CanvasPalette.ink)
             .frame(width: 112, height: 42)
             .accessibilityLabel("Noted")

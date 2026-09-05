@@ -171,7 +171,7 @@ private final class RegionSelectionView: NSView {
         if selection.isEmpty {
             let instruction = "DRAG TO CAPTURE  ·  ESC TO CANCEL" as NSString
             let attributes: [NSAttributedString.Key: Any] = [
-                .font: NSFont(name: "Quicksand", size: 13) ?? .systemFont(ofSize: 13, weight: .semibold),
+                .font: NSFont(name: "HankenGrotesk-Regular_SemiBold", size: 13) ?? .systemFont(ofSize: 13, weight: .semibold),
                 .foregroundColor: NSColor(calibratedRed: 0.973, green: 0.957, blue: 0.925, alpha: 1)
             ]
             let textSize = instruction.size(withAttributes: attributes)
@@ -207,7 +207,7 @@ private final class RegionSelectionView: NSView {
 
         let label = "\(Int(selection.width)) × \(Int(selection.height))" as NSString
         let attributes: [NSAttributedString.Key: Any] = [
-            .font: NSFont(name: "Quicksand", size: 10) ?? .systemFont(ofSize: 10, weight: .semibold),
+            .font: NSFont(name: "HankenGrotesk-Regular_SemiBold", size: 10) ?? .systemFont(ofSize: 10, weight: .semibold),
             .foregroundColor: NSColor(calibratedRed: 0.973, green: 0.957, blue: 0.925, alpha: 1)
         ]
         let textSize = label.size(withAttributes: attributes)

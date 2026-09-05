@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 
 // ============================================================
@@ -258,41 +259,57 @@ typealias CoilShape = Capsule
 
 // MARK: - Type
 //
-// Newsreader (the ink — user-written content only), IBM Plex Sans
-// (the stamp — app chrome), IBM Plex Mono (the kiln mark — metadata).
-// If the user wrote it, it's Newsreader. If the app wrote it, it's Plex.
+// Three families, everywhere in the app:
+//
+//   Anybody         — display. Squarish, and the counters close up as the
+//                     weight climbs, which is where the inky feel comes from.
+//                     Always uppercase; that is what makes it a masthead.
+//   Hanken Grotesk  — everything read, at Light. Plain and open, so it sits
+//                     under the display face without arguing with it.
+//   Geist Mono      — machine strings only.
+//
+// The old rule here was "user ink is Newsreader, app chrome is Plex". The
+// split survives, but it is now carried by weight and italic inside one text
+// family rather than by a second typeface — a serif for the user and a
+// grotesque for the chrome was reading as two apps stitched together.
+//
+// These are PostScript names, not family names. `Font.custom` fails SILENTLY
+// to San Francisco when a name doesn't resolve, so a typo here looks like a
+// design choice rather than a bug.
 
 enum StoneFont {
-    static func display() -> Font { .custom("NewsreaderRoman-72pt", size: Stoneink.tDisplay) }
-    static func title() -> Font { .custom("NewsreaderRoman-72pt", size: Stoneink.tTitle) }
-    static func heading() -> Font { .custom("NewsreaderRoman-72pt", size: Stoneink.tHeading) }
-    static func read() -> Font { .custom("NewsreaderRoman-Regular", size: Stoneink.tRead) }
-    static func readSmall() -> Font { .custom("NewsreaderRoman-Regular", size: Stoneink.tRead - 2) }
-    static func readSemibold() -> Font { .custom("NewsreaderRoman-SemiBold", size: Stoneink.tSubhead) }
-    static func readItalic() -> Font { .custom("NewsreaderItalic-Italic", size: Stoneink.tRead) }
+    private static let wght: UInt32 = 0x77676874
+    private static let wdth: UInt32 = 0x77647468
 
-    // ---- Chrome: Geist, and Geist Mono for the marks ----
-    //
-    // Newsreader keeps everything the reader actually reads. The chrome
-    // moved off IBM Plex Sans because Plex has loud letterforms — the
-    // flared `a`, the squared-off curves, the tall distinctive `g` — and
-    // at 13-15pt next to a literary serif they read as a second voice
-    // competing with it rather than as furniture around it. Geist is a
-    // neutral grotesque with even spacing and a large x-height: it holds
-    // up at small sizes on macOS and gets out of Newsreader's way.
-    //
-    // Geist Mono is drawn as the companion to Geist and shares its
-    // skeleton, so the tracked-out mono marks stop reading as a THIRD
-    // typeface. Mixing Plex Mono with Geist would put the seam back.
-    //
-    // These are PostScript names, not family names. `Font.custom` fails
-    // SILENTLY to San Francisco when a name doesn't resolve, so a typo
-    // here looks like a design choice rather than a bug — which is
-    // exactly how "Newsreader Display" survived in the canvas view.
-    static func subhead() -> Font { .custom("Geist-SemiBold", size: Stoneink.tSubhead) }
-    static func body() -> Font { .custom("Geist-Regular", size: Stoneink.tBody) }
-    static func bodyMedium() -> Font { .custom("Geist-Medium", size: Stoneink.tBody) }
-    static func label() -> Font { .custom("Geist-Medium", size: Stoneink.tLabel) }
+    private static func varied(_ name: String, _ size: CGFloat, _ axes: [UInt32: CGFloat]) -> Font {
+        var variations: [CFNumber: CFNumber] = [:]
+        for (tag, value) in axes { variations[tag as CFNumber] = value as CFNumber }
+        let descriptor = CTFontDescriptorCreateWithAttributes([
+            kCTFontNameAttribute: name,
+            kCTFontVariationAttribute: variations
+        ] as CFDictionary)
+        return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
+    }
+
+    private static func display(_ size: CGFloat, _ weight: CGFloat) -> Font {
+        varied("Anybody-Thin", size, [wght: weight, wdth: 94])
+    }
+    private static func text(_ size: CGFloat, _ weight: CGFloat = 330) -> Font {
+        varied("HankenGrotesk-Regular", size, [wght: weight])
+    }
+
+    static func display() -> Font { display(Stoneink.tDisplay, 820) }
+    static func title() -> Font { display(Stoneink.tTitle, 820) }
+    static func heading() -> Font { display(Stoneink.tHeading, 760) }
+    static func read() -> Font { text(Stoneink.tRead) }
+    static func readSmall() -> Font { text(Stoneink.tRead - 2) }
+    static func readSemibold() -> Font { text(Stoneink.tSubhead, 600) }
+    static func readItalic() -> Font { varied("HankenGrotesk-Italic", Stoneink.tRead, [wght: 330]) }
+
+    static func subhead() -> Font { text(Stoneink.tSubhead, 620) }
+    static func body() -> Font { text(Stoneink.tBody) }
+    static func bodyMedium() -> Font { text(Stoneink.tBody, 500) }
+    static func label() -> Font { text(Stoneink.tLabel, 500) }
 
     static func mark() -> Font { .custom("GeistMono-Regular", size: Stoneink.tMark) }
     static func markMedium() -> Font { .custom("GeistMono-Medium", size: Stoneink.tMark) }

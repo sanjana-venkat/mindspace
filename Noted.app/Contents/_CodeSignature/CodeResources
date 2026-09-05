@@ -6,27 +6,15 @@
 	<dict>
 		<key>Resources/AppIcon.icns</key>
 		<data>
-		AY1caj+xXZ/8cldtSLYAdK713E4=
+		gksPbwoSKH7yURbXZfVSvnwDcr4=
+		</data>
+		<key>Resources/Fonts/Anybody-VF.ttf</key>
+		<data>
+		fCnQiM47RYOZep3nuOw4b4buc60=
 		</data>
 		<key>Resources/Fonts/Caveat-Variable.ttf</key>
 		<data>
 		fuvCvyu/vVGw26fq7o/Y97UaOCo=
-		</data>
-		<key>Resources/Fonts/Geist-Bold.ttf</key>
-		<data>
-		hCkh0rTuLCxfbW00sUzNL05XI8Y=
-		</data>
-		<key>Resources/Fonts/Geist-Medium.ttf</key>
-		<data>
-		7jMtmqNGmamYpG9BFduq+PPQIhs=
-		</data>
-		<key>Resources/Fonts/Geist-Regular.ttf</key>
-		<data>
-		PejWefwDeL0yE3QwjeQABFt5rYE=
-		</data>
-		<key>Resources/Fonts/Geist-SemiBold.ttf</key>
-		<data>
-		M/QexYKfsHGgse1asOL146wDiPE=
 		</data>
 		<key>Resources/Fonts/GeistMono-Medium.ttf</key>
 		<data>
@@ -40,61 +28,57 @@
 		<data>
 		D+rm7JShN69BFFyfZqO0ZWTRUVk=
 		</data>
-		<key>Resources/Fonts/IBMPlexMono-Medium.ttf</key>
+		<key>Resources/Fonts/HankenGrotesk-VF.ttf</key>
 		<data>
-		0SRigKMVw3emUYeQR3I7q247QR4=
+		h4RwPLC7sMyeA1vqBLfLGO/Xn+I=
 		</data>
-		<key>Resources/Fonts/IBMPlexMono-Regular.ttf</key>
+		<key>Resources/Fonts/HankenGroteskItalic-VF.ttf</key>
 		<data>
-		K3wjk//0Gm4URv1jUQAuGqGpmeg=
-		</data>
-		<key>Resources/Fonts/IBMPlexSans-Medium.ttf</key>
-		<data>
-		xfU5tpv3prDU0JFCl4iCfN31iMo=
-		</data>
-		<key>Resources/Fonts/IBMPlexSans-Regular.ttf</key>
-		<data>
-		ekJbnZVYZV4FEl4VJXiqef7qyaI=
-		</data>
-		<key>Resources/Fonts/IBMPlexSans-SemiBold.ttf</key>
-		<data>
-		/gGr6rXAim7Wtshe95TAUsJSB1Y=
-		</data>
-		<key>Resources/Fonts/InstrumentSerif-Regular.ttf</key>
-		<data>
-		dg3OLkMvs3EVedTeHPUxnsryjH8=
-		</data>
-		<key>Resources/Fonts/Newsreader-DisplayRegular.ttf</key>
-		<data>
-		McR7UtfQ9ncqLJZdKFrao2JfgtQ=
-		</data>
-		<key>Resources/Fonts/Newsreader-ReadItalic.ttf</key>
-		<data>
-		qBKMZhJx/HEOXf18UN+LJClcLLc=
-		</data>
-		<key>Resources/Fonts/Newsreader-ReadRegular.ttf</key>
-		<data>
-		zK7san+Zri8Cc0gKJ7v9ThenENg=
-		</data>
-		<key>Resources/Fonts/Newsreader-ReadSemiBold.ttf</key>
-		<data>
-		oOI6/9uSCBxOj9JM3YVWcafCy/Q=
-		</data>
-		<key>Resources/Fonts/PatrickHand-Regular.ttf</key>
-		<data>
-		CjxRU7J3jv0wUpuaWtaiE1Vn0NQ=
-		</data>
-		<key>Resources/Fonts/Quicksand-Variable.ttf</key>
-		<data>
-		QiM+oHxXDg6ID8qnkpImJ4FOzcc=
-		</data>
-		<key>Resources/Fonts/Syne-Variable.ttf</key>
-		<data>
-		BQo+P2t7ID56BfNOuf0ZdU5mFMA=
+		w9yXqi9G2vI1tOGsln1tOiMCp1M=
 		</data>
 		<key>Resources/NotedLogo.png</key>
 		<data>
 		PAGDUxdIePN1t9bOG0u074ljl+k=
+		</data>
+		<key>Resources/Notefy_NotefyApp.bundle/noted-mark.svg</key>
+		<data>
+		0PKyJA6UzuK1h7is0Qk3IrnsPdY=
+		</data>
+		<key>Resources/Notefy_NotefyApp.bundle/noted-nib.png</key>
+		<data>
+		TWD0q7zaQyd4pMi+fOlPyJE+o28=
+		</data>
+		<key>Resources/Notefy_NotefyApp.bundle/noted-splat.png</key>
+		<data>
+		e9DU0HroS+NotT+Q8LIRHskIUS8=
+		</data>
+		<key>Resources/Notefy_NotefyApp.bundle/noted-wordmark.svg</key>
+		<data>
+		pACXCsMuLHXTuh+wbA1wKoKsBHs=
+		</data>
+		<key>Resources/Notefy_NotefyApp.bundle/splat-01.svg</key>
+		<data>
+		pGkLduQSFD2ax9cQvoNMqA6yQIY=
+		</data>
+		<key>Resources/Notefy_NotefyApp.bundle/splat-02.svg</key>
+		<data>
+		oB/Ojzo/W7qNYWGfZ48kHKR80ZI=
+		</data>
+		<key>Resources/Notefy_NotefyApp.bundle/splat-03.svg</key>
+		<data>
+		30hMYry2cd50WAEVdlEWE2oGOSI=
+		</data>
+		<key>Resources/Notefy_NotefyApp.bundle/splat-04.svg</key>
+		<data>
+		N7bWk9B+Lm/fpWLSYUUs4tloySg=
+		</data>
+		<key>Resources/Notefy_NotefyApp.bundle/splat-05.svg</key>
+		<data>
+		KcljRimfWAELjB3XMiQTQjSN3CY=
+		</data>
+		<key>Resources/Notefy_NotefyApp.bundle/splat-06.svg</key>
+		<data>
+		2wEMjPzRcJ01bk+mhjzJPk+BCl4=
 		</data>
 	</dict>
 	<key>files2</key>
@@ -103,7 +87,14 @@
 		<dict>
 			<key>hash2</key>
 			<data>
-			NIsxcxNzeNL8/ep7Q+WeKOXmoPMFmKaIa+Pd+EKWeYs=
+			s0ns886UcqvmytCxR7TT5FBr8dLl7nFOOjcNwsUF2gs=
+			</data>
+		</dict>
+		<key>Resources/Fonts/Anybody-VF.ttf</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			sYS9fmyoNIu67OyYlRVlcp1+ibeHLUiYofmYE0K1tkw=
 			</data>
 		</dict>
 		<key>Resources/Fonts/Caveat-Variable.ttf</key>
@@ -111,34 +102,6 @@
 			<key>hash2</key>
 			<data>
 			C9trZgSC0xUxs5RYSfulkWs++GldpwJKnmue48QVeYg=
-			</data>
-		</dict>
-		<key>Resources/Fonts/Geist-Bold.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			PyHwK4JyKMPwxfsjDQJ7WhomMBNhjoBSvBs8VpKBLIg=
-			</data>
-		</dict>
-		<key>Resources/Fonts/Geist-Medium.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			Ojs28NC5gfSFf38A7u9KXuEjYFV102KrMe58GePRHy8=
-			</data>
-		</dict>
-		<key>Resources/Fonts/Geist-Regular.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			haHGsYprCgbf6f1PbWpdSXn3Tshh6u9Lx4aLVJK4oRc=
-			</data>
-		</dict>
-		<key>Resources/Fonts/Geist-SemiBold.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			ufUjItbSCn/x5/4TEP8S7IUa67g9JPi08dQUkpj0ibI=
 			</data>
 		</dict>
 		<key>Resources/Fonts/GeistMono-Medium.ttf</key>
@@ -162,95 +125,18 @@
 			/RbRtYwheDFdEQ6zmakssCusgPglDgtYpgX+lu4lc2Q=
 			</data>
 		</dict>
-		<key>Resources/Fonts/IBMPlexMono-Medium.ttf</key>
+		<key>Resources/Fonts/HankenGrotesk-VF.ttf</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			qbTEm7KZ4FtfbEgef7XniUPSeTJJoMiHSrV0otHqZ1U=
+			gTs/j6CWVAVmmomzjlG779le72uOINHLLYwQzOBiZi8=
 			</data>
 		</dict>
-		<key>Resources/Fonts/IBMPlexMono-Regular.ttf</key>
+		<key>Resources/Fonts/HankenGroteskItalic-VF.ttf</key>
 		<dict>
 			<key>hash2</key>
 			<data>
-			ajQS8FjH2N/ZFwxB6FreSOUVbsuJNWEQylegonc0r0Y=
-			</data>
-		</dict>
-		<key>Resources/Fonts/IBMPlexSans-Medium.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			OcHK47goknxyzWwYwuTU5Rl+5n15KEPxGLSpbKjFaIU=
-			</data>
-		</dict>
-		<key>Resources/Fonts/IBMPlexSans-Regular.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			0tY5hTotoLQN4+4QYeBFEr0bEwdW+pWEAzNoXbq5/+k=
-			</data>
-		</dict>
-		<key>Resources/Fonts/IBMPlexSans-SemiBold.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			aq9G6crG5BDihIpV/9e/iNrOACb7+MB3XOAilZBAVzQ=
-			</data>
-		</dict>
-		<key>Resources/Fonts/InstrumentSerif-Regular.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			SY79Rh9t38t6ERv5pWVwnSCF1IIB1QHq2WDZPoT/u4g=
-			</data>
-		</dict>
-		<key>Resources/Fonts/Newsreader-DisplayRegular.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			NTOjB3StdJ639ETDZlnwwRQHh+0qmgReIfMJ65yOj04=
-			</data>
-		</dict>
-		<key>Resources/Fonts/Newsreader-ReadItalic.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			+8rgzlP9gCFdJaygTjwjeUcxAFeUf6WBVL4LrrPeyDI=
-			</data>
-		</dict>
-		<key>Resources/Fonts/Newsreader-ReadRegular.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			GWjNiGcS3hRoN645Rg/Yy9l+M0v+U7ppj3RC6tjR/oo=
-			</data>
-		</dict>
-		<key>Resources/Fonts/Newsreader-ReadSemiBold.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			soSDv8Lno4UywpkNe8EwvjcSycME8ZvROxiVE1+KnAk=
-			</data>
-		</dict>
-		<key>Resources/Fonts/PatrickHand-Regular.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			Dxc7Pmy20a8lur9/AFfFrE7hH5mSsEabuBfpZ+9K0Pw=
-			</data>
-		</dict>
-		<key>Resources/Fonts/Quicksand-Variable.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			Ocm2QiNWH1aq/2BipvBAY8T8hoCa1naHIsBmFNl34cw=
-			</data>
-		</dict>
-		<key>Resources/Fonts/Syne-Variable.ttf</key>
-		<dict>
-			<key>hash2</key>
-			<data>
-			zlrHcUKmXKsiSKGi67dAsdTZwgtSSIh30/9mTRNWEEo=
+			rlcxcm/3UwGjy2Py6Y0bq8d9VasJ+44inKdfW9RvvjI=
 			</data>
 		</dict>
 		<key>Resources/NotedLogo.png</key>
@@ -258,6 +144,76 @@
 			<key>hash2</key>
 			<data>
 			W/mbdPulkczPybA7GGEGgn/tivhc9Y/1etsTorrJiSs=
+			</data>
+		</dict>
+		<key>Resources/Notefy_NotefyApp.bundle/noted-mark.svg</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			73q2weHad98CP2S/YDGL6iSqiZcqfrYLuFCRuS1Bof8=
+			</data>
+		</dict>
+		<key>Resources/Notefy_NotefyApp.bundle/noted-nib.png</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			s9GNJx/RpNbe1AE5WCaCoN4i6wOvubIMmwu4thEtFdM=
+			</data>
+		</dict>
+		<key>Resources/Notefy_NotefyApp.bundle/noted-splat.png</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			zFsOtHk5RU+AVWnYxmBhEInfefY/jaWX+IA/TqvBhOs=
+			</data>
+		</dict>
+		<key>Resources/Notefy_NotefyApp.bundle/noted-wordmark.svg</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			7KS0Zr1mq/dJ7xQ32ENOaowdDnRxDA1/nI3I/ZNSkgE=
+			</data>
+		</dict>
+		<key>Resources/Notefy_NotefyApp.bundle/splat-01.svg</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			a3BiFzLxR2Um9XqyNXkkduLmaCLQNYV1IxJ6GIav+jo=
+			</data>
+		</dict>
+		<key>Resources/Notefy_NotefyApp.bundle/splat-02.svg</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			NOfktzudOz8xTeiMQjYVcmvv2LdpizX51f9l8vJUSK8=
+			</data>
+		</dict>
+		<key>Resources/Notefy_NotefyApp.bundle/splat-03.svg</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			ztGh4Uw7AFo8D19Urk/Cop9GKdRZ2Y5JTzjTEW1/Lhw=
+			</data>
+		</dict>
+		<key>Resources/Notefy_NotefyApp.bundle/splat-04.svg</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			pUYeeO3AC7zqbrAxP0iTOcrEWOCDIzWWiqbT5HRCwW4=
+			</data>
+		</dict>
+		<key>Resources/Notefy_NotefyApp.bundle/splat-05.svg</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			Ll+Aw2yW3H6sGZnHSbMPxIeut03x5F4SwhgKJqfq6aU=
+			</data>
+		</dict>
+		<key>Resources/Notefy_NotefyApp.bundle/splat-06.svg</key>
+		<dict>
+			<key>hash2</key>
+			<data>
+			lu8KOMuQxKxh1dU8a5dlkyIjkn9lTjSvEADtvaRyVoo=
 			</data>
 		</dict>
 	</dict>

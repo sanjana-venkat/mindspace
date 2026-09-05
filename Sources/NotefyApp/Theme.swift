@@ -1,3 +1,4 @@
+import CoreText
 import SwiftUI
 
 /// Design tokens — read directly off Figma file `5ZSw0dNrfHERxpNMdpzK90`,
@@ -304,14 +305,37 @@ extension Color {
 /// Plus one conditional fourth: Caveat, for the user's own annotations only.
 /// Never use it for placeholder copy or machine-captured content.
 enum NotefyFont {
-    static let pageTitle = Font.custom("InstrumentSerif-Regular", size: 44)
-    static let sectionTitle = Font.custom("InstrumentSerif-Regular", size: 26)
+    // The same three families the rest of the app uses: Anybody for anything
+    // that behaves like a masthead, Hanken Grotesk Light for anything read,
+    // Geist Mono for machine strings. See StoneFont for the reasoning.
+    private static let wght: UInt32 = 0x77676874
+    private static let wdth: UInt32 = 0x77647468
 
-    static let wordmark = Font.custom("Geist-Bold", size: 15)
-    static let title = Font.custom("Geist-SemiBold", size: 20)
-    static let heading = Font.custom("Geist-SemiBold", size: 14)
-    static let body = Font.custom("Geist-Regular", size: 15)
-    static let bodyMedium = Font.custom("Geist-Medium", size: 14)
+    private static func varied(_ name: String, _ size: CGFloat, _ axes: [UInt32: CGFloat]) -> Font {
+        var variations: [CFNumber: CFNumber] = [:]
+        for (tag, value) in axes { variations[tag as CFNumber] = value as CFNumber }
+        let descriptor = CTFontDescriptorCreateWithAttributes([
+            kCTFontNameAttribute: name,
+            kCTFontVariationAttribute: variations
+        ] as CFDictionary)
+        return Font(CTFontCreateWithFontDescriptor(descriptor, size, nil))
+    }
+
+    private static func display(_ size: CGFloat, _ weight: CGFloat) -> Font {
+        varied("Anybody-Thin", size, [wght: weight, wdth: 94])
+    }
+    private static func text(_ size: CGFloat, _ weight: CGFloat = 330) -> Font {
+        varied("HankenGrotesk-Regular", size, [wght: weight])
+    }
+
+    static let pageTitle = display(38, 820)
+    static let sectionTitle = display(23, 800)
+
+    static let wordmark = display(15, 800)
+    static let title = text(20, 600)
+    static let heading = text(14, 620)
+    static let body = text(15)
+    static let bodyMedium = text(14, 500)
 
     // Geist Mono — uppercase tracked labels, timestamps, tags, and captured body copy.
     static let caption = Font.custom("GeistMono-Regular", size: 11)
