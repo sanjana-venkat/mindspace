@@ -1,9 +1,9 @@
 import AppKit
 
-// MINDSPACE app icon — the brain as line-work: one weight of stroke, one ink,
-// on a navy plate. Drawn rather than filtered, because an outline thin enough
-// to look delicate at 1024 is mush at 48, and the only fix is to choose the
-// stroke weight for the small size and let the big one look bold.
+// MINDSPACE app icon — the brain as a handful of flowing lines rather than an
+// outline: stacked waves that follow the shape of the mass, with a stem hooking
+// off the lower right. One ink, one stroke weight, drawn straight into the
+// final composition so nothing gets scaled twice.
 
 let canvas = 1024.0
 let rect = NSRect(x: 0, y: 0, width: canvas, height: canvas)
@@ -14,13 +14,12 @@ func rgb(_ r: Double, _ g: Double, _ b: Double) -> NSColor {
 }
 
 let navy = rgb(24, 26, 58)
-let navyDeep = rgb(16, 18, 42)
-let mint = rgb(163, 239, 200)
+let navyDeep = rgb(15, 17, 40)
+let mint = rgb(168, 240, 205)
 
 image.lockFocus()
 NSGraphicsContext.current?.shouldAntialias = true
 
-// Plate on the macOS grid, artwork sitting well inside it.
 let margin = canvas * 0.08
 let plate = NSRect(x: margin, y: margin, width: canvas - margin * 2, height: canvas - margin * 2)
 let plateShape = NSBezierPath(roundedRect: plate,
@@ -30,57 +29,44 @@ plateShape.addClip()
 NSGradient(colors: [navy, navyDeep], atLocations: [0, 1], colorSpace: .deviceRGB)?
     .draw(in: plate, angle: 90)
 
-let stroke: CGFloat = 46
+let stroke: CGFloat = 30
 mint.setStroke()
 
-// The silhouette: a scalloped crown over a fuller left side, with a short stem.
-let outline = NSBezierPath()
-outline.lineWidth = stroke
-outline.lineCapStyle = .round
-outline.lineJoinStyle = .round
-
-let crownY: CGFloat = 596
-outline.move(to: NSPoint(x: 306, y: 430))
-outline.curve(to: NSPoint(x: 306, y: crownY),
-              controlPoint1: NSPoint(x: 268, y: 494), controlPoint2: NSPoint(x: 272, y: 556))
-for (x, radius) in [(374.0, 68.0), (502.0, 78.0), (632.0, 66.0)] {
-    outline.appendArc(withCenter: NSPoint(x: x, y: crownY), radius: radius,
-                      startAngle: 180, endAngle: 0, clockwise: true)
+func line(_ points: [NSPoint], _ controls: [(NSPoint, NSPoint)]) {
+    let path = NSBezierPath()
+    path.lineWidth = stroke
+    path.lineCapStyle = .round
+    path.lineJoinStyle = .round
+    path.move(to: points[0])
+    for (index, control) in controls.enumerated() {
+        path.curve(to: points[index + 1], controlPoint1: control.0, controlPoint2: control.1)
+    }
+    path.stroke()
 }
-outline.curve(to: NSPoint(x: 718, y: 430),
-              controlPoint1: NSPoint(x: 752, y: 556), controlPoint2: NSPoint(x: 756, y: 494))
-outline.curve(to: NSPoint(x: 552, y: 322),
-              controlPoint1: NSPoint(x: 692, y: 366), controlPoint2: NSPoint(x: 630, y: 322))
-outline.curve(to: NSPoint(x: 512, y: 268),
-              controlPoint1: NSPoint(x: 524, y: 322), controlPoint2: NSPoint(x: 524, y: 288))
-outline.stroke()
 
-// Base and stem, closing the shape without a hard corner.
-let base = NSBezierPath()
-base.lineWidth = stroke
-base.lineCapStyle = .round
-base.move(to: NSPoint(x: 306, y: 430))
-base.curve(to: NSPoint(x: 512, y: 268),
-           controlPoint1: NSPoint(x: 330, y: 330), controlPoint2: NSPoint(x: 410, y: 268))
-base.stroke()
+// The crown: one long line up and over the top, closing down the right side.
+line([NSPoint(x: 306, y: 396), NSPoint(x: 552, y: 716), NSPoint(x: 722, y: 424)],
+     [(NSPoint(x: 288, y: 604), NSPoint(x: 404, y: 716)),
+      (NSPoint(x: 700, y: 716), NSPoint(x: 740, y: 560))])
 
-// Two folds. Both stop short of the outline so the mark stays open — folds that
-// touch the edge close the shape into a face.
-let foldA = NSBezierPath()
-foldA.lineWidth = stroke
-foldA.lineCapStyle = .round
-foldA.move(to: NSPoint(x: 392, y: 486))
-foldA.curve(to: NSPoint(x: 638, y: 470),
-            controlPoint1: NSPoint(x: 470, y: 566), controlPoint2: NSPoint(x: 556, y: 396))
-foldA.stroke()
+// Three waves through the mass, each following the crown's curve and fading
+// shorter as they descend.
+line([NSPoint(x: 336, y: 556), NSPoint(x: 520, y: 594), NSPoint(x: 690, y: 556)],
+     [(NSPoint(x: 396, y: 636), NSPoint(x: 452, y: 528)),
+      (NSPoint(x: 592, y: 660), NSPoint(x: 636, y: 522))])
 
-let foldB = NSBezierPath()
-foldB.lineWidth = stroke
-foldB.lineCapStyle = .round
-foldB.move(to: NSPoint(x: 512, y: 596))
-foldB.curve(to: NSPoint(x: 512, y: 372),
-            controlPoint1: NSPoint(x: 566, y: 520), controlPoint2: NSPoint(x: 452, y: 452))
-foldB.stroke()
+line([NSPoint(x: 330, y: 452), NSPoint(x: 512, y: 494), NSPoint(x: 694, y: 452)],
+     [(NSPoint(x: 392, y: 534), NSPoint(x: 446, y: 424)),
+      (NSPoint(x: 586, y: 562), NSPoint(x: 640, y: 418))])
+
+line([NSPoint(x: 352, y: 356), NSPoint(x: 522, y: 396), NSPoint(x: 668, y: 364)],
+     [(NSPoint(x: 408, y: 434), NSPoint(x: 460, y: 328)),
+      (NSPoint(x: 592, y: 462), NSPoint(x: 624, y: 330))])
+
+// The underside, gathering to the right and hooking down into the stem.
+line([NSPoint(x: 372, y: 286), NSPoint(x: 560, y: 288), NSPoint(x: 648, y: 202)],
+     [(NSPoint(x: 428, y: 246), NSPoint(x: 500, y: 248)),
+      (NSPoint(x: 608, y: 318), NSPoint(x: 672, y: 268))])
 
 image.unlockFocus()
 
