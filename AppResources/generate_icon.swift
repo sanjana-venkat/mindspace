@@ -1,9 +1,9 @@
 import AppKit
 
-// MINDSPACE app icon — one flat shape, drawn to survive the Dock. The tell for
-// "brain" at 32 points is a scalloped crown and two fat grooves, not fold
-// detail: anything finer turns to mush beside a flat mark like Figma's or
-// QuickTime's. Deterministic source — re-render it, don't replace it.
+// MINDSPACE app icon — the brain as line-work: one weight of stroke, one ink,
+// on a navy plate. Drawn rather than filtered, because an outline thin enough
+// to look delicate at 1024 is mush at 48, and the only fix is to choose the
+// stroke weight for the small size and let the big one look bold.
 
 let canvas = 1024.0
 let rect = NSRect(x: 0, y: 0, width: canvas, height: canvas)
@@ -15,11 +15,12 @@ func rgb(_ r: Double, _ g: Double, _ b: Double) -> NSColor {
 
 let navy = rgb(24, 26, 58)
 let navyDeep = rgb(16, 18, 42)
-let mint = rgb(150, 232, 190)
+let mint = rgb(163, 239, 200)
 
 image.lockFocus()
+NSGraphicsContext.current?.shouldAntialias = true
 
-// The plate, inset so the icon sits on the macOS grid rather than filling it.
+// Plate on the macOS grid, artwork sitting well inside it.
 let margin = canvas * 0.08
 let plate = NSRect(x: margin, y: margin, width: canvas - margin * 2, height: canvas - margin * 2)
 let plateShape = NSBezierPath(roundedRect: plate,
@@ -29,46 +30,57 @@ plateShape.addClip()
 NSGradient(colors: [navy, navyDeep], atLocations: [0, 1], colorSpace: .deviceRGB)?
     .draw(in: plate, angle: 90)
 
-// The silhouette does all the work. Bumps right around the upper perimeter say
-// "brain" on their own; interior grooves at this size only ever read as a face.
-let brain = NSBezierPath()
-let centre = NSPoint(x: 512, y: 520)
+let stroke: CGFloat = 46
+mint.setStroke()
 
-// Lobes placed around the mass, largest at the crown, tucking in at the base.
-let lobes: [(angle: Double, distance: CGFloat, radius: CGFloat)] = [
-    (100, 156, 132),   // crown left
-    (58, 168, 120),    // crown right
-    (146, 150, 118),   // upper left
-    (16, 158, 112),    // upper right
-    (188, 132, 104),   // left
-    (348, 140, 100),   // right
-    (232, 118, 96),    // lower left
-    (302, 122, 92),    // lower right
-    (268, 96, 104)     // base
-]
+// The silhouette: a scalloped crown over a fuller left side, with a short stem.
+let outline = NSBezierPath()
+outline.lineWidth = stroke
+outline.lineCapStyle = .round
+outline.lineJoinStyle = .round
 
-for lobe in lobes {
-    let radians = lobe.angle * .pi / 180
-    let point = NSPoint(x: centre.x + cos(radians) * lobe.distance,
-                        y: centre.y + sin(radians) * lobe.distance)
-    let circle = NSBezierPath(ovalIn: NSRect(x: point.x - lobe.radius, y: point.y - lobe.radius,
-                                             width: lobe.radius * 2, height: lobe.radius * 2))
-    brain.append(circle)
+let crownY: CGFloat = 596
+outline.move(to: NSPoint(x: 306, y: 430))
+outline.curve(to: NSPoint(x: 306, y: crownY),
+              controlPoint1: NSPoint(x: 268, y: 494), controlPoint2: NSPoint(x: 272, y: 556))
+for (x, radius) in [(374.0, 68.0), (502.0, 78.0), (632.0, 66.0)] {
+    outline.appendArc(withCenter: NSPoint(x: x, y: crownY), radius: radius,
+                      startAngle: 180, endAngle: 0, clockwise: true)
 }
-brain.append(NSBezierPath(ovalIn: NSRect(x: centre.x - 150, y: centre.y - 140,
-                                         width: 300, height: 280)))
-brain.windingRule = .nonZero
+outline.curve(to: NSPoint(x: 718, y: 430),
+              controlPoint1: NSPoint(x: 752, y: 556), controlPoint2: NSPoint(x: 756, y: 494))
+outline.curve(to: NSPoint(x: 552, y: 322),
+              controlPoint1: NSPoint(x: 692, y: 366), controlPoint2: NSPoint(x: 630, y: 322))
+outline.curve(to: NSPoint(x: 512, y: 268),
+              controlPoint1: NSPoint(x: 524, y: 322), controlPoint2: NSPoint(x: 524, y: 288))
+outline.stroke()
 
-mint.setFill()
-brain.fill()
+// Base and stem, closing the shape without a hard corner.
+let base = NSBezierPath()
+base.lineWidth = stroke
+base.lineCapStyle = .round
+base.move(to: NSPoint(x: 306, y: 430))
+base.curve(to: NSPoint(x: 512, y: 268),
+           controlPoint1: NSPoint(x: 330, y: 330), controlPoint2: NSPoint(x: 410, y: 268))
+base.stroke()
 
-// One notch out of the base, so the mass has a front and a back rather than
-// reading as a cloud.
-NSGraphicsContext.saveGraphicsState()
-navyDeep.setFill()
-let notch = NSBezierPath(ovalIn: NSRect(x: 452, y: 236, width: 132, height: 108))
-notch.fill()
-NSGraphicsContext.restoreGraphicsState()
+// Two folds. Both stop short of the outline so the mark stays open — folds that
+// touch the edge close the shape into a face.
+let foldA = NSBezierPath()
+foldA.lineWidth = stroke
+foldA.lineCapStyle = .round
+foldA.move(to: NSPoint(x: 392, y: 486))
+foldA.curve(to: NSPoint(x: 638, y: 470),
+            controlPoint1: NSPoint(x: 470, y: 566), controlPoint2: NSPoint(x: 556, y: 396))
+foldA.stroke()
+
+let foldB = NSBezierPath()
+foldB.lineWidth = stroke
+foldB.lineCapStyle = .round
+foldB.move(to: NSPoint(x: 512, y: 596))
+foldB.curve(to: NSPoint(x: 512, y: 372),
+            controlPoint1: NSPoint(x: 566, y: 520), controlPoint2: NSPoint(x: 452, y: 452))
+foldB.stroke()
 
 image.unlockFocus()
 
