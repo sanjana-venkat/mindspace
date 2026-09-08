@@ -277,6 +277,9 @@ final class AppState: ObservableObject {
     @Published var microphoneSourceActive = false
     @Published var systemAudioSourceActive = false
     @Published var isShowingPermissionOnboarding: Bool
+    /// Setup ends with the user taking their first capture, so the rail has to
+    /// be reachable while onboarding is still on screen.
+    @Published var onboardingCaptureUnlocked = false
 
     let whisperTranscriber = LocalWhisperTranscriber()
 
@@ -323,6 +326,13 @@ final class AppState: ObservableObject {
         self.sessionDir = dir
         self.settingsURL = dir.appendingPathComponent("settings.json")
         var loaded = NotefySettings.load(from: settingsURL)
+        // A hosted model name under the on-device provider is always wrong —
+        // it produced hints like "ollama pull gemini-2.5-flash".
+        if loaded.vision.provider == .local,
+           loaded.vision.modelName.contains("gemini") || loaded.vision.modelName.contains("gpt")
+            || loaded.vision.modelName.contains("claude") {
+            loaded.vision.modelName = ModelProvider.local.defaultVisionModel
+        }
         if loaded.audio.provider == .local && !Self.isLocalWhisperVariant(loaded.audio.modelName) {
             loaded.audio.modelName = "base"
             loaded.save(to: settingsURL)
@@ -372,13 +382,18 @@ final class AppState: ObservableObject {
         hotkeys.start()
     }
 
+    /// Called after the user rebinds a shortcut.
+    func reloadHotkeys() {
+        hotkeys.restart()
+    }
+
     func showCapturePet() {
-        guard !isShowingPermissionOnboarding else { return }
+        guard !isShowingPermissionOnboarding || onboardingCaptureUnlocked else { return }
         capturePet.show()
     }
 
     func toggleCaptureRail() {
-        guard !isShowingPermissionOnboarding else { return }
+        guard !isShowingPermissionOnboarding || onboardingCaptureUnlocked else { return }
         capturePet.toggle()
     }
 

@@ -68,7 +68,7 @@ public struct VisionConfig: Codable {
     public var apiKey: String
     public var modelName: String // e.g. "qwen2-vl" or "gpt-4o"
     
-    public init(provider: ModelProvider = .local, apiURL: String = "http://localhost:11434/api/chat", apiKey: String = "", modelName: String = "qwen3.5:9b") {
+    public init(provider: ModelProvider = .local, apiURL: String = "http://localhost:11434/api/chat", apiKey: String = "", modelName: String = "qwen2.5vl:7b") {
         self.provider = provider
         self.apiURL = apiURL
         self.apiKey = apiKey

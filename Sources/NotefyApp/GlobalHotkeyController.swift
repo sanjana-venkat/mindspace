@@ -60,15 +60,28 @@ final class GlobalHotkeyController {
         started = true
         Self.installHandlerIfNeeded()
 
-        // ⌘⇧M: start/stop meeting notes
-        register(id: 2, keyCode: UInt32(kVK_ANSI_M), callback: onMeeting)
-        // Manual session capture hotkeys.
-        register(id: 3, keyCode: UInt32(kVK_ANSI_T), callback: onSelectedText)
-        register(id: 4, keyCode: UInt32(kVK_ANSI_P), callback: onPage)
-        register(id: 5, keyCode: UInt32(kVK_ANSI_G), callback: onRegion)
-        register(id: 6, keyCode: UInt32(kVK_ANSI_A), callback: onSessionAudio)
-        // ⌘⇧K: summon/dismiss Kami's capture rail.
-        register(id: 7, keyCode: UInt32(kVK_ANSI_K), callback: onCaptureRail)
+        // Letters come from the user's own bindings; the ⌘⇧ pair is fixed.
+        let code: (HotkeyAction) -> UInt32 = { action in
+            HotkeyBindings.keyCode(for: HotkeyBindings.letter(for: action))
+                ?? HotkeyBindings.keyCode(for: action.defaultLetter)!
+        }
+        register(id: 2, keyCode: code(.meeting), callback: onMeeting)
+        register(id: 3, keyCode: code(.selectedText), callback: onSelectedText)
+        register(id: 4, keyCode: code(.page), callback: onPage)
+        register(id: 5, keyCode: code(.region), callback: onRegion)
+        register(id: 6, keyCode: code(.voice), callback: onSessionAudio)
+        register(id: 7, keyCode: code(.captureRail), callback: onCaptureRail)
+    }
+
+    /// Re-registers everything after a binding changes.
+    func restart() {
+        for reference in references where reference != nil {
+            UnregisterEventHotKey(reference!)
+        }
+        references.removeAll()
+        for id in 1...7 { notefyHotkeyCallbacks[UInt32(id)] = nil }
+        started = false
+        start()
     }
 
     deinit {
