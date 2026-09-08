@@ -378,7 +378,7 @@ private struct CaptureReviewView: View {
             .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)
             Button(action: keep) {
-                Text("KEEP ↧").font(Aurora.mono(10.5)).tracking(1.1)
+                Text("KEEP").font(Aurora.mono(10.5)).tracking(1.1)
                     .padding(.horizontal, 19).padding(.vertical, 11)
                     .background(Aurora.ink, in: Capsule())
                     .foregroundStyle(Aurora.ground)
