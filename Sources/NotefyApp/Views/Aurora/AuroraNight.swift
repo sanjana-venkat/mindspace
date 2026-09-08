@@ -5,6 +5,9 @@ import SwiftUI
 /// the light look like light — a blurred fill on a pale ground never will.
 struct AuroraNight: View {
     var seed: Int
+    /// On a pale ground the same light has to be painted rather than added —
+    /// `plusLighter` over near-white shows nothing at all.
+    var onLight: Bool = false
 
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
@@ -20,32 +23,36 @@ struct AuroraNight: View {
             let t = reduceMotion ? 0 : timeline.date.timeIntervalSinceReferenceDate * 0.055
 
             ZStack {
-                LinearGradient(colors: [night, nightLow, night],
-                               startPoint: .top, endPoint: .bottom)
+                if !onLight {
+                    LinearGradient(colors: [night, nightLow, night],
+                                   startPoint: .top, endPoint: .bottom)
+                }
 
                 Canvas { context, size in
                     for i in 0..<5 {
                         context.fill(ribbon(i, t: t, size: size), with: shading(i, size: size))
                     }
                 }
-                .blur(radius: 34)
-                .blendMode(.plusLighter)
-                .opacity(0.62)
+                .blur(radius: onLight ? 44 : 34)
+                .blendMode(onLight ? .normal : .plusLighter)
+                .opacity(onLight ? 0.5 : 0.62)
 
                 // the glow the curtains stand in, low and green
-                LinearGradient(colors: [.clear, green.opacity(0.07), .clear],
-                               startPoint: .top, endPoint: .bottom)
-                    .blendMode(.plusLighter)
+                if !onLight {
+                    LinearGradient(colors: [.clear, green.opacity(0.07), .clear],
+                                   startPoint: .top, endPoint: .bottom)
+                        .blendMode(.plusLighter)
 
-                // Keeps the type legible: the light sits behind a slight veil,
-                // heaviest at the top where the title and thought sit.
-                LinearGradient(colors: [.black.opacity(0.34), .black.opacity(0.12), .black.opacity(0.22)],
-                               startPoint: .top, endPoint: .bottom)
+                    // Keeps the type legible: the light sits behind a slight
+                    // veil, heaviest at the top where the title and thought sit.
+                    LinearGradient(colors: [.black.opacity(0.34), .black.opacity(0.12), .black.opacity(0.22)],
+                                   startPoint: .top, endPoint: .bottom)
+                }
 
                 AuroraGrain.tile
                     .resizable(resizingMode: .tile)
-                    .blendMode(.overlay)
-                    .opacity(0.35)
+                    .blendMode(onLight ? .multiply : .overlay)
+                    .opacity(onLight ? 0.22 : 0.35)
             }
             .drawingGroup()
         }

@@ -77,9 +77,12 @@ struct AuroraOnboarding: View {
                 .ignoresSafeArea()
         } else {
             AuroraGround()
-            AuroraNight(seed: 2)
-                .opacity(0.14)
-                .blur(radius: 6)
+            AuroraNight(seed: 2, onLight: true)
+                .opacity(0.9)
+                .ignoresSafeArea()
+            // A pale veil so the type still has something quiet to sit on.
+            LinearGradient(colors: [.white.opacity(0.24), .white.opacity(0.06)],
+                           startPoint: .top, endPoint: .bottom)
                 .ignoresSafeArea()
         }
     }
@@ -143,26 +146,34 @@ struct AuroraOnboarding: View {
     // MARK: 0 — what this is
 
     private var welcome: some View {
-        HStack(alignment: .center, spacing: 40) {
-            VStack(alignment: .leading, spacing: 18) {
-                Text("OPENHUMAN")
-                    .font(Aurora.mono(10)).tracking(3)
-                    .foregroundStyle(fgFaint)
-                Text("Everything you want to remember, in one place.")
-                    .font(Aurora.display(34))
-                    .foregroundStyle(fg)
-                    .lineSpacing(6)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text("Capture your screen, save text, record thoughts and meetings, then come back to any of it later.")
-                    .font(Aurora.serif(18))
-                    .foregroundStyle(fgSoft)
-                    .lineSpacing(6)
-                    .fixedSize(horizontal: false, vertical: true)
-            }
-            .frame(width: 360, alignment: .leading)
+        VStack(spacing: 20) {
+            Spacer(minLength: 0)
+
+            Text("OPENHUMAN")
+                .font(Aurora.mono(10)).tracking(3)
+                .foregroundStyle(fgFaint)
+
+            Text("Everything you want to remember, in one place.")
+                .font(Aurora.display(34))
+                .foregroundStyle(fg)
+                .lineSpacing(6)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 620)
+                .fixedSize(horizontal: false, vertical: true)
+
+            Text("Capture your screen, save text, record thoughts and meetings, then come back to any of it later.")
+                .font(Aurora.serif(17))
+                .foregroundStyle(fgSoft)
+                .lineSpacing(5)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 520)
+                .fixedSize(horizontal: false, vertical: true)
 
             AuroraDemoLoop(dark: dark)
                 .frame(width: 500, height: 300)
+                .padding(.top, 6)
+
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
