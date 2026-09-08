@@ -368,8 +368,8 @@ struct InkSplatter: Shape {
             let angle = (Double(i) / Double(pointCount)) * 2 * .pi
             let radius = baseRadius * CGFloat.random(in: 0.62...1.0, using: &generator)
             points.append(CGPoint(
-                x: center.x + radius * cos(angle),
-                y: center.y + radius * sin(angle)
+                x: center.x + radius * CoreGraphics.cos(CGFloat(angle)),
+                y: center.y + radius * CoreGraphics.sin(CGFloat(angle))
             ))
         }
         path.move(to: points[0])
@@ -389,8 +389,8 @@ struct InkSplatter: Shape {
             let distance = baseRadius * CGFloat.random(in: 1.05...1.7, using: &generator)
             let dropRadius = baseRadius * CGFloat.random(in: 0.05...0.14, using: &generator)
             let dropCenter = CGPoint(
-                x: center.x + distance * cos(angle),
-                y: center.y + distance * sin(angle)
+                x: center.x + distance * CoreGraphics.cos(CGFloat(angle)),
+                y: center.y + distance * CoreGraphics.sin(CGFloat(angle))
             )
             path.addEllipse(in: CGRect(
                 x: dropCenter.x - dropRadius, y: dropCenter.y - dropRadius,
