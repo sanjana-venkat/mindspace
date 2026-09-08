@@ -177,14 +177,14 @@ private struct CaptureReviewView: View {
             if isTextLift {
                 ZStack {
                     Rectangle().fill(.ultraThinMaterial)
-                    Color.black.opacity(0.45)
+                    Color.black.opacity(0.42)
                     textLift
                 }
                 .ignoresSafeArea()
             } else {
                 ZStack {
                     Rectangle().fill(.ultraThinMaterial)
-                    Color.black.opacity(0.45)
+                    Color.black.opacity(0.42)
                     screenshotHold
                         .padding(28)
                 }
@@ -199,68 +199,81 @@ private struct CaptureReviewView: View {
     }
 
     private var screenshotHold: some View {
-        VStack(spacing: -7) {
-            VStack(alignment: .leading, spacing: 8) {
-                destinationPicker
+        VStack(alignment: .leading, spacing: 14) {
+            destinationPicker
+
+            VStack(spacing: 0) {
+                HStack(spacing: 8) {
+                    Text(sourceName)
+                        .font(Aurora.mono(9.5))
+                        .foregroundStyle(Aurora.ink3)
+                        .lineLimit(1)
+                        .padding(.horizontal, 8).padding(.vertical, 3)
+                        .background(Aurora.surface2, in: Capsule())
+                    Spacer(minLength: 0)
+                    Text(metadata)
+                        .font(Aurora.mono(9.5))
+                        .foregroundStyle(Aurora.ink3)
+                        .lineLimit(1)
+                }
+                .padding(.horizontal, 12).padding(.vertical, 9)
+                .background(Aurora.surface2.opacity(0.75))
+
                 if let path = step.screenshotPath, let image = NSImage(contentsOfFile: path) {
                     Image(nsImage: image)
                         .resizable()
                         .scaledToFit()
-                        .frame(maxWidth: 600, maxHeight: 340)
-                        .clipShape(RoundedRectangle(cornerRadius: 7))
+                        .frame(maxWidth: .infinity)
+                        .frame(maxHeight: 360)
                 }
-                Text(metadata)
-                    .font(StoneFont.mark())
-                    .tracking(1)
-                    .foregroundStyle(Stoneink.textMuted)
-                    .lineLimit(1)
             }
-            .padding(.horizontal, 10)
-            .padding(.top, 10)
-            .padding(.bottom, 14)
-            .background(Stoneink.surfaceSlip)
-            .clipShape(RoundedRectangle(cornerRadius: 10))
-            .overlay(RoundedRectangle(cornerRadius: 10).stroke(Stoneink.textPrimary.opacity(0.14), lineWidth: 1))
-            .rotationEffect(.degrees(-0.6))
+            .background(Aurora.surface2)
+            .clipShape(RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Aurora.line, lineWidth: 1))
 
             sticky
-                .padding(.horizontal, 34)
-                .rotationEffect(.degrees(1.2))
         }
-        .frame(width: 640)
+        .padding(18)
+        .frame(width: 660)
+        .background(Aurora.surface.opacity(0.96))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .strokeBorder(Aurora.line, lineWidth: 1))
+        .shadow(color: .black.opacity(0.35), radius: 50, y: 22)
     }
 
     private var textLift: some View {
         VStack(alignment: .leading, spacing: 13) {
             destinationPicker
             HStack(alignment: .top, spacing: 12) {
-                RoundedRectangle(cornerRadius: 2).fill(Stoneink.cobalt600).frame(width: 3)
+                RoundedRectangle(cornerRadius: 2).fill(Aurora.accent).frame(width: 3)
                 Text(displayExcerpt)
-                    .font(StoneFont.body())
-                    .lineSpacing(7)
-                    .foregroundStyle(Stoneink.textPrimary)
-                    .padding(.horizontal, 3)
-                    .background(Stoneink.cobalt100, in: RoundedRectangle(cornerRadius: 8))
+                    .font(Aurora.serif(16))
+                    .lineSpacing(6)
+                    .foregroundStyle(Aurora.ink)
             }
+            .padding(14)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(Aurora.surface2, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                .strokeBorder(Aurora.line, lineWidth: 1))
             .fixedSize(horizontal: false, vertical: true)
 
             Text(sourceLine)
-                .font(StoneFont.mark())
+                .font(Aurora.mono(9.5))
                 .tracking(1)
-                .foregroundStyle(Stoneink.textMuted)
+                .foregroundStyle(Aurora.ink3)
 
-            noteField
-                .padding(.horizontal, 12)
-                .padding(.vertical, 9)
-                .background(Stoneink.surfacePress, in: ThrownRect.press)
-
-            captureActions
+            sticky
         }
-        .padding(20)
-        .frame(width: 560)
-        .background(Stoneink.surfaceSlip)
-        .clipShape(RoundedRectangle(cornerRadius: 14))
-        .overlay(RoundedRectangle(cornerRadius: 14).stroke(Stoneink.textPrimary.opacity(0.14), lineWidth: 1))
+        .padding(18)
+        .frame(width: 600)
+        .background(Aurora.surface.opacity(0.96))
+        .clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 22, style: .continuous)
+            .strokeBorder(Aurora.line, lineWidth: 1))
+        .shadow(color: .black.opacity(0.35), radius: 50, y: 22)
         .transition(.scale(scale: 0.98).combined(with: .opacity))
     }
 
@@ -268,14 +281,11 @@ private struct CaptureReviewView: View {
         VStack(alignment: .leading, spacing: 5) {
             noteField
             if let error = voice.errorMessage {
-                Text(error).font(StoneFont.mark()).foregroundStyle(Stoneink.oxide600)
+                Text(error).font(Aurora.ui(11.5, .medium)).foregroundStyle(Aurora.ink3)
             }
             captureActions
         }
-        .padding(12)
-        .background(Stoneink.surfaceSlip)
-        .clipShape(RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).stroke(Stoneink.textPrimary.opacity(0.14), lineWidth: 1))
+        .padding(.top, 2)
     }
 
     private var destinationPicker: some View {
@@ -290,13 +300,13 @@ private struct CaptureReviewView: View {
     @ViewBuilder
     private var noteField: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextField("add a thought…", text: Binding(
+            TextField("What were you thinking when you saved this?", text: Binding(
                 get: { note },
                 set: { note = String($0.prefix(1_600)) }
             ), axis: .vertical)
             .textFieldStyle(.plain)
-            .font(StoneFont.body())
-            .foregroundStyle(Stoneink.textPrimary)
+            .font(Aurora.serif(17))
+            .foregroundStyle(Aurora.ink)
             .lineLimit(1...12)
             .fixedSize(horizontal: false, vertical: true)
             .onSubmit { keep() }
@@ -338,18 +348,18 @@ private struct CaptureReviewView: View {
         HStack(spacing: 9) {
             if note.count >= 1_300 {
                 Text("\(note.count) / 1600")
-                    .font(StoneFont.mark())
-                    .foregroundStyle(note.count >= 1_550 ? Stoneink.oxide600 : Stoneink.textMuted)
+                    .font(Aurora.mono(10))
+                    .foregroundStyle(Aurora.ink3)
             }
             Spacer()
             Button(action: toggleVoiceAnnotation) {
                 ZStack {
-                    Circle().fill(voice.isRecording ? Stoneink.oxide600 : Color.clear)
-                    Circle().stroke(Stoneink.textPrimary, lineWidth: 1.5)
-                    OverlayIcon(kind: .microphone).frame(width: 17, height: 17)
-                        .colorInvertIfRecording(voice.isRecording)
+                    Circle().fill(voice.isRecording ? Aurora.accent : Aurora.surface2)
+                    Circle().strokeBorder(Aurora.line, lineWidth: 1)
+                    OverlayIcon(kind: .microphone, tint: voice.isRecording ? .white : NotefyTheme.ink)
+                        .frame(width: 17, height: 17)
                 }
-                .frame(width: 32, height: 32)
+                .frame(width: 34, height: 34)
             }
             .buttonStyle(.plain)
             .disabled(isTranscribing)
@@ -358,21 +368,20 @@ private struct CaptureReviewView: View {
                     Image(systemName: "xmark")
                     Text("DISCARD · ESC")
                 }
-                .font(StoneFont.mark())
-                .tracking(0.8)
-                .foregroundStyle(Stoneink.textPrimary)
-                .padding(.horizontal, 13)
-                .padding(.vertical, 9)
-                .background(Color.clear, in: Capsule())
-                .overlay(Capsule().stroke(Stoneink.textPrimary.opacity(0.45), lineWidth: 1))
+                .font(Aurora.mono(10)).tracking(0.9)
+                .foregroundStyle(Aurora.ink2)
+                .padding(.horizontal, 15)
+                .padding(.vertical, 10)
+                .background(Aurora.surface2, in: Capsule())
+                .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
             }
             .buttonStyle(.plain)
             .keyboardShortcut(.cancelAction)
             Button(action: keep) {
-                Text("KEEP ↧").font(StoneFont.label()).tracking(1.1)
-                    .padding(.horizontal, 17).padding(.vertical, 10)
-                    .background(Stoneink.textPrimary, in: Capsule())
-                    .foregroundStyle(Stoneink.clay050)
+                Text("KEEP ↧").font(Aurora.mono(10.5)).tracking(1.1)
+                    .padding(.horizontal, 19).padding(.vertical, 11)
+                    .background(Aurora.ink, in: Capsule())
+                    .foregroundStyle(Aurora.ground)
             }
             .buttonStyle(.plain)
             .disabled(voice.isRecording || isTranscribing)
@@ -479,11 +488,11 @@ private struct CaptureDestinationPicker: View {
                 Text("SAVING TO · \(title.uppercased())")
                 Image(systemName: "chevron.down").font(.system(size: 8, weight: .bold))
             }
-            .font(StoneFont.mark()).tracking(0.7)
-            .foregroundStyle(Stoneink.textSecondary)
-            .padding(.horizontal, 11).padding(.vertical, 6)
-            .background(Stoneink.surfacePress, in: Capsule())
-            .overlay(Capsule().stroke(Stoneink.textPrimary.opacity(0.12), lineWidth: 1))
+            .font(Aurora.mono(10)).tracking(0.9)
+            .foregroundStyle(Aurora.ink2)
+            .padding(.horizontal, 13).padding(.vertical, 7)
+            .background(Aurora.surface2, in: Capsule())
+            .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
         }
         .buttonStyle(.plain)
         .fixedSize()
