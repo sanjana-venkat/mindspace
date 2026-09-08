@@ -22,11 +22,11 @@ enum HotkeyAction: String, CaseIterable, Identifiable {
 
     var detail: String {
         switch self {
-        case .captureRail: return "Everything, in one place"
+        case .captureRail: return "Your floating sidebar — click to capture, record audio, and the rest"
         case .region: return "Drag a box around anything"
-        case .page: return "The window in front of you"
-        case .selectedText: return "Only the passage you highlighted"
-        case .voice: return "Think out loud into the note"
+        case .page: return "Whatever window you're looking at"
+        case .selectedText: return "Just the bit you've highlighted"
+        case .voice: return "Talk straight into the note"
         case .meeting: return "You and the room, transcribed"
         }
     }

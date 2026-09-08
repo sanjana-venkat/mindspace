@@ -193,7 +193,6 @@ struct AuroraPanels: View {
     var body: some View {
         HStack(spacing: 0) {
             left.frame(width: Self.columnWidth)
-            Rectangle().fill(.white.opacity(0.12)).frame(width: 1)
             right
         }
         .focusable()

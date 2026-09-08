@@ -12,17 +12,17 @@ enum NotedPermission: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .microphone: "Your voice"
-        case .accessibility: "The text you highlight"
-        case .screenRecording: "What is on your screen"
+        case .microphone: "Let it hear you"
+        case .accessibility: "Let it read what you highlight"
+        case .screenRecording: "Let it see your screen"
         }
     }
 
     var explanation: String {
         switch self {
-        case .microphone: "So you can think out loud instead of typing it. You are “You” in every recording."
-        case .accessibility: "Only the passage you have highlighted, only when you press ⌘⇧T."
-        case .screenRecording: "The one thing Mindspace cannot work without: holding on to what you were looking at."
+        case .microphone: "So you can talk instead of typing. You show up as “You” in anything you record."
+        case .accessibility: "Only the bit you've highlighted, and only when you press ⌘⇧T. Nothing else gets read."
+        case .screenRecording: "This is the one it can't work without — it's how anything gets kept at all."
         }
     }
 

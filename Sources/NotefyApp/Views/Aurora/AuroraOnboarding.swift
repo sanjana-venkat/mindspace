@@ -143,6 +143,31 @@ struct AuroraOnboarding: View {
         onFinish()
     }
 
+    /// Every page is the same shape: centred, sitting a little below the middle,
+    /// heading then explanation then the thing you act on.
+    private func page<Content: View>(_ title: String,
+                                     _ subtitle: String,
+                                     @ViewBuilder content: () -> Content) -> some View {
+        VStack(spacing: 16) {
+            Spacer(minLength: 0)
+            Text(title)
+                .font(Aurora.display(30))
+                .foregroundStyle(fg)
+                .multilineTextAlignment(.center)
+            Text(subtitle)
+                .font(Aurora.ui(13.5, .regular))
+                .foregroundStyle(fgSoft)
+                .lineSpacing(4)
+                .multilineTextAlignment(.center)
+                .frame(maxWidth: 560)
+                .fixedSize(horizontal: false, vertical: true)
+            content()
+                .padding(.top, 10)
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
     // MARK: 0 — what this is
 
     private var welcome: some View {
@@ -178,114 +203,110 @@ struct AuroraOnboarding: View {
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
-    // MARK: 1 — permissions
+    // MARK: 1 — permissions, one at a time
 
-    private var permissions: some View {
-        HStack(alignment: .top, spacing: 34) {
-            VStack(alignment: .leading, spacing: 14) {
-                Text("What you let in")
-                    .font(Aurora.display(30)).foregroundStyle(fg)
-                Text("Three switches, granted once. What you keep stays on this Mac. Nothing is sent anywhere unless you point Mindspace at a cloud model yourself.")
-                    .font(Aurora.ui(13, .regular)).foregroundStyle(fgSoft)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 340, alignment: .leading)
+    /// The order they're asked in: screen first because nothing works without
+    /// it, then voice, then selection.
+    private var permissionOrder: [NotedPermission] { [.screenRecording, .microphone, .accessibility] }
 
-                ForEach(NotedPermission.allCases) { permission in
-                    permissionRow(permission)
-                }
-            }
-            .frame(width: 380, alignment: .leading)
-
-            AuroraSettingsMap(permission: highlighted, dark: dark)
-                .frame(maxWidth: .infinity, alignment: .top)
-        }
+    private var currentPermission: NotedPermission {
+        permissionOrder.first { !snapshot.isGranted($0) } ?? .screenRecording
     }
 
-    private func permissionRow(_ permission: NotedPermission) -> some View {
+    private var permissions: some View {
+        let permission = currentPermission
         let granted = snapshot.isGranted(permission)
-        return Button {
-            withAnimation(.smooth(duration: 0.25)) { highlighted = permission }
-            if granted { return }
-            appState.permissionCenter.request(permission)
-            appState.permissionCenter.openSettings(for: permission)
-        } label: {
-            HStack(spacing: 12) {
-                Image(systemName: granted ? "checkmark.circle.fill" : permission.icon)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(granted ? good : fgSoft)
-                    .frame(width: 22)
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(permission.title).font(Aurora.ui(14, .bold)).foregroundStyle(fg)
-                    Text(permission.explanation)
-                        .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .multilineTextAlignment(.leading)
+        let allDone = snapshot.allGranted
+
+        return page(allDone ? "That's all three" : permission.title,
+                    allDone
+                    ? "Nothing else to turn on. Everything you keep stays on this Mac unless you point Mindspace at a cloud model yourself."
+                    : permission.explanation) {
+            VStack(spacing: 18) {
+                HStack(spacing: 7) {
+                    ForEach(permissionOrder) { item in
+                        Circle()
+                            .fill(snapshot.isGranted(item) ? good
+                                  : (item == permission ? fg.opacity(0.55) : fg.opacity(0.2)))
+                            .frame(width: 7, height: 7)
+                    }
                 }
-                Spacer(minLength: 8)
-                Text(granted ? "ON" : "GRANT")
-                    .font(Aurora.mono(9.5)).tracking(1)
-                    .foregroundStyle(granted ? fgFaint : solidText)
-                    .padding(.horizontal, 10).padding(.vertical, 5)
-                    .background(granted ? AnyShapeStyle(panelFill) : AnyShapeStyle(solidFill), in: Capsule())
+
+                if allDone {
+                    HStack(spacing: 10) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 16, weight: .bold)).foregroundStyle(good)
+                        Text("Screen, voice and selection are all on.")
+                            .font(Aurora.ui(13.5, .semibold)).foregroundStyle(fg)
+                    }
+                } else {
+                    AuroraSettingsMap(permission: permission, dark: dark)
+                        .frame(width: 420)
+
+                    Button {
+                        appState.permissionCenter.request(permission)
+                        appState.permissionCenter.openSettings(for: permission)
+                    } label: {
+                        Text("Open System Settings")
+                            .font(Aurora.ui(14, .bold))
+                            .foregroundStyle(solidText)
+                            .padding(.horizontal, 20).padding(.vertical, 11)
+                            .background(solidFill, in: Capsule())
+                    }
+                    .buttonStyle(AuroraPressStyle())
+
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small).scaleEffect(0.7)
+                        Text("Go flip the switch — this page will notice when you do.")
+                            .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
+                    }
+                    .opacity(granted ? 0 : 1)
+                }
             }
-            .padding(14)
-            .background(highlighted == permission ? panelFill : panelFill.opacity(0.55),
-                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                .strokeBorder(highlighted == permission ? panelStroke : panelStroke.opacity(0.6), lineWidth: 1))
-            .contentShape(Rectangle())
+            .animation(.smooth(duration: 0.3), value: snapshot)
         }
-        .buttonStyle(AuroraPressStyle())
     }
 
     // MARK: 2 — voice
 
     private var microphone: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Think out loud")
-                .font(Aurora.display(30)).foregroundStyle(fg)
-            Text("Half of what you think never survives being typed. Say something now: the bars should move. If they do not, pick a different input.")
-                .font(Aurora.ui(13, .regular)).foregroundStyle(fgSoft)
-                .frame(maxWidth: 560, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 6) {
-                ForEach(0..<24, id: \.self) { i in
-                    let threshold = Double(i) / 24.0
-                    Capsule()
-                        .fill(meter.level > threshold ? good : fg.opacity(0.14))
-                        .frame(width: 8, height: 14 + CGFloat(sin(Double(i) / 3.4) * 10 + 14))
-                }
-            }
-            .animation(.easeOut(duration: 0.08), value: meter.level)
-            .frame(height: 46)
-
-            HStack(spacing: 10) {
-                Image(systemName: meter.heardSomething ? "checkmark.circle.fill" : "waveform")
-                    .font(.system(size: 13, weight: .bold))
-                    .foregroundStyle(meter.heardSomething ? good : fgSoft)
-                Text(meter.statusLine)
-                    .font(Aurora.ui(13, .medium)).foregroundStyle(fgSoft)
-            }
-
-            VStack(alignment: .leading, spacing: 7) {
-                Text("INPUT").font(Aurora.mono(9.5)).tracking(1.1).foregroundStyle(fgFaint)
-                Picker("", selection: $appState.settings.audio.inputDeviceUID) {
-                    Text("System default").tag(nil as String?)
-                    ForEach(appState.audioInputDevices) { device in
-                        Text(device.name).tag(device.uid as String?)
+        page("Think out loud",
+             "Half of what you think never survives being typed. Say something — the bars should move. If they don't, try another input below.") {
+            VStack(spacing: 20) {
+                HStack(spacing: 6) {
+                    ForEach(0..<24, id: \.self) { i in
+                        let threshold = Double(i) / 24.0
+                        Capsule()
+                            .fill(meter.level > threshold ? good : fg.opacity(0.14))
+                            .frame(width: 8, height: 14 + CGFloat(sin(Double(i) / 3.4) * 10 + 14))
                     }
                 }
-                .labelsHidden()
-                .pickerStyle(.menu)
-                .tint(fg)
-                .frame(maxWidth: 320, alignment: .leading)
-            }
+                .animation(.easeOut(duration: 0.08), value: meter.level)
+                .frame(height: 46)
 
-            Text("Your voice is transcribed on this Mac by default. Nothing is uploaded unless you choose a cloud provider in Settings.")
-                .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
-                .frame(maxWidth: 520, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 10) {
+                    Image(systemName: meter.heardSomething ? "checkmark.circle.fill" : "waveform")
+                        .font(.system(size: 13, weight: .bold))
+                        .foregroundStyle(meter.heardSomething ? good : fgSoft)
+                    Text(meter.statusLine)
+                        .font(Aurora.ui(13, .medium)).foregroundStyle(fgSoft)
+                }
+
+                AuroraSelect(
+                    label: "Input",
+                    options: [AuroraSelect.Option(id: nil, title: "System default")]
+                        + appState.audioInputDevices.map { AuroraSelect.Option(id: $0.uid, title: $0.name) },
+                    selection: $appState.settings.audio.inputDeviceUID,
+                    dark: dark
+                )
+                .frame(width: 320)
+
+                Text("Your voice is transcribed right here on your Mac. Nothing gets uploaded unless you pick a cloud provider in Settings.")
+                    .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 480)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
         }
         .onAppear { appState.refreshAudioInputDevices(); meter.start() }
         .onDisappear { meter.stop() }
@@ -294,85 +315,82 @@ struct AuroraOnboarding: View {
     // MARK: 3 — the model
 
     private var model: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("Help, on your terms")
-                .font(Aurora.display(30)).foregroundStyle(fg)
-            Text("What you keep, and what you thought about it, is yours and stays here. When you ask for an organized version, a model reads it and writes it up, with every line pointing back at where it came from. Choose who does that, or keep it entirely on-device.")
-                .font(Aurora.ui(13, .regular)).foregroundStyle(fgSoft)
-                .frame(maxWidth: 600, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-
-            HStack(spacing: 3) {
-                ForEach(ModelProvider.allCases, id: \.self) { option in
-                    Button { selectProvider(option) } label: {
-                        Text(option.displayName)
-                            .font(Aurora.ui(13))
-                            .foregroundStyle(appState.settings.vision.provider == option ? solidText : fgSoft)
-                            .padding(.horizontal, 16).padding(.vertical, 8)
-                            .background(appState.settings.vision.provider == option
-                                        ? AnyShapeStyle(solidFill) : AnyShapeStyle(Color.clear), in: Capsule())
+        page("Help, on your terms",
+             "Your captures and your thoughts stay here. When you want a tidy version, a model reads them and writes it up — and shows you where every line came from. Pick who does that, or keep it all on your Mac.") {
+            VStack(spacing: 16) {
+                HStack(spacing: 3) {
+                    ForEach(ModelProvider.allCases, id: \.self) { option in
+                        Button { selectProvider(option) } label: {
+                            Text(option.displayName)
+                                .font(Aurora.ui(13))
+                                .foregroundStyle(appState.settings.vision.provider == option ? solidText : fgSoft)
+                                .padding(.horizontal, 16).padding(.vertical, 8)
+                                .background(appState.settings.vision.provider == option
+                                            ? AnyShapeStyle(solidFill) : AnyShapeStyle(Color.clear), in: Capsule())
+                        }
+                        .buttonStyle(.plain)
                     }
-                    .buttonStyle(.plain)
+                }
+                .padding(3)
+                .background(panelFill, in: Capsule())
+
+                VStack(alignment: .leading, spacing: 12) {
+                    switch appState.settings.vision.provider {
+                    case .local:
+                        field("Model", ModelProvider.local.defaultVisionModel, text: $appState.settings.vision.modelName)
+                        Text("Runs against Ollama on this Mac — install it, run `ollama pull \(appState.settings.vision.modelName)`, and leave it running. Slower than a hosted model, and nothing leaves the machine.")
+                            .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
+                            .fixedSize(horizontal: false, vertical: true)
+                    case .anthropic:
+                        secure("Claude API key", "sk-ant-…", text: $appState.settings.vision.apiKey)
+                        Text("Claude writes the organized note. Voice stays on-device. Key from \(ModelProvider.anthropic.keyURL).")
+                            .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
+                    case .gemini:
+                        secure("Gemini API key", "AIza…", text: $appState.settings.vision.apiKey)
+                        Text("One key covers transcription and the organized note. Key from \(ModelProvider.gemini.keyURL).")
+                            .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
+                    case .api:
+                        secure("OpenAI API key", "sk-…", text: $appState.settings.vision.apiKey)
+                        Text("Reads your captures and writes the organized note. Key from \(ModelProvider.api.keyURL).")
+                            .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
+                        field("Model", "gpt-4o", text: $appState.settings.vision.modelName)
+                    }
+
+                    if needsKeyWarning {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle.fill")
+                                .font(.system(size: 12, weight: .bold))
+                                .foregroundStyle(Color(red: 0.88, green: 0.68, blue: 0.25))
+                            Text("No key? That's fine — Mindspace falls back to the model on your Mac. It's slower and a bit rougher, and you can add a key whenever you like.")
+                                .font(Aurora.ui(12, .regular)).foregroundStyle(fgSoft)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        .padding(12)
+                        .background(panelFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                            .strokeBorder(panelStroke, lineWidth: 1))
+                    }
+                }
+                .frame(width: 460)
+
+                HStack(spacing: 12) {
+                    Button {
+                        appState.saveSettings()
+                        appState.checkVisionStatus()
+                    } label: {
+                        Text("Test connection")
+                            .font(Aurora.ui(13))
+                            .foregroundStyle(fg)
+                            .padding(.horizontal, 14).padding(.vertical, 8)
+                            .background(panelFill, in: Capsule())
+                            .overlay(Capsule().strokeBorder(panelStroke, lineWidth: 1))
+                    }
+                    .buttonStyle(AuroraPressStyle())
+                    Text(appState.visionStatus)
+                        .font(Aurora.ui(12, .medium)).foregroundStyle(fgSoft)
                 }
             }
-            .padding(3)
-            .background(panelFill, in: Capsule())
-
-            switch appState.settings.vision.provider {
-            case .local:
-                field("Model", ModelProvider.local.defaultVisionModel, text: $appState.settings.vision.modelName)
-                Text("Runs against Ollama on this Mac — install it, run `ollama pull \(appState.settings.vision.modelName)`, and leave it running. Slower than a hosted model, and nothing leaves the machine.")
-                    .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
-                    .fixedSize(horizontal: false, vertical: true)
-                    .frame(maxWidth: 560, alignment: .leading)
-            case .anthropic:
-                secure("Claude API key", "sk-ant-…", text: $appState.settings.vision.apiKey)
-                Text("Claude writes the organized note. Voice stays on-device. Key from \(ModelProvider.anthropic.keyURL).")
-                    .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
-            case .gemini:
-                secure("Gemini API key", "AIza…", text: $appState.settings.vision.apiKey)
-                Text("One key covers transcription and the organized note. Key from \(ModelProvider.gemini.keyURL).")
-                    .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
-            case .api:
-                field("API URL", "https://…", text: $appState.settings.vision.apiURL)
-                secure("API key", "sk-…", text: $appState.settings.vision.apiKey)
-                field("Model", "gpt-4o", text: $appState.settings.vision.modelName)
-            }
-
-            if needsKeyWarning {
-                HStack(alignment: .top, spacing: 10) {
-                    Image(systemName: "exclamationmark.triangle.fill")
-                        .font(.system(size: 12, weight: .bold))
-                        .foregroundStyle(Color(red: 0.88, green: 0.68, blue: 0.25))
-                    Text("No key yet — that's fine. Mindspace falls back to the on-device model, which is slower and rougher. You can add a key any time.")
-                        .font(Aurora.ui(12, .regular)).foregroundStyle(fgSoft)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                .padding(12)
-                .background(panelFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(panelStroke, lineWidth: 1))
-            }
-
-            HStack(spacing: 12) {
-                Button {
-                    appState.saveSettings()
-                    appState.checkVisionStatus()
-                } label: {
-                    Text("Test connection")
-                        .font(Aurora.ui(13))
-                        .foregroundStyle(fg)
-                        .padding(.horizontal, 14).padding(.vertical, 8)
-                        .background(panelFill, in: Capsule())
-                        .overlay(Capsule().strokeBorder(panelStroke, lineWidth: 1))
-                }
-                .buttonStyle(AuroraPressStyle())
-                Text(appState.visionStatus)
-                    .font(Aurora.ui(12, .medium)).foregroundStyle(fgSoft)
-            }
-            .padding(.top, 4)
         }
-        .frame(maxWidth: 640, alignment: .leading)
     }
 
     private func selectProvider(_ option: ModelProvider) {
@@ -393,31 +411,25 @@ struct AuroraOnboarding: View {
     // MARK: 4 — the keys you'll press
 
     private var shortcuts: some View {
-        VStack(alignment: .leading, spacing: 18) {
-            Text("The keys you'll press")
-                .font(Aurora.display(30)).foregroundStyle(fg)
-            Text("Every shortcut is ⌘⇧ and a letter. These are the defaults — click one and press a different letter if it clashes with something you already use.")
-                .font(Aurora.ui(13, .regular)).foregroundStyle(fgSoft)
-                .frame(maxWidth: 580, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
-
+        page("The keys you'll press",
+             "Every shortcut is ⌘⇧ and a letter. Don't like one? Click it and press another.") {
             VStack(spacing: 8) {
                 ForEach(HotkeyAction.allCases) { action in
                     shortcutRow(action)
                 }
+                Button("Reset to defaults") {
+                    HotkeyBindings.resetAll()
+                    bindingsTick += 1
+                    appState.reloadHotkeys()
+                }
+                .buttonStyle(.plain)
+                .font(Aurora.ui(12))
+                .foregroundStyle(fgFaint)
+                .padding(.top, 4)
             }
+            .frame(width: 560)
             .id(bindingsTick)
-
-            Button("Reset to defaults") {
-                HotkeyBindings.resetAll()
-                bindingsTick += 1
-                appState.reloadHotkeys()
-            }
-            .buttonStyle(.plain)
-            .font(Aurora.ui(12))
-            .foregroundStyle(fgFaint)
         }
-        .frame(maxWidth: 640, alignment: .leading)
     }
 
     private func shortcutRow(_ action: HotkeyAction) -> some View {
@@ -462,53 +474,43 @@ struct AuroraOnboarding: View {
     // MARK: 5 — your first one
 
     private var tryIt: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text(capturedSomething ? "That's the whole loop" : "Try one now")
-                .font(Aurora.display(30)).foregroundStyle(fg)
-
-            if capturedSomething {
-                Text("It's in your first note, with whatever you wrote beside it. Open Mindspace and it'll be waiting — read it in Panels, or ask for an organized version once there's more in there.")
-                    .font(Aurora.ui(13.5, .regular)).foregroundStyle(fgSoft)
-                    .frame(maxWidth: 600, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 12) {
-                    Image(systemName: "checkmark.circle.fill")
-                        .font(.system(size: 18, weight: .bold)).foregroundStyle(good)
-                    Text("\(appState.steps.count) capture\(appState.steps.count == 1 ? "" : "s") in “\(appState.noteTitle)”")
-                        .font(Aurora.ui(14, .semibold)).foregroundStyle(fg)
-                }
-                .padding(16)
-                .background(panelFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
-                    .strokeBorder(panelStroke, lineWidth: 1))
-            } else {
-                Text("Press \(HotkeyBindings.label(for: .captureRail)) and grab anything on your screen — this window counts. Write a line about why you kept it, hit Keep, and you'll land in Mindspace with something already in it.")
-                    .font(Aurora.ui(13.5, .regular)).foregroundStyle(fgSoft)
-                    .frame(maxWidth: 600, alignment: .leading)
-                    .fixedSize(horizontal: false, vertical: true)
-
-                HStack(spacing: 14) {
-                    Text(HotkeyBindings.label(for: .captureRail))
-                        .font(Aurora.mono(15))
-                        .foregroundStyle(solidText)
-                        .padding(.horizontal, 16).padding(.vertical, 11)
-                        .background(solidFill, in: Capsule())
-                    Text("or")
-                        .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
-                    Button { appState.showCapturePet() } label: {
-                        Text("Open the capture rail")
-                            .font(Aurora.ui(13))
-                            .foregroundStyle(fg)
-                            .padding(.horizontal, 16).padding(.vertical, 11)
-                            .background(panelFill, in: Capsule())
-                            .overlay(Capsule().strokeBorder(panelStroke, lineWidth: 1))
+        page(capturedSomething ? "Nice — that's the whole loop" : "Let's try it out",
+             capturedSomething
+             ? "It's saved in your first note with your thought attached. Open Mindspace and it'll be sitting there waiting for you."
+             : "Hit \(HotkeyBindings.label(for: .captureRail)) and grab anything on screen — this window works fine. Jot a line about why you kept it, hit Keep, and you'll land in Mindspace with something already in it.") {
+            VStack(spacing: 16) {
+                if capturedSomething {
+                    HStack(spacing: 12) {
+                        Image(systemName: "checkmark.circle.fill")
+                            .font(.system(size: 18, weight: .bold)).foregroundStyle(good)
+                        Text("\(appState.steps.count) capture\(appState.steps.count == 1 ? "" : "s") in “\(appState.noteTitle)”")
+                            .font(Aurora.ui(14, .semibold)).foregroundStyle(fg)
                     }
-                    .buttonStyle(AuroraPressStyle())
+                    .padding(16)
+                    .background(panelFill, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 14, style: .continuous)
+                        .strokeBorder(panelStroke, lineWidth: 1))
+                } else {
+                    HStack(spacing: 14) {
+                        Text(HotkeyBindings.label(for: .captureRail))
+                            .font(Aurora.mono(15))
+                            .foregroundStyle(solidText)
+                            .padding(.horizontal, 16).padding(.vertical, 11)
+                            .background(solidFill, in: Capsule())
+                        Text("or").font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
+                        Button { appState.showCapturePet() } label: {
+                            Text("Open the rail for me")
+                                .font(Aurora.ui(13))
+                                .foregroundStyle(fg)
+                                .padding(.horizontal, 16).padding(.vertical, 11)
+                                .background(panelFill, in: Capsule())
+                                .overlay(Capsule().strokeBorder(panelStroke, lineWidth: 1))
+                        }
+                        .buttonStyle(AuroraPressStyle())
+                    }
+                    Text("Waiting for your first one…")
+                        .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
                 }
-
-                Text("Waiting for your first capture…")
-                    .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
             }
         }
         .onAppear {
