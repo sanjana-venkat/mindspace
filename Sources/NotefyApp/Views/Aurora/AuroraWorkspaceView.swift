@@ -193,9 +193,9 @@ struct AuroraWorkspaceView: View {
 
     private var emptyCanvas: some View {
         VStack(spacing: 10) {
-            Text("Nothing captured yet")
+            Text("Nothing kept yet")
                 .font(Aurora.title(18)).foregroundStyle(Aurora.ink)
-            Text("Hit the capture rail, or type a name below and press Create.")
+            Text("Press ⌘⇧K to keep what you are looking at, or name a folder below.")
                 .font(Aurora.ui(13, .medium)).foregroundStyle(Aurora.ink3)
         }
     }
@@ -227,7 +227,7 @@ struct AuroraWorkspaceView: View {
                         .buttonStyle(.plain)
                         Text(tile.name).font(Aurora.display(30)).foregroundStyle(Aurora.ink)
                     } else {
-                        Text("Workspace").font(Aurora.display(30)).foregroundStyle(Aurora.ink)
+                        Text("Mindspace").font(Aurora.display(30)).foregroundStyle(Aurora.ink)
                     }
                 }
 

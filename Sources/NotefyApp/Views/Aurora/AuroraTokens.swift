@@ -75,12 +75,17 @@ enum Aurora {
         return [base, (base + 2) % tints.count, (base + 4) % tints.count]
     }
 
-    // Type roles
-    static func display(_ size: CGFloat) -> Font { .system(size: size, weight: .heavy) }
-    static func title(_ size: CGFloat) -> Font { .system(size: size, weight: .bold) }
-    static func ui(_ size: CGFloat, _ w: Font.Weight = .semibold) -> Font { .system(size: size, weight: w) }
+    // Type roles, on the three families the app already bundles: Boldonse for
+    // anything that announces itself, Hanken Grotesk for the interface, Geist
+    // Mono for labels and data. Boldonse runs large for its point size, so
+    // display sizes are scaled down to sit where the old system face did.
+    static func display(_ size: CGFloat) -> Font { .custom("Boldonse-Regular", size: size * 0.78) }
+    static func title(_ size: CGFloat) -> Font { .custom("HankenGrotesk-Regular", size: size).weight(.bold) }
+    static func ui(_ size: CGFloat, _ w: Font.Weight = .semibold) -> Font {
+        .custom("HankenGrotesk-Regular", size: size).weight(w)
+    }
     static func serif(_ size: CGFloat, _ w: Font.Weight = .regular) -> Font { .system(size: size, weight: w, design: .serif) }
-    static func mono(_ size: CGFloat) -> Font { .system(size: size, weight: .medium, design: .monospaced) }
+    static func mono(_ size: CGFloat) -> Font { .custom("GeistMono-Regular", size: size) }
 }
 
 /// A tileable film-grain texture, generated once.

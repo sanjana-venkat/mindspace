@@ -57,9 +57,6 @@ struct AuroraOnboarding: View {
                     .frame(width: i == step ? 34 : 16, height: 4)
             }
             Spacer()
-            Text("SETUP · \(step + 1) OF 5")
-                .font(Aurora.mono(10)).tracking(1.4)
-                .foregroundStyle(.white.opacity(0.5))
         }
         .padding(.bottom, 34)
         .animation(.smooth(duration: 0.3), value: step)
@@ -103,22 +100,62 @@ struct AuroraOnboarding: View {
     // MARK: steps
 
     private var welcome: some View {
-        VStack(alignment: .leading, spacing: 20) {
-            Text("Mindspace")
-                .font(Aurora.display(46)).foregroundStyle(.white)
-            Text("Clip anything on your screen — a window, a selection, what you just said out loud — and write down what you were thinking when you saved it. Mindspace keeps the two together.")
-                .font(Aurora.serif(20)).foregroundStyle(.white.opacity(0.85))
-                .lineSpacing(7)
-                .frame(maxWidth: 560, alignment: .leading)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: 0) {
+            Spacer(minLength: 10)
 
-            VStack(alignment: .leading, spacing: 12) {
-                bullet("Capture", "⌘⇧K brings up the capture rail from anywhere.")
-                bullet("Think out loud", "Every capture has room for the thought behind it.")
-                bullet("Organize", "A model reads the whole note and writes it up, with sources.")
+            VStack(spacing: 16) {
+                Text("OPENHUMAN")
+                    .font(Aurora.mono(10)).tracking(3)
+                    .foregroundStyle(.white.opacity(0.45))
+                Text("Mindspace")
+                    .font(Aurora.display(62))
+                    .foregroundStyle(.white)
+                Text("A record of your own thinking. In your words, on your machine, for as long as you want it.")
+                    .font(Aurora.serif(20))
+                    .foregroundStyle(.white.opacity(0.82))
+                    .lineSpacing(7)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 560)
+                    .fixedSize(horizontal: false, vertical: true)
             }
-            .padding(.top, 6)
+            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 34)
+
+            HStack(alignment: .top, spacing: 14) {
+                move("Keep it", "square.dashed",
+                     "Anything in front of you: a window, a passage, something you said out loud. Held with the moment it mattered.")
+                move("Say why", "text.quote",
+                     "Write the thought you had when you saved it. A model can summarise the page. Only you have this part.")
+                move("Come back", "arrow.counterclockwise",
+                     "Walk back through what you were thinking last week, or the year you first learned it. Plain files that outlive the app.")
+            }
+            .frame(maxWidth: .infinity)
+
+            Spacer(minLength: 10)
         }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+
+    private func move(_ title: String, _ icon: String, _ body: String) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Image(systemName: icon)
+                .font(.system(size: 15, weight: .semibold))
+                .foregroundStyle(Color(red: 0.55, green: 0.92, blue: 0.74))
+            Text(title)
+                .font(Aurora.ui(15, .bold)).foregroundStyle(.white)
+            Text(body)
+                .font(Aurora.ui(13, .regular))
+                .foregroundStyle(.white.opacity(0.62))
+                .lineSpacing(3)
+                .fixedSize(horizontal: false, vertical: true)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .padding(18)
+        .frame(maxWidth: 262, minHeight: 196, alignment: .topLeading)
+        .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .strokeBorder(.white.opacity(0.14), lineWidth: 1))
     }
 
     private func bullet(_ title: String, _ body: String) -> some View {
@@ -134,9 +171,9 @@ struct AuroraOnboarding: View {
     private var permissions: some View {
         HStack(alignment: .top, spacing: 34) {
             VStack(alignment: .leading, spacing: 14) {
-                Text("Permissions")
+                Text("What you let in")
                     .font(Aurora.display(30)).foregroundStyle(.white)
-                Text("macOS asks for these once. Nothing leaves your Mac unless you point Mindspace at a cloud model.")
+                Text("Three switches, granted once. What you keep stays on this Mac. Nothing is sent anywhere unless you point Mindspace at a cloud model yourself.")
                     .font(Aurora.ui(13, .regular)).foregroundStyle(.white.opacity(0.65))
                     .fixedSize(horizontal: false, vertical: true)
                     .frame(maxWidth: 340, alignment: .leading)
@@ -194,9 +231,9 @@ struct AuroraOnboarding: View {
     /// halfway through their first meeting.
     private var microphone: some View {
         VStack(alignment: .leading, spacing: 20) {
-            Text("Test your microphone")
+            Text("Think out loud")
                 .font(Aurora.display(30)).foregroundStyle(.white)
-            Text("Say something. The bars should move. If they don't, pick a different input below.")
+            Text("Half of what you think never survives being typed. Say something now: the bars should move. If they do not, pick a different input.")
                 .font(Aurora.ui(13, .regular)).foregroundStyle(.white.opacity(0.65))
 
             HStack(spacing: 6) {
@@ -234,7 +271,7 @@ struct AuroraOnboarding: View {
                 .frame(maxWidth: 320, alignment: .leading)
             }
 
-            Text("Voice is transcribed on-device with Whisper. Nothing is uploaded unless you point transcription at a cloud provider in Settings.")
+            Text("Your voice is transcribed on this Mac by default. Nothing is uploaded unless you choose a cloud provider in Settings.")
                 .font(Aurora.ui(12, .regular)).foregroundStyle(.white.opacity(0.5))
                 .frame(maxWidth: 520, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -245,9 +282,9 @@ struct AuroraOnboarding: View {
 
     private var model: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("Who writes the organized note")
+            Text("Help, on your terms")
                 .font(Aurora.display(30)).foregroundStyle(.white)
-            Text("Captures and thoughts are read by a model to produce the organized view. Local keeps everything on your Mac; the cloud options need a key.")
+            Text("What you keep, and what you thought about it, is yours and stays here. When you ask for an organized version, a model reads it and writes it up, with every line pointing back at where it came from. Choose who does that, or keep it entirely on-device.")
                 .font(Aurora.ui(13, .regular)).foregroundStyle(.white.opacity(0.65))
                 .frame(maxWidth: 560, alignment: .leading)
                 .fixedSize(horizontal: false, vertical: true)
@@ -320,7 +357,7 @@ struct AuroraOnboarding: View {
             }
             .padding(.top, 4)
 
-            Text("You can change any of this later in Settings.")
+            Text("Changeable any time in Settings. Your notes never depend on it.")
                 .font(Aurora.ui(12, .regular)).foregroundStyle(.white.opacity(0.45))
         }
         .frame(maxWidth: 620, alignment: .leading)
@@ -333,12 +370,13 @@ struct AuroraOnboarding: View {
 
     private var ready: some View {
         VStack(alignment: .leading, spacing: 18) {
-            Text("You're set")
+            Text("It is yours now")
                 .font(Aurora.display(38)).foregroundStyle(.white)
             VStack(alignment: .leading, spacing: 12) {
-                bullet("⌘⇧K", "Opens the capture rail — window, region, text, voice or meeting.")
-                bullet("⌘F", "Search every capture, thought and folder.")
-                bullet("Right-click a capture", "Forward it to another note, or delete it.")
+                bullet("⌘⇧K", "Keep whatever is in front of you: window, region, selection, voice or meeting.")
+                bullet("⌘F", "Find anything you have kept, by what you saw or by what you thought.")
+                bullet("Right-click a capture", "Move it somewhere it belongs, or let it go.")
+                bullet("Your files", "Plain Markdown on your own disk. Readable without this app, in ten years.")
             }
             Text(readyLine)
                 .font(Aurora.ui(13, .regular)).foregroundStyle(.white.opacity(0.6))
@@ -348,8 +386,8 @@ struct AuroraOnboarding: View {
 
     private var readyLine: String {
         snapshot.allGranted
-            ? "All three permissions are on."
-            : "You can grant the rest any time from Settings — capture will ask when it needs them."
+            ? "Everything is on. Go keep something."
+            : "Grant the rest whenever. Mindspace asks only when it actually needs them."
     }
 
     // MARK: fields
@@ -400,9 +438,6 @@ struct AuroraSettingsMap: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("WHERE TO CLICK")
-                .font(Aurora.mono(9.5)).tracking(1.3).foregroundStyle(.white.opacity(0.45))
-
             VStack(spacing: 0) {
                 // window chrome
                 HStack(spacing: 6) {
