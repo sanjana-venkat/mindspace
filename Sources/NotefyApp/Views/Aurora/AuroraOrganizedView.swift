@@ -9,7 +9,9 @@ struct AuroraOrganized: View {
 
     @EnvironmentObject private var appState: AppState
 
-    private var blocks: [AuroraDocBlock] { AuroraDocBlock.parse(appState.organizedDraft) }
+    private var blocks: [AuroraDocBlock] {
+        AuroraDocBlock.parse(appState.organizedDraft, hidingSourceSections: true)
+    }
 
     var body: some View {
         ScrollView {
@@ -24,9 +26,7 @@ struct AuroraOrganized: View {
                     ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
                         AuroraDocBlockView(block: block)
                     }
-                    // The model's own write-up already cites its sources; only
-                    // add the list when it hasn't.
-                    if !mentionsSources { sources }
+                    if !steps.isEmpty { sources }
                 }
                 Spacer(minLength: 120)
             }
@@ -129,16 +129,6 @@ struct AuroraOrganized: View {
         .padding(.vertical, 10)
     }
 
-    /// True when the organized text already carries a sources section, so the
-    /// app doesn't print a second one underneath it.
-    private var mentionsSources: Bool {
-        blocks.contains { block in
-            if case .heading(let t) = block { return t.lowercased().contains("source") }
-            if case .subheading(let t) = block { return t.lowercased().contains("source") }
-            return false
-        }
-    }
-
     private var sourceNames: [String] {
         var seen: [String] = []
         for s in steps {
@@ -183,11 +173,29 @@ enum AuroraDocBlock: Hashable {
     case quote(String)
     case paragraph(String)
 
-    static func parse(_ markdown: String) -> [AuroraDocBlock] {
+    static func parse(_ markdown: String, hidingSourceSections: Bool = false) -> [AuroraDocBlock] {
         var out: [AuroraDocBlock] = []
+        var hidingSources = false
         for raw in markdown.components(separatedBy: .newlines) {
             let line = raw.trimmingCharacters(in: .whitespaces)
             guard !line.isEmpty else { continue }
+
+            let headingText: String? = {
+                if line.hasPrefix("### ") { return String(line.dropFirst(4)) }
+                if line.hasPrefix("## ") { return String(line.dropFirst(3)) }
+                if line.hasPrefix("# ") { return String(line.dropFirst(2)) }
+                return nil
+            }()
+            if hidingSourceSections, let headingText {
+                if headingText.trimmingCharacters(in: .whitespacesAndNewlines)
+                    .localizedCaseInsensitiveCompare("sources") == .orderedSame {
+                    hidingSources = true
+                    continue
+                }
+                hidingSources = false
+            }
+            if hidingSources { continue }
+
             if line.hasPrefix("### ") { out.append(.subheading(String(line.dropFirst(4)))) }
             else if line.hasPrefix("## ") { out.append(.heading(String(line.dropFirst(3)))) }
             else if line.hasPrefix("# ") { out.append(.title(String(line.dropFirst(2)))) }

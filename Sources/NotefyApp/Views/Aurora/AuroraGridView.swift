@@ -62,6 +62,10 @@ struct AuroraGrid: View {
                         VStack(spacing: 18) {
                             ForEach(masonry[column], id: \.step.id) { entry in
                                 tile(entry.index, entry.step)
+                                    // A tile keeps its capture identity while moving, but its
+                                    // ordinal is positional. Include the position in the view
+                                    // identity so SwiftUI cannot retain the old badge label.
+                                    .id("\(entry.step.id.uuidString)-\(entry.index)")
                                     .onDrag {
                                         dragging = entry.step.id
                                         return NSItemProvider(object: entry.step.id.uuidString as NSString)

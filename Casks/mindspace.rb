@@ -11,15 +11,6 @@ cask "mindspace" do
 
   app "Mindspace.app"
 
-  # The build is ad-hoc signed rather than notarized, so Gatekeeper quarantines
-  # it on download. Drop the quarantine flag on install; remove this block once
-  # the app ships with a Developer ID signature and a notarization ticket.
-  postflight do
-    system_command "/usr/bin/xattr",
-                   args: ["-dr", "com.apple.quarantine", "#{appdir}/Mindspace.app"],
-                   sudo: false
-  end
-
   zap trash: [
     "~/Library/Application Support/Notefy",
     "~/Library/Preferences/com.notefy.app.plist",

@@ -288,9 +288,11 @@ public final class ExplorationTracker: NSObject {
             &focused
         ) == .success, let focused else { return nil }
 
+        guard CFGetTypeID(focused) == AXUIElementGetTypeID() else { return nil }
+        let focusedElement = unsafeBitCast(focused, to: AXUIElement.self)
         var value: CFTypeRef?
         guard AXUIElementCopyAttributeValue(
-            focused as! AXUIElement,
+            focusedElement,
             kAXSelectedTextAttribute as CFString,
             &value
         ) == .success, let text = value as? String else { return nil }

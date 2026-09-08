@@ -260,7 +260,7 @@ private struct Sidebar: View {
                 HStack(spacing: 12) {
                     StoneinkMark()
                         .frame(width: 20, height: 20)
-                    Text("Noted")
+                    Text("Mindspace")
                         .font(StoneFont.title())
                         .foregroundStyle(Stoneink.textPrimary)
                 }

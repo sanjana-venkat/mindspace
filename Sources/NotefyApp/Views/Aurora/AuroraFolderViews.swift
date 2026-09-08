@@ -71,6 +71,7 @@ struct AuroraFolderNode: View {
     @State private var hover = false
     @State private var editing = false
     @State private var draft = ""
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
         VStack(spacing: 12) {
@@ -81,8 +82,9 @@ struct AuroraFolderNode: View {
                     RoundedRectangle(cornerRadius: 11, style: .continuous)
                         .fill(Aurora.tint(tile.tints[0] + i))
                         .frame(width: p.w, height: p.h)
-                        .rotationEffect(.degrees(p.angle))
-                        .offset(x: p.x, y: p.y)
+                        .rotationEffect(.degrees(p.angle + tabRotation(i)))
+                        .offset(x: p.x + tabOffset(i).width,
+                                y: p.y + tabOffset(i).height)
                         .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
                 }
                 RoundedRectangle(cornerRadius: 20, style: .continuous)
@@ -91,9 +93,7 @@ struct AuroraFolderNode: View {
                     .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
                         .strokeBorder(.white.opacity(0.55), lineWidth: 1))
                     .frame(width: 196, height: 118)
-                    .shadow(color: .black.opacity(hover ? 0.16 : 0.09),
-                            radius: hover ? 26 : 14, y: hover ? 12 : 6)
-                    .offset(y: hover ? -4 : 0)
+                    .shadow(color: .black.opacity(0.09), radius: 14, y: 6)
             }
             .frame(width: 212, height: 168)
 
@@ -150,6 +150,18 @@ struct AuroraFolderNode: View {
             editing = false
         }
     }
+
+    private func tabOffset(_ index: Int) -> CGSize {
+        guard hover, !reduceMotion else { return .zero }
+        let direction: CGFloat = index.isMultiple(of: 2) ? -1 : 1
+        return CGSize(width: direction * (2 + CGFloat(index % 3)),
+                      height: -CGFloat(2 + index % 2))
+    }
+
+    private func tabRotation(_ index: Int) -> Double {
+        guard hover, !reduceMotion else { return 0 }
+        return (index.isMultiple(of: 2) ? -1 : 1) * (1.4 + Double(index % 3) * 0.45)
+    }
 }
 
 /// The folder steps forward and its notes rise above it in a wave — a band of
@@ -163,6 +175,7 @@ struct AuroraFocusOverlay: View {
 
     @State private var bloom = false
     @State private var hovered: URL?
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     private var count: Int { tile.notes.count }
 
@@ -277,9 +290,18 @@ struct AuroraFocusOverlay: View {
                     RoundedRectangle(cornerRadius: 12, style: .continuous)
                         .fill(Aurora.tint(tile.tints[0] + i))
                         .frame(width: p.w, height: p.h)
-                        .rotationEffect(.degrees(p.angle))
-                        .offset(x: p.x, y: p.y)
+                        .rotationEffect(.degrees(bloom || reduceMotion ? p.angle : 0))
+                        .offset(x: bloom || reduceMotion ? p.x : 0,
+                                y: bloom || reduceMotion ? p.y : 34)
+                        .opacity(bloom || reduceMotion ? 1 : 0)
                         .shadow(color: .black.opacity(0.06), radius: 4, y: 2)
+                        .animation(
+                            reduceMotion
+                                ? nil
+                                : .spring(response: 0.48, dampingFraction: 0.72)
+                                    .delay(Double(i) * 0.045),
+                            value: bloom
+                        )
                 }
                 RoundedRectangle(cornerRadius: 22, style: .continuous)
                     .fill(Aurora.surface.opacity(0.86))
@@ -290,7 +312,7 @@ struct AuroraFocusOverlay: View {
                     .shadow(color: .black.opacity(0.22), radius: 40, y: 18)
             }
             VStack(spacing: 4) {
-                Text(tile.name).font(Aurora.display(22)).foregroundStyle(Aurora.ink)
+                Text(tile.name).font(Aurora.title(22)).foregroundStyle(Aurora.ink)
                 Text("\(tile.notes.count) notes · \(tile.captureCount) captures")
                     .font(Aurora.ui(12, .medium)).foregroundStyle(Aurora.ink2)
             }
@@ -398,9 +420,6 @@ struct AuroraFeedView: View {
                 .foregroundStyle(Aurora.ink3)
             Spacer()
             sortRail
-            Text("\(tiles.reduce(0) { $0 + $1.notes.count }) notes")
-                .font(Aurora.mono(10.5)).tracking(1.4).textCase(.uppercase)
-                .foregroundStyle(Aurora.ink3)
         }
         .padding(.horizontal, 6).padding(.bottom, 12)
         .overlay(alignment: .bottom) { Rectangle().fill(Aurora.line).frame(height: 1) }
@@ -409,6 +428,10 @@ struct AuroraFeedView: View {
     /// Sorting sits with the count it reorders, and stays quiet about it.
     private var sortRail: some View {
         HStack(spacing: 10) {
+            Image(systemName: "arrow.up.arrow.down")
+                .font(.system(size: 9.5, weight: .semibold))
+                .foregroundStyle(Aurora.ink3)
+                .accessibilityHidden(true)
             ForEach(AuroraSort.allCases, id: \.self) { k in
                 Button(k.label.lowercased()) { withAnimation(.smooth(duration: 0.3)) { sort = k } }
                     .buttonStyle(.plain)

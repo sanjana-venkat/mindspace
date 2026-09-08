@@ -7,7 +7,7 @@ said out loud, a meeting — and keeps your own note attached to each capture. W
 enough in it, a model reads the captures *and* your thoughts and writes the thing up, with its
 sources.
 
-macOS 14+. Everything is stored as plain Markdown on your Mac.
+macOS 14+ on Apple silicon. Everything is stored as plain Markdown on your Mac.
 
 ---
 
@@ -15,16 +15,17 @@ macOS 14+. Everything is stored as plain Markdown on your Mac.
 
 ### Download
 
-Grab the latest `.dmg` from [Releases](https://github.com/abisubramanya27/notefy/releases),
+Grab the latest `.dmg` from [Releases](https://github.com/sanjana-venkat/mindspace/releases),
 open it, and drag Mindspace to Applications.
 
-Mindspace isn't notarized yet, so the first launch needs a right-click → **Open** (or
-System Settings → Privacy & Security → *Open Anyway*). After that it opens normally.
+The current 0.1.0 alpha is ad-hoc signed, so its first launch needs a right-click → **Open**
+(or System Settings → Privacy & Security → *Open Anyway*). The next release pipeline requires
+a Developer ID signature and Apple notarization before it can publish.
 
 ### Homebrew
 
 ```bash
-brew tap abisubramanya27/mindspace
+brew tap sanjana-venkat/mindspace
 brew install --cask mindspace
 ```
 
@@ -33,8 +34,8 @@ brew install --cask mindspace
 Requires macOS 14+ and Xcode 16+.
 
 ```bash
-git clone https://github.com/abisubramanya27/notefy.git
-cd notefy
+git clone https://github.com/sanjana-venkat/mindspace.git
+cd mindspace
 ./scripts/build_app.sh release
 open Mindspace.app
 ```
@@ -46,6 +47,9 @@ open Mindspace.app
 **Capture** — ⌘⇧K brings up the capture rail anywhere: full window, a region you drag, the
 text you have selected, a voice note, or a meeting (your mic as *You*, system audio as
 *Others*). Every capture lands in a note with room for the thought behind it.
+
+When Mindspace notices an active Google Meet or Zoom meeting, it offers to take notes in a
+notification. Recording starts only after you click the notification.
 
 **Canvas** — folders live on an infinite canvas you arrange yourself. Scroll to pan, pinch to
 zoom, drag folders anywhere. The pile of notes peeking over each folder is how many captures
@@ -74,8 +78,8 @@ Transcription runs on-device with WhisperKit by default. The organized note can 
 | Gemini | key from aistudio.google.com — also covers transcription |
 | Claude | key from console.anthropic.com |
 
-Keys are kept per provider, so switching between them doesn't lose the others. Without any key
-Mindspace still works — it falls back to the on-device model and says so.
+Keys are kept in macOS Keychain per provider, so switching between them doesn't lose the
+others. Without any key Mindspace still works — it falls back to the on-device model and says so.
 
 ---
 
@@ -86,14 +90,23 @@ macOS asks once, and setup walks you through each one:
 - **Screen & System Audio Recording** — required; it's how anything gets captured.
 - **Microphone** — voice notes and the *You* side of meetings.
 - **Accessibility** — reads only the text you have selected, when you press ⌘⇧T.
+- **Notifications** — offers to start notes when an active Google Meet or Zoom call is detected.
+
+## Privacy
+
+Mindspace has no analytics or meeting bot. Notes, captures, audio, and settings are stored on
+your Mac. Meeting detection checks the frontmost Zoom window or active Google Meet tab locally;
+it never starts recording without a click. If you explicitly choose a cloud model provider,
+the captures and text being organized are sent to that provider under its own terms.
 
 ---
 
 ## Where your notes live
 
-`~/Desktop/Notefy_Sessions` — one Markdown file per note, with a JSON sidecar holding the
-captures, your thoughts, and any organized versions. Settings live beside them.
+`~/Desktop/Mindspace` — one Markdown file per note, with a JSON sidecar holding the captures,
+your thoughts, and any organized versions. Settings live beside them. Existing
+`~/Desktop/Notefy_Sessions` data is moved here automatically the first time you launch an update.
 
 ## License
 
-See [LICENSE](LICENSE).
+No open-source license has been selected yet.

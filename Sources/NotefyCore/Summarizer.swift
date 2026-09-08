@@ -5,7 +5,7 @@ public class ExplorationSummarizer {
     // Process raw steps, filter out noise, and build a formatted markdown note
     public static func summarize(steps: [ExplorationStep]) -> String {
         guard !steps.isEmpty else {
-            return "# Noted Summary\nNo note content captured."
+            return "# Mindspace Summary\nNo note content captured."
         }
         
         // Define apps classified as context-switching/communication noise
@@ -23,7 +23,7 @@ public class ExplorationSummarizer {
         }
         
         var output = ""
-        output += "# Noted Summary\n"
+        output += "# Mindspace Summary\n"
         output += "Date: \(DateFormatter.localizedString(from: Date(), dateStyle: .medium, timeStyle: .short))\n"
         output += "Duration: Captured \(steps.count) events (Filtered down to \(filteredSteps.count) relevant actions)\n\n"
         

@@ -10,7 +10,7 @@ final class RegionSelectionController {
     func begin(outputDirectory: URL, completion: @escaping (Result<URL, Error>) -> Void) {
         guard panel == nil else { return }
         guard CGPreflightScreenCaptureAccess() else {
-            completion(.failure(Self.error("Grant Screen & System Audio Recording access, then reopen Noted.")))
+            completion(.failure(Self.error("Grant Screen & System Audio Recording access, then reopen Mindspace.")))
             return
         }
 

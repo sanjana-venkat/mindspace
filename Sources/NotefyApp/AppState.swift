@@ -39,10 +39,7 @@ enum OrganizationTemplate: String, Codable, CaseIterable, Identifiable {
             # {Title}
 
             ## Key Ideas
-            - One bullet per idea or finding, citing its source inline in parentheses the first time it's mentioned, e.g. (stripe.com).
-
-            ## Sources
-            - [label](url) — one line per distinct source referenced above. Omit this section if no URLs were captured.
+            - One bullet per idea or finding. Embed a descriptive Markdown link to the full source URL in the sentence the first time it is referenced, e.g. [Stripe](https://stripe.com).
 
             ## \(authorName)'s Reflections
             - \(authorName)'s own typed or spoken thoughts, paraphrased in third person, e.g. "\(authorName) noted that...". Omit this whole section if none were captured.
@@ -55,7 +52,7 @@ enum OrganizationTemplate: String, Codable, CaseIterable, Identifiable {
             One short paragraph framing what this session was about.
 
             ## [2-4 more ## subheadings, named after the actual topics covered — do not leave the literal placeholder text]
-            Connected paragraphs, citing sources inline in parentheses the first time each is mentioned.
+            Connected paragraphs, embedding a descriptive Markdown link to the full source URL the first time each source is mentioned.
 
             ## Takeaway
             One closing paragraph tying the session together. If \(authorName) left thoughts, fold in \(authorName)'s own reasoning here in third person, e.g. "\(authorName) concluded that...".
@@ -68,7 +65,7 @@ enum OrganizationTemplate: String, Codable, CaseIterable, Identifiable {
             One or two sentences on what this meeting or work session covered and, if evident, who or what was involved.
 
             ## Key Discussion Points
-            - One bullet per topic actually discussed or shown, cited to its source in parentheses where applicable.
+            - One bullet per topic actually discussed or shown, embedding a descriptive Markdown link to the full source URL where applicable.
 
             ## Decisions
             - One bullet per concrete decision made. Write "No decisions recorded." if none are evident.
@@ -285,6 +282,7 @@ final class AppState: ObservableObject {
 
     private let tracker: ExplorationTracker
     private let meetingRecorder = MeetingRecorder()
+    private let meetingDetection = MeetingDetectionController()
     private var audioClient: AudioClient
     private var visionClient: VisionClient
     private var isChangingRecordingState = false
@@ -306,7 +304,7 @@ final class AppState: ObservableObject {
             guard let self, !self.isRecording || self.recordingPurposeIsMeetingNote else { return }
             self.toggleMeetingNote()
         },
-        onSelectedText: { [weak self] in self?.captureSelectedText() },
+        onSelectedText: { [weak self] in self?.captureSelectedTextFromHotkey() },
         onPage: { [weak self] in self?.captureActivePage() },
         onRegion: { [weak self] in self?.captureSelectedRegion() },
         onSessionAudio: { [weak self] in self?.toggleSessionVoiceNote() },
@@ -319,9 +317,7 @@ final class AppState: ObservableObject {
         self.isShowingPermissionOnboarding = !UserDefaults.standard.bool(forKey: PermissionCenter.completionKey)
             || !permissionCenter.snapshot.allGranted
 
-        let desktop = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
-        let dir = desktop.appendingPathComponent("Notefy_Sessions")
-        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        let dir = MindspaceStorage.defaultDirectory()
 
         self.sessionDir = dir
         self.settingsURL = dir.appendingPathComponent("settings.json")
@@ -362,6 +358,17 @@ final class AppState: ObservableObject {
                 self?.systemAudioPowerDB = levels.systemAudioDecibels
             }
         }
+
+        meetingDetection.shouldSuggest = { [weak self] in
+            guard let self else { return false }
+            return !self.isRecording && !self.isChangingRecordingState
+        }
+        meetingDetection.onAccept = { [weak self] in
+            guard let self, !self.isRecording, !self.isChangingRecordingState else { return }
+            NSApp.activate(ignoringOtherApps: true)
+            self.toggleMeetingNote()
+        }
+        meetingDetection.start()
 
         whisperTranscriber.$state
             .receive(on: DispatchQueue.main)
@@ -791,6 +798,16 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// A global shortcut is an explicit "capture what is selected now" action.
+    /// Go straight through the capture path so web editors such as Google Docs,
+    /// which do not expose AXSelectedText, can use the clipboard-preserving copy
+    /// fallback. The rail button keeps its useful arm-then-highlight behavior.
+    func captureSelectedTextFromHotkey() {
+        guard ensureCaptureSession() else { return }
+        cancelArmedTextCapture()
+        performSelectedTextCapture()
+    }
+
     /// Pressing the button again while armed cancels, so an accidental press
     /// isn't a thing you have to wait out.
     func armSelectedTextCapture() {
@@ -848,7 +865,7 @@ final class AppState: ObservableObject {
             let captured = await self.tracker.captureActiveWindow()
             self.recordingStatus = captured
                 ? nil
-                : "Grant Screen & System Audio Recording access, then quit and reopen Noted."
+                : "Grant Screen & System Audio Recording access, then quit and reopen Mindspace."
             self.permissionCenter.refresh()
             if !captured && !self.permissionCenter.snapshot.screenRecording {
                 self.showPermissionOnboarding()
@@ -885,7 +902,7 @@ final class AppState: ObservableObject {
     /// Full display name for the sidebar's user row — falls back the same way as `authorName`.
     var fullUserDisplayName: String {
         let full = NSFullUserName().trimmingCharacters(in: .whitespacesAndNewlines)
-        return full.isEmpty ? "Notefy user" : full
+        return full.isEmpty ? "Mindspace user" : full
     }
 
     /// Real disk usage of the sessions folder (screenshots, audio, notes), sized against a
@@ -916,7 +933,7 @@ final class AppState: ObservableObject {
     /// Ollama, generic cloud API, Gemini) so results are consistent regardless of backend.
     private func systemPrompt(for template: OrganizationTemplate) -> String {
         """
-        You are Notefy's note-synthesis assistant. You are shown one or more screenshots \
+        You are Mindspace's note-synthesis assistant. You are shown one or more screenshots \
         \(authorName) captured while researching or working, each labeled with a source (a \
         website domain, app name, or "Screen region"), and optionally \(authorName)'s own \
         thought about it — typed on the spot, or spoken aloud and transcribed to text.
@@ -930,7 +947,8 @@ final class AppState: ObservableObject {
         Rules:
         - Third person only. Never write "I" or "my" — \(authorName) is being described, not speaking.
         - Reference concrete details actually visible in each image; never invent facts.
-        - Cite each distinct source inline in parentheses the first time it's mentioned, e.g. (stripe.com).
+        - Cite each distinct source inline using a descriptive Markdown link to its full URL the first time it is mentioned.
+        - Do not add a Sources section; Mindspace renders a verified source ledger below the document.
         - Output valid Markdown only — no commentary about what you're doing, no meta text before or after.
         """
     }
@@ -998,6 +1016,7 @@ final class AppState: ObservableObject {
                     .map { $0.base64EncodedString() }
                 return VisionClient.MentalNoteCapture(
                     sourceLabel: mentalNoteSourceLabel(for: step),
+                    sourceURL: step.url,
                     thought: stepAnnotations[step.id],
                     imageBase64: imageBase64
                 )
@@ -1124,16 +1143,12 @@ final class AppState: ObservableObject {
             var lines = ["# \(noteTitle)", "", "## Key ideas"]
             if ordered.isEmpty, !rawDraft.isEmpty { lines.append("- \(rawDraft.replacingOccurrences(of: "\n", with: " "))") }
             for step in ordered {
-                lines.append("- **\(step.appName):** \(excerpt(step))")
+                let source = inlineSource(for: step)
+                lines.append("- **\(source):** \(excerpt(step))")
                 if let thought = stepAnnotations[step.id], !thought.isEmpty {
                     lines.append("  - *My thought:* \(thought)")
                 }
             }
-            let sources = ordered.compactMap { step -> String? in
-                guard let url = step.url else { return nil }
-                return "- [\(step.windowTitle)](\(url))"
-            }
-            if !sources.isEmpty { lines += ["", "## Sources"] + sources }
             return lines.joined(separator: "\n")
         case .essay:
             var paragraphs = ["# \(noteTitle)", ""]
@@ -1178,6 +1193,15 @@ final class AppState: ObservableObject {
             lines += ["```", ""]
             return lines.joined(separator: "\n")
         }
+    }
+
+    private func inlineSource(for step: ExplorationStep) -> String {
+        guard let rawURL = step.url,
+              let url = URL(string: rawURL),
+              let host = url.host,
+              !host.isEmpty
+        else { return step.appName }
+        return "[\(host)](\(rawURL))"
     }
 
     /// Voice note captured *during* an active exploration session — folded into that session's timeline.
@@ -1443,7 +1467,7 @@ final class AppState: ObservableObject {
                         return .failure(NSError(
                             domain: "Notefy.CaptureVoice",
                             code: 1,
-                            userInfo: [NSLocalizedDescriptionKey: "Noted closed before transcription finished."]
+                            userInfo: [NSLocalizedDescriptionKey: "Mindspace closed before transcription finished."]
                         ))
                     }
                     return await self.transcribe(audioURL: url)

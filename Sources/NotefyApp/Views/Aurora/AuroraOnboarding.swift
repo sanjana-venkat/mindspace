@@ -174,7 +174,7 @@ struct AuroraOnboarding: View {
         VStack(spacing: 20) {
             Spacer(minLength: 0)
 
-            Text("OPENHUMAN")
+            Text("MINDSPACE")
                 .font(Aurora.mono(10)).tracking(3)
                 .foregroundStyle(fgFaint)
 

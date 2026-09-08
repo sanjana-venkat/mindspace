@@ -15,38 +15,17 @@ REPO="$OWNER/mindspace"
 TAP_REPO="$OWNER/homebrew-mindspace"
 DMG="Mindspace-$VERSION.dmg"
 
+: "${MINDSPACE_SIGN_IDENTITY:?Set MINDSPACE_SIGN_IDENTITY to your Developer ID Application certificate name}"
+: "${MINDSPACE_NOTARY_PROFILE:?Set MINDSPACE_NOTARY_PROFILE to a notarytool keychain profile}"
+
 echo "==> Pushing code to $REPO"
 git remote get-url mindspace >/dev/null 2>&1 || git remote add mindspace "https://github.com/$REPO.git"
 git push -u mindspace main
 
-if [ ! -f "$DMG" ]; then
-    echo "==> Building $DMG"
-    ./scripts/build_app.sh release
-    STAGING="$(mktemp -d)"
-    cp -R Mindspace.app "$STAGING/"
-    ln -s /Applications "$STAGING/Applications"
-    hdiutil create -volname "Mindspace" -srcfolder "$STAGING" -ov -format UDZO "$DMG"
-    rm -rf "$STAGING"
-fi
-
-SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
-echo "==> $DMG  sha256 $SHA"
-
-echo "==> Publishing release v$VERSION"
-gh release create "v$VERSION" "$DMG" --repo "$REPO" \
-    --title "Mindspace $VERSION" \
-    --notes "Open the DMG and drag Mindspace to Applications.
-
-This build is ad-hoc signed rather than notarized, so the first launch needs a
-right-click → **Open** (or System Settings → Privacy & Security → *Open Anyway*).
-Homebrew handles that for you.
-
-    brew tap $OWNER/mindspace
-    brew install --cask mindspace"
+echo "==> Building, signing, notarizing, and publishing v$VERSION"
+MINDSPACE_REPO="$REPO" ./scripts/release.sh "$VERSION"
 
 echo "==> Updating the tap at $TAP_REPO"
-sed -i '' "s/version \".*\"/version \"$VERSION\"/" Casks/mindspace.rb
-sed -i '' "s/sha256 \".*\"/sha256 \"$SHA\"/" Casks/mindspace.rb
 
 TAP_DIR="$(mktemp -d)/homebrew-mindspace"
 if gh repo view "$TAP_REPO" >/dev/null 2>&1; then

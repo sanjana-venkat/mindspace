@@ -47,6 +47,7 @@ public class GeminiClient {
         var parts: [[String: Any]] = []
         for (index, capture) in captures.enumerated() {
             var text = "Capture \(index + 1) — Source: \(capture.sourceLabel)\n"
+            if let sourceURL = capture.sourceURL { text += "Source URL: \(sourceURL)\n" }
             if let thought = capture.thought, !thought.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 text += "Thought: \(thought)\n"
             }

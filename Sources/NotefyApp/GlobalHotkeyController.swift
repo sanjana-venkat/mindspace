@@ -75,8 +75,8 @@ final class GlobalHotkeyController {
 
     /// Re-registers everything after a binding changes.
     func restart() {
-        for reference in references where reference != nil {
-            UnregisterEventHotKey(reference!)
+        for case let reference? in references {
+            UnregisterEventHotKey(reference)
         }
         references.removeAll()
         for id in 1...7 { notefyHotkeyCallbacks[UInt32(id)] = nil }

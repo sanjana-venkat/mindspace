@@ -27,10 +27,10 @@
     <key>NSHighResolutionCapable</key>
     <true/>
     <key>NSMicrophoneUsageDescription</key>
-    <string>Noted records your microphone for spoken annotations and meeting notes.</string>
+    <string>Mindspace records your microphone for spoken annotations and meeting notes.</string>
     <key>NSScreenCaptureUsageDescription</key>
-    <string>Noted captures selected screen content and computer audio to turn your work into notes.</string>
+    <string>Mindspace captures selected screen content and computer audio to turn your work into notes.</string>
     <key>NSAppleEventsUsageDescription</key>
-    <string>Noted reads the active Chrome tab URL/title and copies selected text to enrich your notes.</string>
+    <string>Mindspace reads the active browser tab URL/title and copies selected text to enrich your notes and recognize Google Meet sessions.</string>
 </dict>
 </plist>

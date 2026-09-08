@@ -36,7 +36,7 @@ final class NotefyAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
-            NSApp.windows.first(where: { $0.title == "Noted" })?.makeKeyAndOrderFront(nil)
+            NSApp.windows.first(where: { $0.title == "Mindspace" })?.makeKeyAndOrderFront(nil)
             Self.nudgeMainWindowLayout()
         }
     }
@@ -47,7 +47,7 @@ final class NotefyAppDelegate: NSObject, NSApplicationDelegate {
     /// event forces a clean relayout against the window's actual bounds, so nudge the size
     /// by a point and back right after launch.
     private static func nudgeMainWindowLayout() {
-        guard let window = NSApp.windows.first(where: { $0.title == "Noted" }) else { return }
+        guard let window = NSApp.windows.first(where: { $0.title == "Mindspace" }) else { return }
         let original = window.frame
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
             var nudged = original
@@ -83,7 +83,7 @@ struct NotefyMenuBarApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("Noted", id: "main") {
+        Window("Mindspace", id: "main") {
             MainWindowView()
                 .environmentObject(appState)
                 .onAppear {

@@ -15,7 +15,7 @@ struct MenuBarContentView: View {
             } label: {
                 HStack {
                     NotedMark(tint: NotefyTheme.ink, knockout: NotefyTheme.sand).frame(width: 23, height: 20)
-                    Text("SHOW KAMI CAPTURE RAIL").font(NotefyFont.label).tracking(0.9)
+                    Text("SHOW MINDSPACE CAPTURE RAIL").font(NotefyFont.label).tracking(0.9)
                     Spacer()
                     Text("⌘⇧K").font(NotefyFont.caption).foregroundStyle(NotefyTheme.inkFaint)
                 }
@@ -107,7 +107,7 @@ struct MenuBarContentView: View {
                     openWindow(id: "main")
                     NSApp.activate(ignoringOtherApps: true)
                 } label: {
-                    Label("Open Noted", systemImage: "sidebar.left")
+                    Label("Open Mindspace", systemImage: "sidebar.left")
                 }
                 .buttonStyle(.plain)
                 .foregroundStyle(NotefyTheme.ink)
@@ -137,7 +137,7 @@ struct MenuBarContentView: View {
             }
             .frame(width: 42, height: 34)
             VStack(alignment: .leading, spacing: 0) {
-                Text("noted")
+                Text("mindspace")
                     .font(NotefyFont.wordmark)
                 Text("the intangible, made tangible")
                     .font(NotefyFont.caption)

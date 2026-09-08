@@ -199,7 +199,7 @@ struct PermissionOnboardingView: View {
                 .frame(width: 126, height: 92)
 
                 VStack(spacing: 6) {
-                    Text("LET KAMI WORK ACROSS YOUR MAC")
+                    Text("LET MINDSPACE WORK ACROSS YOUR MAC")
                         .font(NotefyFont.label).tracking(1.5).foregroundStyle(NotefyTheme.inkSoft)
                     Text(currentPermission == nil ? "You’re ready" : "A few permissions first")
                         .font(NotefyFont.pageTitle).foregroundStyle(NotefyTheme.ink)

@@ -3,13 +3,9 @@ import AppKit
 import Dispatch
 import NotefyCore
 
-// Setup active paths
-let desktopURL = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Desktop")
-let notefySessionDir = desktopURL.appendingPathComponent("Notefy_Sessions")
-let settingsURL = notefySessionDir.appendingPathComponent("settings.json")
-
-// Ensure directory exists immediately
-try? FileManager.default.createDirectory(at: notefySessionDir, withIntermediateDirectories: true)
+// Setup active paths. Existing Notefy_Sessions data is migrated automatically.
+let mindspaceDirectory = MindspaceStorage.defaultDirectory()
+let settingsURL = mindspaceDirectory.appendingPathComponent("settings.json")
 
 // Load settings
 var settings = NotefySettings.load(from: settingsURL)
@@ -17,7 +13,7 @@ var settings = NotefySettings.load(from: settingsURL)
 print("==================================================")
 print("             NOTEFY macOS PORTABLE DECK            ")
 print("==================================================")
-print("Session output directory: \(notefySessionDir.path)")
+print("Session output directory: \(mindspaceDirectory.path)")
 print("Settings configuration:   \(settingsURL.path)")
 
 // Initialize clients based on settings
@@ -25,7 +21,7 @@ var audioClient = AudioClient(config: settings.audio)
 var visionClient = VisionClient(config: settings.vision)
 
 // Initialize modules
-let tracker = ExplorationTracker(outputDir: notefySessionDir)
+let tracker = ExplorationTracker(outputDir: mindspaceDirectory)
 let recorder = VoiceRecorder()
 
 var recordingSessionCount = 0
@@ -82,7 +78,7 @@ func printMenu() {
             print("[R] Stop recording Audio Voice Thought")
         }
     }
-    print("[Q] Quit Notefy")
+    print("[Q] Quit Mindspace")
     print("-----------------------------------------------")
     print("Select option: ", terminator: "")
     fflush(stdout)
@@ -108,7 +104,7 @@ consoleQueue.async {
                     
                     // Save final markdown note to desktop
                     let outputFilename = "Exploration_Summary_\(Int(Date().timeIntervalSince1970)).md"
-                    let outputURL = notefySessionDir.appendingPathComponent(outputFilename)
+                    let outputURL = mindspaceDirectory.appendingPathComponent(outputFilename)
                     
                     do {
                         try summaryMarkdown.write(to: outputURL, atomically: true, encoding: .utf8)
@@ -142,7 +138,7 @@ consoleQueue.async {
                 if tracker.isTracking {
                     if !recorder.isRecording {
                         recordingSessionCount += 1
-                        let audioURL = notefySessionDir.appendingPathComponent("voice_note_\(recordingSessionCount).aac")
+                        let audioURL = mindspaceDirectory.appendingPathComponent("voice_note_\(recordingSessionCount).aac")
                         if recorder.startRecording(saveTo: audioURL) {
                             print("\n🎙️ Dictation active. Speak clearly...")
                         }
@@ -151,7 +147,7 @@ consoleQueue.async {
                         recorder.stopRecording()
                         print("\n🎙️ Audio captured. Transcribing voice thought...")
                         
-                        let audioURL = notefySessionDir.appendingPathComponent("voice_note_\(recordingSessionCount).aac")
+                        let audioURL = mindspaceDirectory.appendingPathComponent("voice_note_\(recordingSessionCount).aac")
                         
                         // Asynchronously transcribe voice thought using configured provider (local/API)
                         audioClient.transcribe(audioURL: audioURL) { result in
@@ -192,7 +188,7 @@ consoleQueue.async {
                     print("   Model:     \(settings.vision.modelName)")
                     print("   API Key:   \(settings.vision.apiKey.isEmpty ? "None" : "••••••••")")
                     print("====================================")
-                    print("💡 Edit settings.json inside Notefy_Sessions to change models or set custom endpoints.")
+                    print("💡 Edit settings.json inside Mindspace to change models or set custom endpoints.")
                 } else {
                     print("\n⚠️ Settings menu cannot be accessed during an active exploration session.")
                 }
@@ -200,7 +196,7 @@ consoleQueue.async {
             }
             
         case "q":
-            print("\n👋 Exiting Notefy. Clean up resources...")
+            print("\n👋 Exiting Mindspace. Clean up resources...")
             DispatchQueue.main.async {
                 _ = tracker.stop()
                 recorder.stopRecording()

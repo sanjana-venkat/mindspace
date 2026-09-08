@@ -225,7 +225,7 @@ struct AuroraWorkspaceView: View {
                                 .overlay(Circle().strokeBorder(Aurora.line, lineWidth: 1))
                         }
                         .buttonStyle(.plain)
-                        Text(tile.name).font(Aurora.display(30)).foregroundStyle(Aurora.ink)
+                        Text(tile.name).font(Aurora.title(30)).foregroundStyle(Aurora.ink)
                     } else {
                         Text("Mindspace").font(Aurora.display(30)).foregroundStyle(Aurora.ink)
                     }

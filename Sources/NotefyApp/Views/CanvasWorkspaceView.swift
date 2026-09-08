@@ -275,7 +275,7 @@ private struct CanvasToolbar: View {
             .textCase(.uppercase)
             .tracking(0.035 * 26)
             .foregroundStyle(CanvasPalette.ink)
-            .accessibilityLabel("Noted")
+            .accessibilityLabel("Mindspace")
     }
 
     /// Zoom, the layout toggles and settings share one baseline at 22px
@@ -1269,7 +1269,7 @@ private struct OrganizedEssayView: View {
                                 .font(CanvasTypography.emptyTitle)
                                 .textCase(.uppercase)
                                 .tracking(0.01 * 23)
-                            Text("Choose a structure and Noted will turn the raw note and captures into one readable page using your configured model.")
+                            Text("Choose a structure and Mindspace will turn the raw note and captures into one readable page using your configured model.")
                                 .font(CanvasTypography.noteBody).lineSpacing(CanvasTypography.leading(15.5)).opacity(0.58)
                             OrganizationPicker()
                                 .environmentObject(appState)
@@ -2101,7 +2101,7 @@ private struct CanvasBrandMark: View {
             .tracking(0.035 * 26)
             .foregroundStyle(CanvasPalette.ink)
             .frame(width: 112, height: 42)
-            .accessibilityLabel("Noted")
+            .accessibilityLabel("Mindspace")
     }
 }
 
@@ -2486,4 +2486,3 @@ private struct CanvasGrain: View {
         .allowsHitTesting(false)
     }
 }
-

@@ -1,4 +1,47 @@
 import Foundation
+import Security
+
+private enum ModelSecretStore {
+    private static let service = "com.notefy.app.model-keys"
+
+    static func read(_ account: String) -> String? {
+        let query: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account,
+            kSecReturnData as String: true,
+            kSecMatchLimit as String: kSecMatchLimitOne
+        ]
+        var item: CFTypeRef?
+        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
+              let data = item as? Data
+        else { return nil }
+        return String(data: data, encoding: .utf8)
+    }
+
+    @discardableResult
+    static func write(_ value: String, account: String) -> Bool {
+        let identity: [String: Any] = [
+            kSecClass as String: kSecClassGenericPassword,
+            kSecAttrService as String: service,
+            kSecAttrAccount as String: account
+        ]
+        guard !value.isEmpty else {
+            let status = SecItemDelete(identity as CFDictionary)
+            return status == errSecSuccess || status == errSecItemNotFound
+        }
+        let attributes: [String: Any] = [
+            kSecValueData as String: Data(value.utf8),
+            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
+        ]
+        let update = SecItemUpdate(identity as CFDictionary, attributes as CFDictionary)
+        if update == errSecSuccess { return true }
+        guard update == errSecItemNotFound else { return false }
+        var insertion = identity
+        attributes.forEach { insertion[$0.key] = $0.value }
+        return SecItemAdd(insertion as CFDictionary, nil) == errSecSuccess
+    }
+}
 
 public enum ModelProvider: String, Codable, CaseIterable {
     case local = "local"
@@ -102,9 +145,24 @@ public struct NotefySettings: Codable {
     
     // Save configuration settings to local JSON file
     public func save(to url: URL) {
+        var keys = savedKeys ?? [:]
+        keys["audio." + audio.provider.rawValue] = audio.apiKey
+        keys[vision.provider.rawValue] = vision.apiKey
+
+        var storedSecurely = true
+        for (account, value) in keys {
+            if !ModelSecretStore.write(value, account: account) { storedSecurely = false }
+        }
+
+        var settingsToWrite = self
+        if storedSecurely {
+            settingsToWrite.audio.apiKey = ""
+            settingsToWrite.vision.apiKey = ""
+            settingsToWrite.savedKeys = nil
+        }
         let encoder = JSONEncoder()
         encoder.outputFormatting = .prettyPrinted
-        if let data = try? encoder.encode(self) {
+        if let data = try? encoder.encode(settingsToWrite) {
             try? data.write(to: url)
         }
     }
@@ -112,12 +170,29 @@ public struct NotefySettings: Codable {
     // Load configuration settings from local JSON file
     public static func load(from url: URL) -> NotefySettings {
         guard let data = try? Data(contentsOf: url),
-              let settings = try? JSONDecoder().decode(NotefySettings.self, from: data) else {
+              var settings = try? JSONDecoder().decode(NotefySettings.self, from: data) else {
             // Return defaults if file doesn't exist
             let defaults = NotefySettings()
             defaults.save(to: url)
             return defaults
         }
+        let containedPlaintext = !settings.audio.apiKey.isEmpty
+            || !settings.vision.apiKey.isEmpty
+            || !(settings.savedKeys ?? [:]).values.allSatisfy(\.isEmpty)
+
+        var keys = settings.savedKeys ?? [:]
+        if !settings.audio.apiKey.isEmpty { keys["audio." + settings.audio.provider.rawValue] = settings.audio.apiKey }
+        if !settings.vision.apiKey.isEmpty { keys[settings.vision.provider.rawValue] = settings.vision.apiKey }
+        for provider in ModelProvider.allCases where provider.needsKey {
+            let visionAccount = provider.rawValue
+            let audioAccount = "audio." + provider.rawValue
+            if let stored = ModelSecretStore.read(visionAccount) { keys[visionAccount] = stored }
+            if let stored = ModelSecretStore.read(audioAccount) { keys[audioAccount] = stored }
+        }
+        settings.savedKeys = keys
+        settings.audio.apiKey = keys["audio." + settings.audio.provider.rawValue] ?? ""
+        settings.vision.apiKey = keys[settings.vision.provider.rawValue] ?? ""
+        if containedPlaintext { settings.save(to: url) }
         return settings
     }
 }

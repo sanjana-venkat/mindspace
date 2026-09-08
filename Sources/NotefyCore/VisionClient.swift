@@ -70,11 +70,13 @@ public class VisionClient {
     /// source) and, optionally, the screenshot itself plus any thought they left about it.
     public struct MentalNoteCapture {
         public let sourceLabel: String
+        public let sourceURL: String?
         public let thought: String?
         public let imageBase64: String?
 
-        public init(sourceLabel: String, thought: String?, imageBase64: String?) {
+        public init(sourceLabel: String, sourceURL: String? = nil, thought: String?, imageBase64: String?) {
             self.sourceLabel = sourceLabel
+            self.sourceURL = sourceURL
             self.thought = thought
             self.imageBase64 = imageBase64
         }
@@ -102,6 +104,7 @@ public class VisionClient {
         var images: [String] = []
         for (index, capture) in captures.enumerated() {
             userText += "Capture \(index + 1) — Source: \(capture.sourceLabel)\n"
+            if let sourceURL = capture.sourceURL { userText += "Source URL: \(sourceURL)\n" }
             if let thought = capture.thought, !thought.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                 userText += "Thought: \(thought)\n"
             }
