@@ -18,9 +18,9 @@ macOS 14+ on Apple silicon. Everything is stored as plain Markdown on your Mac.
 Grab the latest `.dmg` from [Releases](https://github.com/sanjana-venkat/mindspace/releases),
 open it, and drag Mindspace to Applications.
 
-The current 0.1.0 alpha is ad-hoc signed, so its first launch needs a right-click → **Open**
-(or System Settings → Privacy & Security → *Open Anyway*). The next release pipeline requires
-a Developer ID signature and Apple notarization before it can publish.
+The current alpha is ad-hoc signed. Try opening it once, then go to System Settings →
+Privacy & Security and choose **Open Anyway**. Future releases can use Developer ID signing
+and Apple notarization without changing the build workflow.
 
 ### Homebrew
 

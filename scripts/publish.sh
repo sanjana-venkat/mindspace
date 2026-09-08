@@ -15,9 +15,6 @@ REPO="$OWNER/mindspace"
 TAP_REPO="$OWNER/homebrew-mindspace"
 DMG="Mindspace-$VERSION.dmg"
 
-: "${MINDSPACE_SIGN_IDENTITY:?Set MINDSPACE_SIGN_IDENTITY to your Developer ID Application certificate name}"
-: "${MINDSPACE_NOTARY_PROFILE:?Set MINDSPACE_NOTARY_PROFILE to a notarytool keychain profile}"
-
 echo "==> Pushing code to $REPO"
 git remote get-url mindspace >/dev/null 2>&1 || git remote add mindspace "https://github.com/$REPO.git"
 git push -u mindspace main
