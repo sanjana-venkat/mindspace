@@ -25,6 +25,12 @@ public class VisionClient {
                 systemPrompt: "Describe this screen capture in 2-3 sentences: what app or site it's from and the key information visible. Plain prose only.",
                 completion: completion
             )
+        case .anthropic:
+            sendAnthropic(
+                system: "Describe this screen capture in 2-3 sentences: what app or site it's from and the key information visible. Plain prose only.",
+                blocks: [Self.imageBlock(base64String)],
+                completion: completion
+            )
         }
     }
 
@@ -49,6 +55,10 @@ public class VisionClient {
             ], completion: completion)
         case .gemini:
             geminiClient.generateNote(systemPrompt: systemPrompt, context: context, completion: completion)
+        case .anthropic:
+            sendAnthropic(system: systemPrompt,
+                          blocks: [["type": "text", "text": String(context.prefix(100_000))]],
+                          completion: completion)
         }
     }
 
@@ -103,6 +113,16 @@ public class VisionClient {
             userText += "\n"
         }
         userText += "Write the note tying these captures together, following the required structure exactly."
+
+        if config.provider == .anthropic {
+            var blocks: [[String: Any]] = [["type": "text", "text": userText]]
+            for image in images { blocks.append(Self.imageBlock(image)) }
+            sendAnthropic(system: systemPrompt,
+                          blocks: blocks,
+                          timeout: min(600, 90 + Double(images.count) * 45),
+                          completion: completion)
+            return
+        }
 
         if config.provider == .api {
             var content: [[String: Any]] = [["type": "text", "text": userText]]
@@ -193,6 +213,78 @@ public class VisionClient {
     }
     
     // Call standard OpenAI-compatible cloud vision endpoint (OpenAI, OpenRouter, Custom VLM)
+    static func imageBlock(_ base64: String) -> [String: Any] {
+        ["type": "image", "source": ["type": "base64", "media_type": "image/png", "data": base64]]
+    }
+
+    /// Anthropic's Messages API: key in `x-api-key`, a version header, the
+    /// system prompt as its own field, and the answer in `content[].text`.
+    private func sendAnthropic(
+        system: String?,
+        blocks: [[String: Any]],
+        timeout: Double = 180,
+        completion: @escaping (Result<String, Error>) -> Void
+    ) {
+        let endpoint = config.apiURL.isEmpty ? ModelProvider.anthropic.defaultVisionURL : config.apiURL
+        guard let url = URL(string: endpoint) else {
+            completion(.failure(NSError(domain: "Notefy", code: 400,
+                                        userInfo: [NSLocalizedDescriptionKey: "Invalid Claude API URL"])))
+            return
+        }
+        guard !config.apiKey.isEmpty else {
+            completion(.failure(NSError(domain: "Notefy", code: 401,
+                                        userInfo: [NSLocalizedDescriptionKey: "Add a Claude API key in Settings"])))
+            return
+        }
+
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        request.timeoutInterval = timeout
+        request.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        request.setValue(config.apiKey, forHTTPHeaderField: "x-api-key")
+        request.setValue("2023-06-01", forHTTPHeaderField: "anthropic-version")
+
+        var payload: [String: Any] = [
+            "model": config.modelName.isEmpty ? ModelProvider.anthropic.defaultVisionModel : config.modelName,
+            "max_tokens": 4096,
+            "messages": [["role": "user", "content": blocks]]
+        ]
+        if let system { payload["system"] = system }
+
+        guard let body = try? JSONSerialization.data(withJSONObject: payload) else {
+            completion(.failure(NSError(domain: "Notefy", code: 500,
+                                        userInfo: [NSLocalizedDescriptionKey: "Failed to encode the Claude request"])))
+            return
+        }
+        request.httpBody = body
+
+        URLSession.shared.dataTask(with: request) { data, _, error in
+            if let error { completion(.failure(error)); return }
+            guard let data else {
+                completion(.failure(NSError(domain: "Notefy", code: 500,
+                                            userInfo: [NSLocalizedDescriptionKey: "No data from Claude"])))
+                return
+            }
+            guard let json = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else {
+                completion(.failure(NSError(domain: "Notefy", code: 500,
+                                            userInfo: [NSLocalizedDescriptionKey: "Unreadable response from Claude"])))
+                return
+            }
+            if let content = json["content"] as? [[String: Any]] {
+                let text = content.compactMap { $0["text"] as? String }.joined()
+                if !text.isEmpty { completion(.success(text)); return }
+            }
+            if let apiError = json["error"] as? [String: Any],
+               let message = apiError["message"] as? String {
+                completion(.failure(NSError(domain: "Notefy", code: 502,
+                                            userInfo: [NSLocalizedDescriptionKey: message])))
+                return
+            }
+            completion(.failure(NSError(domain: "Notefy", code: 500,
+                                        userInfo: [NSLocalizedDescriptionKey: "Claude returned no text"])))
+        }.resume()
+    }
+
     private func analyzeViaCloudAPI(base64Image: String, completion: @escaping (Result<String, Error>) -> Void) {
         sendCloud(messages: [[
             "role": "user",

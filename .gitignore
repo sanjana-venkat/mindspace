@@ -17,3 +17,8 @@ Package.resolved
 /Notefy.app
 AppResources/AppIcon.iconset
 AppResources/icon_1024.png
+
+# Built app bundle and installer — shipped via GitHub Releases, not the repo
+Mindspace.app/
+Noted.app/
+*.dmg

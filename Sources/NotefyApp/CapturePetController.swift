@@ -266,20 +266,13 @@ private struct CaptureRailView: View {
     private func satellite(_ title: String, icon: OverlayIcon.Kind, action: @escaping () -> Void) -> some View {
         Button(action: action) {
             HStack(spacing: 8) {
-                OverlayIcon(kind: icon).frame(width: 18, height: 18)
+                OverlayIcon(kind: icon, tint: NotefyTheme.sand).frame(width: 18, height: 18)
                 Text(title).font(NotefyFont.label).tracking(1)
             }
-            .foregroundStyle(NotefyTheme.ink)
+            .foregroundStyle(NotefyTheme.sand)
             .padding(.horizontal, 15)
             .padding(.vertical, 9)
-            .background {
-                ZStack {
-                    RailGlass()
-                    FrostGrain()
-                }
-                .clipShape(Capsule())
-            }
-            .overlay(Capsule().stroke(Color.white.opacity(0.5), lineWidth: 1))
+            .background(NotefyTheme.ink, in: Capsule())
         }
         .buttonStyle(RailPressStyle())
     }
@@ -308,6 +301,7 @@ private struct RailPressStyle: ButtonStyle {
 struct OverlayIcon: View {
     enum Kind { case capture, text, audio, meeting, microphone, window, region }
     let kind: Kind
+    var tint: Color = NotefyTheme.ink
 
     var body: some View {
         Canvas { context, size in
@@ -317,7 +311,7 @@ struct OverlayIcon: View {
             func stroke(_ path: Path, dashed: Bool = false) {
                 context.stroke(
                     path,
-                    with: .color(NotefyTheme.ink),
+                    with: .color(tint),
                     style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round, dash: dashed ? [3, 3] : [])
                 )
             }

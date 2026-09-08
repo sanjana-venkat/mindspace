@@ -10,7 +10,9 @@ public class AudioClient {
     // Transcribe audio using local engine or remote API
     public func transcribe(audioURL: URL, completion: @escaping (Result<String, Error>) -> Void) {
         switch config.provider {
-        case .local:
+        case .local, .anthropic:
+            // Claude has no speech-to-text endpoint, so transcription stays
+            // on-device even when Claude is writing the organized note.
             transcribeLocally(audioURL: audioURL, completion: completion)
         case .api:
             transcribeViaAPI(audioURL: audioURL, completion: completion)

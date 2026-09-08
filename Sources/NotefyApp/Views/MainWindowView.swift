@@ -15,6 +15,12 @@ struct MainWindowView: View {
     /// system-preference auto-switch — this is a surface choice.
     @AppStorage(GroundStorage.key) private var groundRaw = GroundMode.ink.rawValue
     @AppStorage(GroundSurface.storageKey) private var surfaceRaw = GroundSurface.paper.rawValue
+    /// The Aurora shell is the app now; the original canvas stays one shortcut
+    /// away (⌘⇧A) while the port settles.
+    @AppStorage("aurora.shell") private var auroraShell = true
+    @AppStorage(AuroraAppearance.storageKey) private var appearanceRaw = AuroraAppearance.system.rawValue
+
+    private var appearance: AuroraAppearance { AuroraAppearance(rawValue: appearanceRaw) ?? .system }
 
     private var groundMode: GroundMode { GroundMode(rawValue: groundRaw) ?? .ink }
     private var surface: GroundSurface { GroundSurface(rawValue: surfaceRaw) ?? .paper }
@@ -22,14 +28,25 @@ struct MainWindowView: View {
     var body: some View {
         Group {
             if appState.isShowingPermissionOnboarding {
-                PermissionOnboardingView(
-                    permissionCenter: appState.permissionCenter,
-                    onFinished: appState.finishPermissionOnboarding
-                )
+                if auroraShell {
+                    AuroraOnboarding(onFinish: appState.finishPermissionOnboarding)
+                } else {
+                    PermissionOnboardingView(
+                        permissionCenter: appState.permissionCenter,
+                        onFinished: appState.finishPermissionOnboarding
+                    )
+                }
+            } else if auroraShell {
+                AuroraWorkspaceView()
             } else {
                 CanvasWorkspaceView()
             }
         }
+        .background(
+            Button("") { auroraShell.toggle() }
+                .keyboardShortcut("a", modifiers: [.command, .shift])
+                .opacity(0).frame(width: 0, height: 0)
+        )
         .frame(minWidth: 980, minHeight: 680)
         // The bed: the ground slab. Darker than the cards resting on it —
         // a worn work surface, not a light "airy" background. This
@@ -44,14 +61,16 @@ struct MainWindowView: View {
         // This shell fill is what was blocking the vibrancy: an opaque
         // background here paints over anything the window would otherwise
         // let through, so on glass the canvas must own the surface alone.
-        .background(surface == .glass ? Color.clear : Stoneink.surfaceBed)
+        .background((surface == .glass || auroraShell) ? Color.clear : Stoneink.surfaceBed)
         // Configured at the shell, not deep inside the canvas: this needs to
         // reach the NSWindow, and the shell is what owns it.
-        .background(WindowSurfaceBridge(glass: surface == .glass))
+        .background(WindowSurfaceBridge(glass: surface == .glass || auroraShell))
         // Pinned to light in BOTH modes. This is not a dark theme: the paper
         // panels have to resolve as paper whatever the Mac is set to, and the
         // ground is chosen here, never by the system appearance.
-        .preferredColorScheme(.light)
+        // The legacy canvas is a light-only design; the Aurora shell follows the
+        // user's choice, and `system` inherits the Mac's own schedule.
+        .preferredColorScheme(auroraShell ? appearance.scheme : .light)
         .environment(\.ground, GroundPalette.clay)
     }
 }

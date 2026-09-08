@@ -301,6 +301,15 @@ struct SettingsView: View {
             }
 
             switch provider.wrappedValue {
+            case .anthropic:
+                LabeledContent("Claude API Key") {
+                    SecureField("sk-ant-...", text: apiKey)
+                        .textFieldStyle(.roundedBorder)
+                }
+                LabeledContent("Model") {
+                    TextField("claude-sonnet-4-5", text: modelName)
+                        .textFieldStyle(.roundedBorder)
+                }
             case .local:
                 Text(localHint)
                     .font(StoneFont.mark())

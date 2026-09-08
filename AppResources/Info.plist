@@ -3,9 +3,9 @@
 <plist version="1.0">
 <dict>
     <key>CFBundleName</key>
-    <string>Noted</string>
+    <string>Mindspace</string>
     <key>CFBundleDisplayName</key>
-    <string>Noted</string>
+    <string>Mindspace</string>
     <key>CFBundleIdentifier</key>
     <string>com.notefy.app</string>
     <key>CFBundleVersion</key>

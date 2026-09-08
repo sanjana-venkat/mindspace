@@ -1374,7 +1374,7 @@ private struct OrganizationPicker: View {
                 }
                 .padding(.horizontal, 10).padding(.bottom, 6)
 
-                ForEach(OrganizationTemplate.allCases) { template in
+                ForEach(OrganizationTemplate.offered) { template in
                     Button {
                         isOpen = false
                         appState.organizeCurrentSession(as: template)

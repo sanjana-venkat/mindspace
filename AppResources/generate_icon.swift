@@ -1,96 +1,121 @@
 import AppKit
+import CoreImage
 
-// NOTED app icon — the paper, margin rule, pebble, and Kami crane distilled
-// into one mark. Keep this source deterministic so design can evolve without
-// replacing an opaque bitmap asset.
+// MINDSPACE app icon — a night sky with an aurora hanging in it, the same
+// curtains the reading panel draws. Deterministic source so the mark can be
+// re-rendered rather than stored as an opaque bitmap.
 
 let size = 1024.0
 let rect = NSRect(x: 0, y: 0, width: size, height: size)
 let image = NSImage(size: rect.size)
 
-let sand = NSColor(calibratedRed: 248/255, green: 244/255, blue: 236/255, alpha: 1)
-let card = NSColor(calibratedRed: 254/255, green: 253/255, blue: 250/255, alpha: 1)
-let ink = NSColor(calibratedRed: 31/255, green: 30/255, blue: 26/255, alpha: 1)
-let rose = NSColor(calibratedRed: 199/255, green: 154/255, blue: 144/255, alpha: 1)
-let tan = NSColor(calibratedRed: 240/255, green: 211/255, blue: 162/255, alpha: 1)
+func rgb(_ r: Double, _ g: Double, _ b: Double, _ a: Double = 1) -> NSColor {
+    NSColor(calibratedRed: r/255, green: g/255, blue: b/255, alpha: a)
+}
+
+let nightTop = rgb(8, 16, 22)
+let nightLow = rgb(14, 34, 38)
+let green = rgb(76, 214, 150)
+let teal = rgb(78, 176, 196)
+let violet = rgb(140, 118, 226)
+let rose = rgb(214, 130, 168)
 
 image.lockFocus()
 
-// Warm sheet of paper.
-let outer = NSBezierPath(roundedRect: rect.insetBy(dx: 24, dy: 24), xRadius: 224, yRadius: 224)
-sand.setFill()
-outer.fill()
-outer.addClip()
+let plate = NSBezierPath(roundedRect: rect.insetBy(dx: 24, dy: 24), xRadius: 224, yRadius: 224)
+plate.addClip()
 
-// Kami's perch. The crane itself is the logo; the pebble only gives the white
-// folded paper enough contrast at small macOS icon sizes.
-let pebble = NSBezierPath()
-pebble.move(to: NSPoint(x: 150, y: 486))
-pebble.curve(to: NSPoint(x: 394, y: 826), controlPoint1: NSPoint(x: 134, y: 690), controlPoint2: NSPoint(x: 228, y: 810))
-pebble.curve(to: NSPoint(x: 812, y: 770), controlPoint1: NSPoint(x: 586, y: 874), controlPoint2: NSPoint(x: 784, y: 858))
-pebble.curve(to: NSPoint(x: 892, y: 366), controlPoint1: NSPoint(x: 934, y: 642), controlPoint2: NSPoint(x: 954, y: 472))
-pebble.curve(to: NSPoint(x: 526, y: 176), controlPoint1: NSPoint(x: 810, y: 224), controlPoint2: NSPoint(x: 668, y: 154))
-pebble.curve(to: NSPoint(x: 150, y: 486), controlPoint1: NSPoint(x: 302, y: 144), controlPoint2: NSPoint(x: 134, y: 308))
-pebble.close()
-tan.setFill()
-pebble.fill()
+// The sky.
+NSGradient(colors: [nightLow, nightTop, nightLow],
+           atLocations: [0, 0.45, 1],
+           colorSpace: .deviceRGB)?
+    .draw(in: rect, angle: 90)
 
-// Kami, drawn as crisp folded paper. The bold outline survives 16px output.
-func p(_ x: CGFloat, _ y: CGFloat) -> NSPoint {
-    let origin = NSPoint(x: 216, y: 244)
-    let scaleX: CGFloat = 22.0
-    let scaleY: CGFloat = 21.0
-    return NSPoint(x: origin.x + x * scaleX, y: origin.y + y * scaleY)
+// Three curtains: a wandering centre line, a breathing width, and a vertical
+// ramp from green at the base to violet at the tips.
+func curtain(centerX: Double, width: Double, phase: Double, tip: NSColor) {
+    let path = NSBezierPath()
+    let samples = 40
+    var left: [NSPoint] = []
+    var right: [NSPoint] = []
+    for i in 0...samples {
+        let t = Double(i) / Double(samples)
+        let y = 120 + t * 800
+        let wander = sin(t * 2.1 + phase) * 52 + sin(t * 4.3 + phase * 1.4) * 18
+        let breath = width * (0.66 + 0.4 * sin(t * 2.4 + phase))
+        left.append(NSPoint(x: centerX + wander - breath / 2, y: y))
+        right.append(NSPoint(x: centerX + wander + breath / 2, y: y))
+    }
+    path.move(to: left[0])
+    for point in left.dropFirst() { path.line(to: point) }
+    for point in right.reversed() { path.line(to: point) }
+    path.close()
+
+    NSGraphicsContext.saveGraphicsState()
+    path.addClip()
+    NSGradient(colors: [green.withAlphaComponent(0.0),
+                        green.withAlphaComponent(1.0),
+                        teal.withAlphaComponent(0.9),
+                        tip.withAlphaComponent(0.85),
+                        tip.withAlphaComponent(0.0)],
+               atLocations: [0, 0.22, 0.55, 0.85, 1],
+               colorSpace: .deviceRGB)?
+        .draw(in: NSRect(x: 0, y: 100, width: size, height: 840), angle: 90)
+    NSGraphicsContext.restoreGraphicsState()
 }
 
-let crane = NSBezierPath()
-crane.move(to: p(4, 8))
-crane.line(to: p(15, 22))
-crane.line(to: p(20, 16))
-crane.line(to: p(28, 26))
-crane.line(to: p(30, 18))
-crane.line(to: p(22, 10))
-crane.line(to: p(14, 6))
-crane.close()
-crane.lineJoinStyle = .round
-card.setFill()
-crane.fill()
-ink.setStroke()
-crane.lineWidth = 15
-crane.stroke()
+// Drawn into an offscreen image so the whole aurora can be blurred as one.
+let sky = NSImage(size: rect.size)
+sky.lockFocus()
+curtain(centerX: 300, width: 250, phase: 0.4, tip: violet)
+curtain(centerX: 512, width: 150, phase: 2.4, tip: rose)
+curtain(centerX: 726, width: 230, phase: 4.1, tip: violet)
+sky.unlockFocus()
 
-let folds = NSBezierPath()
-folds.move(to: p(15, 22))
-folds.line(to: p(20, 16))
-folds.line(to: p(14, 6))
-folds.move(to: p(4, 8))
-folds.line(to: p(20, 16))
-folds.line(to: p(22, 10))
-folds.lineWidth = 10
-folds.lineJoinStyle = .round
-ink.setStroke()
-folds.stroke()
+if let blur = CIFilter(name: "CIGaussianBlur"),
+   let tiff = sky.tiffRepresentation,
+   let ci = CIImage(data: tiff) {
+    blur.setValue(ci, forKey: kCIInputImageKey)
+    blur.setValue(30.0, forKey: kCIInputRadiusKey)
+    if let output = blur.outputImage {
+        let context = CIContext()
+        if let cg = context.createCGImage(output, from: ci.extent) {
+            NSGraphicsContext.current?.cgContext.draw(cg, in: rect)
+        }
+    }
+} else {
+    sky.draw(in: rect)
+}
 
-// Dusty-rose beak stitch and a tiny ink eye.
-let beak = NSBezierPath()
-beak.move(to: p(28, 26))
-beak.line(to: p(26.5, 28.2))
-beak.lineWidth = 13
-beak.lineCapStyle = .round
-rose.setStroke()
-beak.stroke()
+// A low horizon glow, so the curtains look like they stand on something.
+NSGradient(colors: [green.withAlphaComponent(0.22), NSColor.clear],
+           atLocations: [0, 1], colorSpace: .deviceRGB)?
+    .draw(in: NSRect(x: 0, y: 0, width: size, height: 300), angle: 90)
 
-ink.setFill()
-NSBezierPath(ovalIn: NSRect(x: p(27.5, 24.7).x - 8, y: p(27.5, 24.7).y - 8, width: 16, height: 16)).fill()
+// Stars.
+var seed: UInt64 = 0x2545F4914F6CDD1D
+func rand() -> Double {
+    seed ^= seed << 13; seed ^= seed >> 7; seed ^= seed << 17
+    return Double(seed % 100_000) / 100_000.0
+}
+for _ in 0..<90 {
+    let x = rand() * size
+    let y = 520 + rand() * 460
+    let r = 1.4 + rand() * 2.6
+    NSColor.white.withAlphaComponent(0.18 + rand() * 0.5).setFill()
+    NSBezierPath(ovalIn: NSRect(x: x, y: y, width: r, height: r)).fill()
+}
 
 image.unlockFocus()
 
 guard let tiff = image.tiffRepresentation,
-      let rep = NSBitmapImageRep(data: tiff),
-      let png = rep.representation(using: .png, properties: [:]) else {
-    fatalError("Failed to render icon")
+      let bitmap = NSBitmapImageRep(data: tiff),
+      let png = bitmap.representation(using: .png, properties: [:]) else {
+    fatalError("Could not render the icon")
 }
 
-let outputURL = URL(fileURLWithPath: CommandLine.arguments[1])
+let outputURL = URL(fileURLWithPath: CommandLine.arguments.count > 1
+                    ? CommandLine.arguments[1]
+                    : FileManager.default.currentDirectoryPath + "/icon_1024.png")
 try png.write(to: outputURL)
-print("Wrote icon to \(outputURL.path)")
+print("Wrote \(outputURL.path)")

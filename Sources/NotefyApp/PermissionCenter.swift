@@ -203,7 +203,7 @@ struct PermissionOnboardingView: View {
                         .font(NotefyFont.label).tracking(1.5).foregroundStyle(NotefyTheme.inkSoft)
                     Text(currentPermission == nil ? "You’re ready" : "A few permissions first")
                         .font(NotefyFont.pageTitle).foregroundStyle(NotefyTheme.ink)
-                    Text("Noted checks macOS directly and keeps this page updated while you grant access.")
+                    Text("Mindspace checks macOS directly and keeps this page updated while you grant access.")
                         .font(NotefyFont.body).foregroundStyle(NotefyTheme.inkSoft)
                         .multilineTextAlignment(.center)
                 }
@@ -278,11 +278,11 @@ struct PermissionOnboardingView: View {
                     .accessibilityLabel("Recheck permissions")
                 Button("RELAUNCH NOTED") { permissionCenter.relaunch() }
                     .buttonStyle(.plain).font(NotefyFont.caption)
-                    .accessibilityLabel("Relaunch Noted")
+                    .accessibilityLabel("Relaunch Mindspace")
             }
             .foregroundStyle(NotefyTheme.inkSoft)
             Text(permission == .accessibility
-                 ? "If Noted is already enabled, turn it off and on once, then relaunch Noted. macOS sometimes keeps the old signed build cached."
+                 ? "If Mindspace is already enabled, turn it off and on once, then relaunch Mindspace. macOS sometimes keeps the old signed build cached."
                  : "Return here after changing System Settings. This status refreshes automatically.")
                 .font(NotefyFont.caption).foregroundStyle(NotefyTheme.inkFaint)
                 .multilineTextAlignment(.center)
@@ -307,7 +307,7 @@ struct PermissionOnboardingView: View {
             .buttonStyle(.plain).font(NotefyFont.label).tracking(1)
             .padding(.horizontal, 20).padding(.vertical, 11)
             .background(NotefyTheme.ink, in: Capsule()).foregroundStyle(NotefyTheme.sand)
-            .accessibilityLabel("Start using Noted")
+            .accessibilityLabel("Start using Mindspace")
         }
         .padding(26)
         .background(NotefyTheme.cardPaper)

@@ -16,6 +16,10 @@ enum OrganizationTemplate: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
+    /// What the UI offers. The flowchart path isn't reliable yet, so it stays
+    /// out of the picker while the rest ships.
+    static var offered: [OrganizationTemplate] { allCases.filter { $0 != .diagram } }
+
     var icon: String {
         switch self {
         case .bulletList: return "list.bullet"
@@ -220,6 +224,10 @@ private struct StoredNoteDocument: Codable {
     /// was reopened. Optional with a default so sidecars written before this
     /// field still decode, and so the existing initialiser call sites are
     /// unaffected.
+    /// Every organized version this note has produced, keyed by template.
+    /// Switching between Bullet list / Essay / Meeting notes then costs
+    /// nothing — the model only runs for a shape that hasn't been made yet.
+    var organizedVariants: [String: String]? = nil
     var rawDraft: String? = nil
     /// Same story for the free-standing thoughts block.
     var annotationDraft: String? = nil
@@ -261,6 +269,7 @@ final class AppState: ObservableObject {
     @Published var organizedDraft: String = ""
     @Published var organizedGraph: ThoughtGraph? = nil
     @Published var organizedTemplate: OrganizationTemplate = .bulletList
+    @Published var organizedVariants: [String: String] = [:]
     @Published var isOrganizing = false
     @Published var audioInputDevices: [AudioInputDevice] = []
     @Published var microphonePowerDB: Float = -160
@@ -581,6 +590,20 @@ final class AppState: ObservableObject {
         return folder.id
     }
 
+    /// Where a folder sits on the Aurora canvas. Stored on the folder itself so
+    /// the arrangement survives relaunch like any other workspace metadata.
+    func setFolderPoint(_ id: UUID, to point: CGPoint) {
+        guard let i = workspace.folders.firstIndex(where: { $0.id == id }) else { return }
+        workspace.folders[i].x = point.x
+        workspace.folders[i].y = point.y
+        saveWorkspace()
+    }
+
+    func folderPoint(_ id: UUID) -> CGPoint? {
+        guard let f = workspace.folders.first(where: { $0.id == id }), let x = f.x, let y = f.y else { return nil }
+        return CGPoint(x: x, y: y)
+    }
+
     func renameFolder(_ id: UUID, to newName: String) {
         let trimmed = newName.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty, let idx = workspace.folders.firstIndex(where: { $0.id == id }) else { return }
@@ -630,7 +653,7 @@ final class AppState: ObservableObject {
         saveWorkspace()
     }
 
-    private func saveWorkspace() {
+    func saveWorkspace() {
         workspace.save(to: workspaceURL)
     }
 
@@ -897,6 +920,19 @@ final class AppState: ObservableObject {
         """
     }
 
+    /// Shows a shape that has already been written; only calls the model when
+    /// this note has never been organized that way. `force` re-runs it.
+    func showOrganized(_ template: OrganizationTemplate, force: Bool = false) {
+        if !force, let cached = organizedVariants[template.rawValue], !cached.isEmpty {
+            organizedTemplate = template
+            organizedDraft = cached
+            recordingStatus = nil
+            persistCurrentRawNote()
+            return
+        }
+        organizeCurrentSession(as: template)
+    }
+
     func organizeCurrentSession(as template: OrganizationTemplate = .bulletList) {
         guard !steps.isEmpty || !rawDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             recordingStatus = "Add something to the raw note first."
@@ -957,6 +993,7 @@ final class AppState: ObservableObject {
                     switch result {
                     case .success(let note):
                         self.organizedDraft = note
+                        self.organizedVariants[template.rawValue] = note
                         self.recordingStatus = nil
                     case .failure(let error):
                         self.organizedDraft = fallback
@@ -986,6 +1023,7 @@ final class AppState: ObservableObject {
                 switch result {
                 case .success(let note):
                     self.organizedDraft = note
+                    self.organizedVariants[template.rawValue] = note
                     self.recordingStatus = nil
                 case .failure(let error):
                     self.organizedDraft = fallback
@@ -1610,6 +1648,7 @@ final class AppState: ObservableObject {
             organized: organizedDraft,
             organizationTemplate: organizedTemplate,
             thoughtGraph: organizedGraph,
+            organizedVariants: organizedVariants,
             rawDraft: rawDraft,
             annotationDraft: annotationDraft
         )
@@ -1684,6 +1723,10 @@ final class AppState: ObservableObject {
             organizedDraft = document.organized
             organizedGraph = document.thoughtGraph
             organizedTemplate = document.organizationTemplate ?? .bulletList
+            organizedVariants = document.organizedVariants ?? [:]
+            if organizedVariants.isEmpty, !document.organized.isEmpty {
+                organizedVariants[(document.organizationTemplate ?? .bulletList).rawValue] = document.organized
+            }
             rawDraft = document.rawDraft ?? ""
             annotationDraft = document.annotationDraft ?? ""
         } else {
@@ -1695,6 +1738,7 @@ final class AppState: ObservableObject {
             organizedDraft = ""
             organizedGraph = nil
             organizedTemplate = .bulletList
+            organizedVariants = [:]
             rawDraft = markdown
             annotationDraft = ""
         }

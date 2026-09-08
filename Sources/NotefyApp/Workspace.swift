@@ -7,11 +7,18 @@ struct NoteFolder: Identifiable, Codable, Hashable {
     let id: UUID
     var name: String
     var parentID: UUID?
+    /// Where the folder sits on the infinite canvas. Optional so workspace
+    /// files written before the canvas existed still decode; folders without
+    /// a point get laid out on a grid the first time they are shown.
+    var x: Double?
+    var y: Double?
 
-    init(id: UUID = UUID(), name: String, parentID: UUID? = nil) {
+    init(id: UUID = UUID(), name: String, parentID: UUID? = nil, x: Double? = nil, y: Double? = nil) {
         self.id = id
         self.name = name
         self.parentID = parentID
+        self.x = x
+        self.y = y
     }
 }
 

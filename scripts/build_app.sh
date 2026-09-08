@@ -1,5 +1,5 @@
 #!/bin/bash
-# Builds Noted.app: compiles the notefy-app executable and assembles
+# Builds Mindspace.app: compiles the notefy-app executable and assembles
 # it into a proper macOS app bundle (Info.plist, icon, ad-hoc signature).
 set -euo pipefail
 
@@ -15,7 +15,7 @@ else
     BIN_DIR=".build/debug"
 fi
 
-APP_BUNDLE="$ROOT_DIR/Noted.app"
+APP_BUNDLE="$ROOT_DIR/Mindspace.app"
 rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources/Fonts"
 
