@@ -96,8 +96,8 @@ struct AuroraOnboarding: View {
                     .fill(i <= step ? fg.opacity(0.9) : fg.opacity(0.22))
                     .frame(width: i == step ? 34 : 16, height: 4)
             }
-            Spacer()
         }
+        .frame(maxWidth: .infinity, alignment: .center)
         .padding(.bottom, 30)
         .animation(.smooth(duration: 0.3), value: step)
     }
@@ -154,12 +154,12 @@ struct AuroraOnboarding: View {
                 .foregroundStyle(fgFaint)
 
             Text("Everything you want to remember, in one place.")
-                .font(Aurora.display(34))
+                .font(Aurora.display(30))
                 .foregroundStyle(fg)
-                .lineSpacing(6)
                 .multilineTextAlignment(.center)
-                .frame(maxWidth: 620)
-                .fixedSize(horizontal: false, vertical: true)
+                .lineLimit(1)
+                .minimumScaleFactor(0.6)
+                .frame(maxWidth: 900)
 
             Text("Capture your screen, save text, record thoughts and meetings, then come back to any of it later.")
                 .font(Aurora.serif(17))
