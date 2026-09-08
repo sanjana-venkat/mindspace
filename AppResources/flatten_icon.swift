@@ -35,12 +35,25 @@ if let smooth = CIFilter(name: "CIGaussianBlur") {
     if let output = smooth.outputImage { working = output.cropped(to: input.extent) }
 }
 
+if let mono = CIFilter(name: "CIPhotoEffectMono") {
+    mono.setValue(working, forKey: kCIInputImageKey)
+    if let output = mono.outputImage { working = output.cropped(to: input.extent) }
+}
+
 if let controls = CIFilter(name: "CIColorControls") {
     controls.setValue(working, forKey: kCIInputImageKey)
     controls.setValue(contrast, forKey: kCIInputContrastKey)
     controls.setValue(0.02, forKey: kCIInputBrightnessKey)
-    controls.setValue(1.25, forKey: kCIInputSaturationKey)
     if let output = controls.outputImage { working = output.cropped(to: input.extent) }
+}
+
+// One ink on one ground. Mapping luminance to exactly two colours is what stops
+// the mark drifting between mint and white across its own surface.
+if let falseColour = CIFilter(name: "CIFalseColor") {
+    falseColour.setValue(working, forKey: kCIInputImageKey)
+    falseColour.setValue(CIColor(red: 0.078, green: 0.086, blue: 0.196), forKey: "inputColor0")
+    falseColour.setValue(CIColor(red: 0.639, green: 0.937, blue: 0.792), forKey: "inputColor1")
+    if let output = falseColour.outputImage { working = output.cropped(to: input.extent) }
 }
 
 guard let cg = context.createCGImage(working, from: input.extent) else {
