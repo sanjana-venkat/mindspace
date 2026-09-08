@@ -124,11 +124,11 @@ struct AuroraOnboarding: View {
 
             HStack(alignment: .top, spacing: 14) {
                 move("Keep it", "square.dashed",
-                     "Anything in front of you: a window, a passage, something you said out loud. Held with the moment it mattered.")
+                     "A window, a passage, something you said out loud.")
                 move("Say why", "text.quote",
-                     "Write the thought you had when you saved it. A model can summarise the page. Only you have this part.")
+                     "The thought behind it. Only you have that part.")
                 move("Come back", "arrow.counterclockwise",
-                     "Walk back through what you were thinking last week, or the year you first learned it. Plain files that outlive the app.")
+                     "Last week, or the year you first learned it.")
             }
             .frame(maxWidth: .infinity)
 
@@ -152,7 +152,7 @@ struct AuroraOnboarding: View {
                 .frame(maxWidth: .infinity, alignment: .leading)
         }
         .padding(18)
-        .frame(maxWidth: 262, minHeight: 196, alignment: .topLeading)
+        .frame(maxWidth: 262, minHeight: 148, alignment: .topLeading)
         .background(.white.opacity(0.06), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
             .strokeBorder(.white.opacity(0.14), lineWidth: 1))
@@ -291,7 +291,7 @@ struct AuroraOnboarding: View {
 
             HStack(spacing: 3) {
                 ForEach(ModelProvider.allCases, id: \.self) { option in
-                    Button { appState.settings.vision.provider = option } label: {
+                    Button { selectProvider(option) } label: {
                         Text(option.displayName)
                             .font(Aurora.ui(13))
                             .foregroundStyle(appState.settings.vision.provider == option ? .black : .white.opacity(0.75))
@@ -361,6 +361,19 @@ struct AuroraOnboarding: View {
                 .font(Aurora.ui(12, .regular)).foregroundStyle(.white.opacity(0.45))
         }
         .frame(maxWidth: 620, alignment: .leading)
+    }
+
+    /// Picking a provider brings its endpoint, its default model and whatever
+    /// key you already gave it — the old behaviour left an Ollama hint sitting
+    /// under a Gemini model name.
+    private func selectProvider(_ option: ModelProvider) {
+        appState.settings.rememberKey(appState.settings.vision.apiKey,
+                                      for: appState.settings.vision.provider)
+        appState.settings.vision.provider = option
+        appState.settings.vision.apiKey = appState.settings.key(for: option)
+        appState.settings.vision.apiURL = option.defaultVisionURL
+        appState.settings.vision.modelName = option.defaultVisionModel
+        appState.visionStatus = "Not checked"
     }
 
     private var needsKeyWarning: Bool {
