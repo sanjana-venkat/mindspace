@@ -210,6 +210,7 @@ struct AuroraWorkspaceView: View {
                     emptyCanvas.position(x: geo.size.width / 2, y: geo.size.height / 2)
                 }
             }
+            .background(AuroraWindowReader { canvasWindow = $0 })
             .onAppear { installMonitor(size: geo.size) }
             .onDisappear { removeMonitor() }
         }
@@ -435,6 +436,7 @@ struct AuroraWorkspaceView: View {
 
     @State private var basePan: CGSize = .zero
     @State private var monitor: Any?
+    @State private var canvasWindow: NSWindow?
 
     private func openFolder(_ id: String) {
         withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) { focusedFolder = id }
@@ -506,6 +508,13 @@ struct AuroraWorkspaceView: View {
         let state = canvas
         monitor = NSEvent.addLocalMonitorForEvents(matching: [.scrollWheel, .magnify]) { event in
             guard state.enabled else { return event }
+            // A local monitor sees the whole app, so anything living in its own
+            // window — a sheet, the capture rail, a popover — has to be let
+            // through untouched. Gating on state alone kept swallowing the
+            // settings sheet's scroll.
+            if let canvasWindow, let target = event.window, target !== canvasWindow {
+                return event
+            }
             let winH = event.window?.contentView?.bounds.height ?? size.height
             let cursor = CGPoint(x: event.locationInWindow.x, y: winH - event.locationInWindow.y)
             let center = CGPoint(x: size.width / 2, y: size.height / 2)
@@ -537,5 +546,20 @@ struct AuroraWorkspaceView: View {
 
     private func removeMonitor() {
         if let m = monitor { NSEvent.removeMonitor(m); monitor = nil }
+    }
+}
+
+/// Hands back the NSWindow a SwiftUI view is living in.
+struct AuroraWindowReader: NSViewRepresentable {
+    var onResolve: (NSWindow?) -> Void
+
+    func makeNSView(context: Context) -> NSView {
+        let view = NSView()
+        DispatchQueue.main.async { onResolve(view.window) }
+        return view
+    }
+
+    func updateNSView(_ nsView: NSView, context: Context) {
+        DispatchQueue.main.async { onResolve(nsView.window) }
     }
 }

@@ -138,7 +138,14 @@ private struct CaptureRailView: View {
                 .buttonStyle(.plain)
                 .help("Hide Kami's capture rail")
 
-                railButton(.capture, icon: .capture, help: "Capture") {}
+                // Clicking has to do what hovering does: the capture options
+                // were hover-only, so a click on the rail's main button did
+                // nothing at all — and hover isn't available to everyone.
+                railButton(.capture, icon: .capture, help: "Capture") {
+                    withAnimation(.easeOut(duration: 0.14)) {
+                        hovered = (hovered == .capture) ? nil : .capture
+                    }
+                }
                 railButton(.text, icon: .text, help: "Selected text — ⌘⇧T") { perform(captureText) }
                 railButton(.audio, icon: .audio, help: "Computer audio — ⌘⇧A") { perform(toggleAudio) }
                 railButton(.meeting, icon: .meeting, help: "Meeting notes — ⌘⇧M") { perform(toggleMeeting) }
