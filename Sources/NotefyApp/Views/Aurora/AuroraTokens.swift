@@ -55,13 +55,14 @@ enum Aurora {
     /// Five desaturated polar-light hues. Folders and captures pick one by id,
     /// so the same folder is the same colour every launch.
     static let tints: [Color] = [
-        // Folders keep their hue in the dark, deep enough to sit on near-black
-        // without glowing.
-        dyn((157, 188, 171), (39, 92, 70)),    // sage
-        dyn((205, 187, 209), (72, 60, 110)),   // mauve
-        dyn((233, 226, 211), (94, 76, 48)),    // sand
-        dyn((147, 170, 188), (38, 72, 108)),   // slate
-        dyn((180, 213, 189), (28, 88, 94))     // teal
+        // On near-black, a dark tint reads as grime rather than colour — these
+        // are pitched to carry at the small sizes they actually appear in, as
+        // tabs behind a folder and swatches in the feed.
+        dyn((157, 188, 171), (52, 176, 124)),   // green
+        dyn((205, 187, 209), (146, 112, 224)),  // violet
+        dyn((233, 226, 211), (208, 158, 74)),   // amber
+        dyn((147, 170, 188), (72, 138, 220)),   // blue
+        dyn((180, 213, 189), (56, 176, 186))    // teal
     ]
 
     /// The deep end of the palette — used where the wash needs to land, not tint.

@@ -62,8 +62,6 @@ struct AuroraSettingsView: View {
 
     private var header: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text("THE WORKBENCH")
-                .font(Aurora.mono(10)).tracking(1.6).foregroundStyle(Aurora.ink3)
             Text("Settings").font(Aurora.display(30)).foregroundStyle(Aurora.ink)
         }
     }

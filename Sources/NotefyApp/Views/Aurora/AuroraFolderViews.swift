@@ -356,7 +356,7 @@ struct AuroraNoteCard: View {
         Button(action: open) {
             VStack(alignment: .leading, spacing: 0) {
                 ZStack(alignment: .bottomLeading) {
-                    LinearGradient(colors: [Aurora.tint(tint).opacity(0.55), Aurora.tint(tint).opacity(0.18)],
+                    LinearGradient(colors: [Aurora.tint(tint).opacity(0.95), Aurora.tint(tint).opacity(0.5)],
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
                     if note.hasOrganizedNote {
                         Text("ORGANIZED")
@@ -518,7 +518,7 @@ struct AuroraFolderRow: View {
     var body: some View {
         Button(action: open) {
             HStack(spacing: 18) {
-                LinearGradient(colors: tile.tints.map { Aurora.tint($0).opacity(0.9) },
+                LinearGradient(colors: tile.tints.map { Aurora.tint($0) },
                                startPoint: .topLeading, endPoint: .bottomTrailing)
                     .frame(width: 56, height: 46)
                     .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))

@@ -134,6 +134,8 @@ struct AuroraWorkspaceView: View {
         .onChange(of: focusedFolder) { _, _ in canvas.enabled = canvasLive }
         .onChange(of: openNoteURL) { _, _ in canvas.enabled = canvasLive }
         .onChange(of: mode) { _, _ in canvas.enabled = canvasLive }
+        .onChange(of: settingsOpen) { _, _ in canvas.enabled = canvasLive }
+        .onChange(of: noteMenu) { _, _ in canvas.enabled = canvasLive }
         .sheet(isPresented: $settingsOpen) {
             AuroraSettingsView()
                 .environmentObject(appState)
