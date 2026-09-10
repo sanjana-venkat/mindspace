@@ -172,6 +172,7 @@ struct AuroraFocusOverlay: View {
     let tile: AuroraFolderTile
     var onClose: () -> Void
     var onOpenNote: (URL) -> Void
+    var onNoteRightClick: ((CanvasNoteSnapshot, CGPoint) -> Void)? = nil
 
     @State private var bloom = false
     @State private var hovered: URL?
@@ -198,16 +199,14 @@ struct AuroraFocusOverlay: View {
             ZStack {
                 Color.black.opacity(0.001)
                     .contentShape(Rectangle())
-                    .onTapGesture { onClose() }
+                    .onTapGesture { collapseAndClose() }
 
                 VStack(spacing: 0) {
                     Spacer(minLength: 24)
                     band(width: geo.size.width)
                         .frame(height: 300)
-                        .opacity(bloom ? 1 : 0)
                     plate
-                        .scaleEffect(bloom ? 1 : 0.92)
-                        .opacity(bloom ? 1 : 0)
+                        .scaleEffect(bloom ? 1 : 0.96)
                     Spacer(minLength: 130)
                 }
                 .padding(.top, 96)
@@ -232,9 +231,13 @@ struct AuroraFocusOverlay: View {
                             AuroraNoteCard(note: note, tint: tile.tints[i % tile.tints.count]) {
                                 onOpenNote(note.url)
                             }
-                            .offset(y: crest(i) + (hovered == note.url ? -16 : 0))
-                            .rotationEffect(.degrees(tilt(i)), anchor: .bottom)
-                            .scaleEffect(hovered == note.url ? 1.05 : 1)
+                            .offset(
+                                x: bloom ? 0 : collapsedX(i),
+                                y: bloom ? crest(i) + (hovered == note.url ? -16 : 0) : 270
+                            )
+                            .rotationEffect(.degrees(bloom ? tilt(i) : collapsedTilt(i)), anchor: .bottom)
+                            .scaleEffect(bloom ? (hovered == note.url ? 1.05 : 1) : 0.32, anchor: .bottom)
+                            .opacity(bloom ? 1 : 0)
                             .shadow(color: .black.opacity(hovered == note.url ? 0.24 : 0.10),
                                     radius: hovered == note.url ? 34 : 14,
                                     y: hovered == note.url ? 16 : 7)
@@ -318,6 +321,27 @@ struct AuroraFocusOverlay: View {
             }
         }
     }
+
+    /// Pulls each card back to the folder's mouth before the focus layer is
+    /// removed, so an outside click reads as closing the physical folder and
+    /// returning home rather than simply fading the notes away.
+    private func collapseAndClose() {
+        guard !reduceMotion else { onClose(); return }
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.86)) { bloom = false }
+        Task { @MainActor in
+            try? await Task.sleep(for: .milliseconds(390))
+            onClose()
+        }
+    }
+
+    private func collapsedX(_ index: Int) -> CGFloat {
+        let stride = 218 + spacing
+        return (CGFloat(count - 1) / 2 - CGFloat(index)) * stride
+    }
+
+    private func collapsedTilt(_ index: Int) -> Double {
+        (index.isMultiple(of: 2) ? -1 : 1) * Double(min(index + 1, 5)) * 1.8
+    }
 }
 
 /// A note as a card: its title, the first line of what's in it, and how much.
@@ -325,6 +349,7 @@ struct AuroraNoteCard: View {
     let note: CanvasNoteSnapshot
     var tint: Int
     var open: () -> Void
+    var onRightClick: ((CGPoint) -> Void)? = nil
     @State private var hover = false
 
     var body: some View {
@@ -376,6 +401,19 @@ struct AuroraNoteCard: View {
         .buttonStyle(.plain)
         .onHover { hover = $0 }
         .animation(.smooth(duration: 0.2), value: hover)
+        .modifier(AuroraOptionalRightClick(action: onRightClick))
+    }
+}
+
+/// Applies the right-click reporter only when the card's owner wants it.
+private struct AuroraOptionalRightClick: ViewModifier {
+    let action: ((CGPoint) -> Void)?
+    func body(content: Content) -> some View {
+        if let action {
+            content.auroraRightClick(in: "auroraWorkspace") { action($0) }
+        } else {
+            content
+        }
     }
 }
 
@@ -386,6 +424,7 @@ struct AuroraFeedView: View {
     @Binding var sort: AuroraSort
     @Binding var focused: String?
     var onOpenNote: (URL) -> Void
+    var onNoteRightClick: ((CanvasNoteSnapshot, CGPoint) -> Void)? = nil
 
     var body: some View {
         ScrollView {
@@ -460,9 +499,9 @@ struct AuroraFeedView: View {
 
             LazyVGrid(columns: [GridItem(.adaptive(minimum: 250, maximum: 320), spacing: 16)], spacing: 16) {
                 ForEach(Array(tile.notes.enumerated()), id: \.element.id) { i, note in
-                    AuroraNoteCard(note: note, tint: tile.tints[i % tile.tints.count]) {
-                        onOpenNote(note.url)
-                    }
+                    AuroraNoteCard(note: note, tint: tile.tints[i % tile.tints.count],
+                                   open: { onOpenNote(note.url) },
+                                   onRightClick: { point in onNoteRightClick?(note, point) })
                     .frame(maxWidth: .infinity)
                 }
             }

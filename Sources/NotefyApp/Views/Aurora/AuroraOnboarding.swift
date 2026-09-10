@@ -18,6 +18,7 @@ struct AuroraOnboarding: View {
     @State private var bindingsTick = 0
     @State private var capturesAtStart: Int?
     @StateObject private var meter = AuroraMicMeter()
+    @StateObject private var recorder = HotkeyRecorder()
 
     private var dark: Bool { scheme == .dark }
     private var fg: Color { dark ? .white : Aurora.ink }
@@ -58,7 +59,9 @@ struct AuroraOnboarding: View {
                 .transition(.opacity)
                 controls
             }
-            .padding(40)
+            .padding(.horizontal, 44)
+            .padding(.top, 40)
+            .padding(.bottom, 56)
             .frame(maxWidth: 980)
         }
         .onAppear { appState.permissionCenter.startPolling() }
@@ -134,7 +137,7 @@ struct AuroraOnboarding: View {
             .disabled(step == 1 && !canLeavePermissions)
             .opacity(step == 1 && !canLeavePermissions ? 0.45 : 1)
         }
-        .padding(.top, 26)
+        .padding(.top, 30)
     }
 
     private func finish() {
@@ -412,7 +415,7 @@ struct AuroraOnboarding: View {
 
     private var shortcuts: some View {
         page("The keys you'll press",
-             "Every shortcut is ⌘⇧ and a letter. Don't like one? Click it and press another.") {
+             "Click a shortcut and press the keys you want. Some combinations belong to macOS — ⌘⇧5 is Screenshot — and it keeps those unless you free them in Keyboard Settings.") {
             VStack(spacing: 8) {
                 ForEach(HotkeyAction.allCases) { action in
                     shortcutRow(action)
@@ -434,41 +437,49 @@ struct AuroraOnboarding: View {
 
     private func shortcutRow(_ action: HotkeyAction) -> some View {
         let listening = listeningFor == action
+        let clashes = appState.hotkeyConflicts.contains(action)
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(action.title).font(Aurora.ui(13.5, .semibold)).foregroundStyle(fg)
-                Text(action.detail).font(Aurora.ui(11.5, .regular)).foregroundStyle(fgFaint)
+                if clashes {
+                    Text("macOS already uses that one — free it in Keyboard Settings, or pick another.")
+                        .font(Aurora.ui(11.5, .regular))
+                        .foregroundStyle(Color(red: 0.92, green: 0.74, blue: 0.36))
+                } else {
+                    Text(action.detail).font(Aurora.ui(11.5, .regular)).foregroundStyle(fgFaint)
+                }
             }
             Spacer(minLength: 8)
             Button {
-                listeningFor = listening ? nil : action
+                if listening {
+                    recorder.stop()
+                    listeningFor = nil
+                } else {
+                    listeningFor = action
+                    recorder.start { binding in
+                        HotkeyBindings.set(binding, for: action)
+                        appState.reloadHotkeys()
+                        listeningFor = nil
+                        bindingsTick += 1
+                    }
+                }
             } label: {
-                Text(listening ? "press a letter" : HotkeyBindings.label(for: action))
+                Text(listening ? "press keys" : HotkeyBindings.label(for: action))
                     .font(Aurora.mono(12))
                     .foregroundStyle(listening ? solidText : fg)
-                    .frame(minWidth: 92)
+                    .frame(minWidth: 96)
                     .padding(.horizontal, 12).padding(.vertical, 8)
                     .background(listening ? AnyShapeStyle(solidFill) : AnyShapeStyle(panelFill), in: Capsule())
-                    .overlay(Capsule().strokeBorder(listening ? .clear : panelStroke, lineWidth: 1))
+                    .overlay(Capsule().strokeBorder(listening ? .clear : Aurora.ink.opacity(0.3), lineWidth: 1))
             }
             .buttonStyle(AuroraPressStyle())
-            .focusable(listening)
-            .onKeyPress(phases: .down) { press in
-                guard listening else { return .ignored }
-                let letter = String(press.characters).uppercased()
-                guard letter.count == 1, HotkeyBindings.keyCode(for: letter) != nil else { return .handled }
-                HotkeyBindings.set(letter, for: action)
-                appState.reloadHotkeys()
-                listeningFor = nil
-                bindingsTick += 1
-                return .handled
-            }
         }
         .padding(.horizontal, 14).padding(.vertical, 11)
         .background(panelFill.opacity(listening ? 1 : 0.6),
                     in: RoundedRectangle(cornerRadius: 13, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
-            .strokeBorder(panelStroke.opacity(listening ? 1 : 0.6), lineWidth: 1))
+            .strokeBorder(clashes ? Color(red: 0.92, green: 0.74, blue: 0.36).opacity(0.5)
+                          : panelStroke.opacity(listening ? 1 : 0.6), lineWidth: 1))
     }
 
     // MARK: 5 — your first one

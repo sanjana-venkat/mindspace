@@ -48,6 +48,25 @@ struct AuroraOrganized: View {
 
                 Spacer()
 
+                if !appState.organizedDraft.isEmpty {
+                    Button {
+                        appState.showOrganized(appState.organizedTemplate, force: true)
+                    } label: {
+                        HStack(spacing: 6) {
+                            Image(systemName: "arrow.clockwise")
+                                .font(.system(size: 10.5, weight: .bold))
+                            Text("Re-organize").font(Aurora.ui(11.5))
+                        }
+                        .foregroundStyle(Aurora.ink)
+                        .padding(.horizontal, 11).padding(.vertical, 6)
+                        .background(Aurora.surface2, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Aurora.ink.opacity(0.35), lineWidth: 1))
+                    }
+                    .buttonStyle(.plain)
+                    .disabled(appState.isOrganizing)
+                    .help("Run the model again over this note")
+                }
+
                 ForEach(OrganizationTemplate.offered) { t in
                     Button {
                         appState.showOrganized(t)
@@ -60,7 +79,8 @@ struct AuroraOrganized: View {
                         .padding(.horizontal, 13).padding(.vertical, 7)
                         .background(appState.organizedTemplate == t ? AnyShapeStyle(Aurora.ink) : AnyShapeStyle(Color.clear),
                                     in: Capsule())
-                        .overlay(Capsule().strokeBorder(appState.organizedTemplate == t ? .clear : Aurora.line, lineWidth: 1))
+                        .overlay(Capsule().strokeBorder(appState.organizedTemplate == t
+                                                        ? .clear : Aurora.ink.opacity(0.35), lineWidth: 1))
                     }
                     .buttonStyle(.plain)
                     .disabled(appState.isOrganizing)

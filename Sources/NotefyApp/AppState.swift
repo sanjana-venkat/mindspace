@@ -389,9 +389,12 @@ final class AppState: ObservableObject {
         hotkeys.start()
     }
 
+    /// Bindings macOS would not register — the system already owns them.
+    @Published var hotkeyConflicts: Set<HotkeyAction> = []
+
     /// Called after the user rebinds a shortcut.
     func reloadHotkeys() {
-        hotkeys.restart()
+        hotkeyConflicts = Set(hotkeys.restart())
     }
 
     func showCapturePet() {
@@ -1701,7 +1704,40 @@ final class AppState: ObservableObject {
     /// used by chunk move/forward and by "save this recording to a different note".
     private func loadDocument(for url: URL) -> StoredNoteDocument? {
         guard let data = try? Data(contentsOf: sidecarURL(for: url)) else { return nil }
-        return try? JSONDecoder().decode(StoredNoteDocument.self, from: data)
+        guard let decoded = try? JSONDecoder().decode(StoredNoteDocument.self, from: data) else { return nil }
+        let (document, changed) = documentByRepairingAssetPaths(decoded)
+        if changed, let repairedData = try? JSONEncoder().encode(document) {
+            try? repairedData.write(to: sidecarURL(for: url), options: .atomic)
+        }
+        return document
+    }
+
+    /// Sidecars historically stored absolute capture paths. When
+    /// `Notefy_Sessions` became `Mindspace`, the directory moved intact but
+    /// those strings did not. Rebase only references whose old target is gone
+    /// and whose corresponding file is present in the active data directory.
+    private func documentByRepairingAssetPaths(
+        _ source: StoredNoteDocument
+    ) -> (document: StoredNoteDocument, changed: Bool) {
+        var document = source
+        var changed = false
+        document.steps = source.steps.map { step in
+            let screenshot = MindspaceStorage.rebasedAssetPath(step.screenshotPath, in: sessionDir)
+            let html = MindspaceStorage.rebasedAssetPath(step.htmlPath, in: sessionDir)
+            if screenshot != step.screenshotPath || html != step.htmlPath { changed = true }
+            return ExplorationStep(
+                id: step.id,
+                timestamp: step.timestamp,
+                appName: step.appName,
+                windowTitle: step.windowTitle,
+                url: step.url,
+                selectedText: step.selectedText,
+                screenshotPath: screenshot,
+                htmlPath: html,
+                pageText: step.pageText
+            )
+        }
+        return (document, changed)
     }
 
     /// Writes another note's sidecar document + regenerates its markdown file, again without
@@ -1752,8 +1788,7 @@ final class AppState: ObservableObject {
         _ = tracker.start()
         isTracking = true
         vlmResults = [:]
-        if let data = try? Data(contentsOf: sidecarURL(for: url)),
-           let document = try? JSONDecoder().decode(StoredNoteDocument.self, from: data) {
+        if let document = loadDocument(for: url) {
             noteTitle = document.title
             steps = document.steps
             stepAnnotations = Dictionary(uniqueKeysWithValues: document.annotations.compactMap { key, value in

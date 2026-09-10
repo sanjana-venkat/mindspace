@@ -400,7 +400,7 @@ private struct CaptureReviewView: View {
     }
 
     private var metadata: String {
-        "SCREEN CAPTURE · \(step.timestamp.formatted(date: .omitted, time: .shortened)) · \(sourceName)".uppercased()
+        "SCREEN CAPTURE · \(step.timestamp.formatted(date: .omitted, time: .shortened))".uppercased()
     }
 
     private var sourceName: String {

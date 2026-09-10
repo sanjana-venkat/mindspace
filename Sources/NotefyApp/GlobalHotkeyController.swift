@@ -60,21 +60,32 @@ final class GlobalHotkeyController {
         started = true
         Self.installHandlerIfNeeded()
 
-        // Letters come from the user's own bindings; the ⌘⇧ pair is fixed.
-        let code: (HotkeyAction) -> UInt32 = { action in
-            HotkeyBindings.keyCode(for: HotkeyBindings.letter(for: action))
-                ?? HotkeyBindings.keyCode(for: action.defaultLetter)!
+        // Key and modifiers both come from the user's own bindings now.
+        failures = []
+        let pairs: [(UInt32, HotkeyAction, () -> Void)] = [
+            (2, .meeting, onMeeting),
+            (3, .selectedText, onSelectedText),
+            (4, .page, onPage),
+            (5, .region, onRegion),
+            (6, .voice, onSessionAudio),
+            (7, .captureRail, onCaptureRail)
+        ]
+        for (id, action, callback) in pairs {
+            let binding = HotkeyBindings.binding(for: action)
+            if !register(id: id, keyCode: binding.keyCode, modifiers: binding.modifiers, callback: callback) {
+                failures.append(action)
+            }
         }
-        register(id: 2, keyCode: code(.meeting), callback: onMeeting)
-        register(id: 3, keyCode: code(.selectedText), callback: onSelectedText)
-        register(id: 4, keyCode: code(.page), callback: onPage)
-        register(id: 5, keyCode: code(.region), callback: onRegion)
-        register(id: 6, keyCode: code(.voice), callback: onSessionAudio)
-        register(id: 7, keyCode: code(.captureRail), callback: onCaptureRail)
     }
 
-    /// Re-registers everything after a binding changes.
-    func restart() {
+    /// Combinations macOS refused — almost always because the system already
+    /// owns them (⌘⇧5 belongs to Screenshot until you free it in Settings).
+    private(set) var failures: [HotkeyAction] = []
+
+    /// Re-registers everything after a binding changes, and reports what macOS
+    /// would not give up.
+    @discardableResult
+    func restart() -> [HotkeyAction] {
         for case let reference? in references {
             UnregisterEventHotKey(reference)
         }
@@ -82,6 +93,7 @@ final class GlobalHotkeyController {
         for id in 1...7 { notefyHotkeyCallbacks[UInt32(id)] = nil }
         started = false
         start()
+        return failures
     }
 
     deinit {
@@ -91,12 +103,14 @@ final class GlobalHotkeyController {
         for id in 1...7 { notefyHotkeyCallbacks[UInt32(id)] = nil }
     }
 
-    private func register(id: UInt32, keyCode: UInt32, callback: @escaping () -> Void) {
+    @discardableResult
+    private func register(id: UInt32, keyCode: UInt32, modifiers: UInt32,
+                          callback: @escaping () -> Void) -> Bool {
         let signature = FourCharCode(0x4E_54_46_59) // "NTFY"
         var reference: EventHotKeyRef?
         let status = RegisterEventHotKey(
             keyCode,
-            UInt32(cmdKey | shiftKey),
+            modifiers,
             EventHotKeyID(signature: signature, id: id),
             GetApplicationEventTarget(),
             0,
@@ -105,9 +119,10 @@ final class GlobalHotkeyController {
         if status == noErr {
             notefyHotkeyCallbacks[id] = callback
             references.append(reference)
-        } else {
-            fputs("[hotkey] Could not register hotkey \(id): \(status)\n", stderr)
+            return true
         }
+        fputs("[hotkey] Could not register hotkey \(id): \(status)\n", stderr)
+        return false
     }
 
     private static func installHandlerIfNeeded() {

@@ -32,24 +32,26 @@ enum Aurora {
     static let ground    = dyn((233, 234, 231), (11, 14, 12))
     static let surface   = dyn((255, 255, 255), (20, 26, 23))
     static let surface2  = dyn((238, 240, 236), (26, 33, 29))
-    static let ink       = dyn((16, 20, 16), (244, 248, 243))
+    static let ink       = dyn((16, 20, 16), (238, 241, 253))
     // Dark mode needs far more contrast than a straight inversion gives:
     // these two carry most of the running text and were unreadable at the
     // light-mode weights.
-    static let ink2      = dyn((89, 99, 90), (206, 214, 205))
-    static let ink3      = dyn((139, 148, 139), (163, 173, 164))
-    static let line      = dyn((214, 219, 211), (58, 68, 61))
-    static let accent    = dyn((14, 109, 85), (109, 226, 180))
-    static let accentSoft = dyn((220, 239, 231), (22, 48, 42))
+    static let ink2      = dyn((89, 99, 90), (198, 204, 230))
+    static let ink3      = dyn((139, 148, 139), (150, 158, 190))
+    static let line      = dyn((214, 219, 211), (62, 68, 102))
+    static let accent    = dyn((14, 109, 85), (120, 232, 190))
+    static let accentSoft = dyn((220, 239, 231), (28, 60, 60))
 
     /// Five desaturated polar-light hues. Folders and captures pick one by id,
     /// so the same folder is the same colour every launch.
     static let tints: [Color] = [
-        dyn((157, 188, 171), (34, 78, 60)),   // sage
-        dyn((205, 187, 209), (44, 74, 66)),   // mauve
-        dyn((233, 226, 211), (38, 72, 56)),   // sand
-        dyn((147, 170, 188), (32, 70, 68)),   // slate
-        dyn((180, 213, 189), (40, 86, 64))    // aurora green
+        // Folders keep their hue in the dark: flattening them all to green was
+        // most of why the canvas read as a terminal.
+        dyn((157, 188, 171), (44, 96, 76)),    // sage
+        dyn((205, 187, 209), (80, 66, 122)),   // mauve
+        dyn((233, 226, 211), (102, 84, 56)),   // sand
+        dyn((147, 170, 188), (44, 80, 122)),   // slate
+        dyn((180, 213, 189), (34, 96, 104))    // teal
     ]
 
     /// The deep end of the palette — used where the wash needs to land, not tint.

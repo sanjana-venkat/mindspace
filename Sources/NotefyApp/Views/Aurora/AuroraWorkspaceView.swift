@@ -16,6 +16,7 @@ struct AuroraWorkspaceView: View {
     @State private var openNoteURL: URL? = nil
     @State private var settingsOpen = false
     @State private var cancelEdits = 0
+    @State private var noteMenu: AuroraNoteTarget?
     @FocusState private var searchFocused: Bool
     @AppStorage("aurora.unfiled.x") private var unfiledX: Double = 0
     @AppStorage("aurora.unfiled.y") private var unfiledY: Double = 0
@@ -95,11 +96,27 @@ struct AuroraWorkspaceView: View {
             if mode == .map, let tile = focusedTile {
                 AuroraFocusOverlay(tile: tile,
                                    onClose: { closeFolder() },
-                                   onOpenNote: { open(note: $0) })
+                                   onOpenNote: { open(note: $0) },
+                                   onNoteRightClick: { note, point in
+                                       noteMenu = AuroraNoteTarget(url: note.url, title: note.title, point: point)
+                                   })
                     .transition(.opacity)
             }
 
             chrome
+
+            if let target = noteMenu {
+                GeometryReader { geo in
+                    ZStack {
+                        Color.black.opacity(0.06)
+                            .contentShape(Rectangle())
+                            .onTapGesture { noteMenu = nil }
+                        AuroraNoteActions(target: target, bounds: geo.size) { noteMenu = nil }
+                    }
+                }
+                .transition(.opacity)
+                .zIndex(8)
+            }
 
             if let url = openNoteURL {
                 AuroraNoteView(noteURL: url, onClose: { openNoteURL = nil })
@@ -110,6 +127,8 @@ struct AuroraWorkspaceView: View {
         }
         .animation(.smooth(duration: 0.3), value: openNoteURL)
         .animation(.spring(response: 0.45, dampingFraction: 0.86), value: focusedFolder)
+        .coordinateSpace(name: "auroraWorkspace")
+        .animation(.smooth(duration: 0.22), value: noteMenu)
         .background(shortcuts)
         .onAppear { canvas.enabled = canvasLive; seedFolderPoints() }
         .onChange(of: focusedFolder) { _, _ in canvas.enabled = canvasLive }
@@ -133,7 +152,10 @@ struct AuroraWorkspaceView: View {
             } else {
                 AuroraFeedView(tiles: sortedTiles, query: query, sort: $sort,
                                focused: $focusedFolder,
-                               onOpenNote: { open(note: $0) })
+                               onOpenNote: { open(note: $0) },
+                               onNoteRightClick: { note, point in
+                                   noteMenu = AuroraNoteTarget(url: note.url, title: note.title, point: point)
+                               })
             }
         }
         .blur(radius: focusing ? 9 : 0)
