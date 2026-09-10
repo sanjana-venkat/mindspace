@@ -26,32 +26,17 @@ struct AuroraGrid: View {
 
     struct Entry { let index: Int; let step: ExplorationStep }
 
-    /// Columns are fixed; heights are not. Each tile is as tall as what's in
-    /// it, and the next one goes into whichever column is currently shortest.
+    /// Columns are fixed; heights are not. Tiles go across before they go
+    /// down — 01 02 03 on the top row, 04 05 06 under it — so the numbering
+    /// always matches what you're looking at. Packing by shortest column
+    /// balanced the layout better but scrambled the order, and the order is
+    /// the thing people are actually reading.
     private var masonry: [[Entry]] {
         var cols: [[Entry]] = Array(repeating: [], count: columns)
-        var heights = [CGFloat](repeating: 0, count: columns)
         for (i, step) in items.enumerated() {
-            let target = heights.enumerated().min { $0.element < $1.element }?.offset ?? 0
-            cols[target].append(Entry(index: i, step: step))
-            heights[target] += estimatedHeight(step)
+            cols[i % columns].append(Entry(index: i, step: step))
         }
         return cols
-    }
-
-    /// Rough, and only used to balance the columns — the real height comes
-    /// from the layout.
-    private func estimatedHeight(_ step: ExplorationStep) -> CGFloat {
-        var h: CGFloat = 46
-        if step.screenshotPath != nil {
-            h += 170
-        } else {
-            let text = (step.selectedText ?? step.pageText ?? "")
-            h += min(300, 60 + CGFloat(text.count) / 2.2)
-        }
-        let thought = thought(step.id).wrappedValue
-        h += thought.isEmpty ? 42 : min(160, 46 + CGFloat(thought.count) / 2.4)
-        return h + 18
     }
 
     var body: some View {
@@ -126,7 +111,7 @@ struct AuroraGrid: View {
             .background(Aurora.surface.opacity(0.72))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(isActive ? Aurora.accent : Aurora.line, lineWidth: isActive ? 2 : 1))
+                .strokeBorder(isActive ? Aurora.focusRing : Aurora.line, lineWidth: isActive ? 2 : 1))
             .scaleEffect(isActive ? 1.015 : 1)
             .opacity(dragging == step.id ? 0.35 : 1)
         }

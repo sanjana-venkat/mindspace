@@ -305,7 +305,7 @@ struct AuroraPanels: View {
                                 .frame(maxWidth: 780)
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
-                                    .strokeBorder(i == active ? Aurora.accent.opacity(0.55) : Aurora.line,
+                                    .strokeBorder(i == active ? Aurora.focusRing.opacity(0.75) : Aurora.line,
                                                   lineWidth: i == active ? 2 : 1))
                                 .blur(radius: dimmed(step) ? 4 : 0)
                                 .opacity(dimmed(step) ? 0.45 : 1)

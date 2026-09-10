@@ -42,10 +42,15 @@ enum Aurora {
     static let accent    = dyn((14, 109, 85), (52, 211, 153))
     static let accentSoft = dyn((220, 239, 231), (17, 41, 31))
 
-    /// Primary buttons and selected chips. Light puts near-black on paper;
-    /// dark uses the green rather than a stark white slab.
-    static let solid     = dyn((16, 20, 16), (23, 122, 88))
-    static let onSolid   = dyn((233, 234, 231), (255, 255, 255))
+    /// Primary buttons and selected chips: near-black on paper, white on the
+    /// night. The folders already carry the colour, so the primary stays
+    /// neutral rather than adding another hue to compete with them.
+    static let solid     = dyn((16, 20, 16), (255, 255, 255))
+    static let onSolid   = dyn((233, 234, 231), (14, 16, 19))
+
+    /// What marks the thing you have selected or are hovering. Neutral for the
+    /// same reason as `solid`.
+    static let focusRing = dyn((16, 20, 16), (255, 255, 255))
 
     /// Five desaturated polar-light hues. Folders and captures pick one by id,
     /// so the same folder is the same colour every launch.

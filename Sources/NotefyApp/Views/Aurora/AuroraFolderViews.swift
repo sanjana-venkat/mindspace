@@ -108,7 +108,7 @@ struct AuroraFolderNode: View {
                             .padding(.horizontal, 6).padding(.vertical, 2)
                             .background(Aurora.surface, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
                             .overlay(RoundedRectangle(cornerRadius: 7, style: .continuous)
-                                .strokeBorder(Aurora.accent, lineWidth: 2))
+                                .strokeBorder(Aurora.focusRing, lineWidth: 2))
                             .onSubmit { onRename(draft); editing = false }
                             // Esc abandons the edit; anywhere else commits it.
                             .onExitCommand { draft = tile.name; editing = false }
@@ -394,7 +394,7 @@ struct AuroraNoteCard: View {
             .frame(width: 218, height: 186, alignment: .top)
             .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(hover ? Aurora.accent : Aurora.line, lineWidth: hover ? 1.6 : 1))
+                .strokeBorder(hover ? Aurora.focusRing : Aurora.line, lineWidth: hover ? 1.6 : 1))
             .shadow(color: .black.opacity(hover ? 0.20 : 0.12), radius: hover ? 30 : 18, y: hover ? 14 : 8)
             .scaleEffect(hover ? 1.03 : 1)
         }
@@ -540,7 +540,7 @@ struct AuroraFolderRow: View {
                         .foregroundStyle(Aurora.ink2).frame(width: 22, alignment: .trailing)
                     Image(systemName: "chevron.right")
                         .font(.system(size: 11, weight: .bold))
-                        .foregroundStyle(hover ? Aurora.accent : Aurora.ink3)
+                        .foregroundStyle(hover ? Aurora.focusRing : Aurora.ink3)
                 }
             }
             .padding(.horizontal, 10).padding(.vertical, 16)
