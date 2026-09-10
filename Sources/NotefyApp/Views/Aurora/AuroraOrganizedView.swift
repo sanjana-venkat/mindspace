@@ -75,9 +75,9 @@ struct AuroraOrganized: View {
                             Image(systemName: t.icon).font(.system(size: 10.5, weight: .semibold))
                             Text(t.rawValue).font(Aurora.ui(11.5))
                         }
-                        .foregroundStyle(appState.organizedTemplate == t ? Aurora.ground : Aurora.ink)
+                        .foregroundStyle(appState.organizedTemplate == t ? Aurora.onSolid : Aurora.ink)
                         .padding(.horizontal, 13).padding(.vertical, 7)
-                        .background(appState.organizedTemplate == t ? AnyShapeStyle(Aurora.ink) : AnyShapeStyle(Color.clear),
+                        .background(appState.organizedTemplate == t ? AnyShapeStyle(Aurora.solid) : AnyShapeStyle(Color.clear),
                                     in: Capsule())
                         .overlay(Capsule().strokeBorder(appState.organizedTemplate == t
                                                         ? .clear : Aurora.ink.opacity(0.35), lineWidth: 1))
@@ -138,9 +138,9 @@ struct AuroraOrganized: View {
             } label: {
                 Text("Organize this note")
                     .font(Aurora.ui(14, .bold))
-                    .foregroundStyle(Aurora.ground)
+                    .foregroundStyle(Aurora.onSolid)
                     .padding(.horizontal, 18).padding(.vertical, 11)
-                    .background(Aurora.ink, in: Capsule())
+                    .background(Aurora.solid, in: Capsule())
             }
             .buttonStyle(.plain)
             .disabled(steps.isEmpty)

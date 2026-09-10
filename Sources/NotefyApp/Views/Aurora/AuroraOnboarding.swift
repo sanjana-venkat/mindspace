@@ -16,6 +16,7 @@ struct AuroraOnboarding: View {
     @State private var highlighted: NotedPermission = .screenRecording
     @State private var listeningFor: HotkeyAction?
     @State private var bindingsTick = 0
+    @State private var displaced: HotkeyAction?
     @State private var capturesAtStart: Int?
     @StateObject private var meter = AuroraMicMeter()
     @StateObject private var recorder = HotkeyRecorder()
@@ -415,7 +416,7 @@ struct AuroraOnboarding: View {
 
     private var shortcuts: some View {
         page("The keys you'll press",
-             "Click a shortcut and press the keys you want. Some combinations belong to macOS — ⌘⇧5 is Screenshot — and it keeps those unless you free them in Keyboard Settings.") {
+             "Click a shortcut and press the keys you want — taking one that's already in use here moves it across. A few belong to macOS: ⌘⇧5 is Screenshot, and it keeps that until you turn it off in Keyboard Settings.") {
             VStack(spacing: 8) {
                 ForEach(HotkeyAction.allCases) { action in
                     shortcutRow(action)
@@ -442,7 +443,22 @@ struct AuroraOnboarding: View {
             VStack(alignment: .leading, spacing: 2) {
                 Text(action.title).font(Aurora.ui(13.5, .semibold)).foregroundStyle(fg)
                 if clashes {
-                    Text("macOS already uses that one — free it in Keyboard Settings, or pick another.")
+                    HStack(spacing: 8) {
+                        Text("macOS is holding this one.")
+                            .font(Aurora.ui(11.5, .regular))
+                            .foregroundStyle(Color(red: 0.92, green: 0.74, blue: 0.36))
+                        Button("Free it in Keyboard Settings") {
+                            if let url = URL(string: "x-apple.systempreferences:com.apple.Keyboard-Settings.extension") {
+                                NSWorkspace.shared.open(url)
+                            }
+                        }
+                        .buttonStyle(.plain)
+                        .font(Aurora.ui(11.5, .semibold))
+                        .foregroundStyle(fg)
+                        .underline()
+                    }
+                } else if displaced == action {
+                    Text("Lost its shortcut to another action — press keys to give it a new one.")
                         .font(Aurora.ui(11.5, .regular))
                         .foregroundStyle(Color(red: 0.92, green: 0.74, blue: 0.36))
                 } else {
@@ -457,7 +473,7 @@ struct AuroraOnboarding: View {
                 } else {
                     listeningFor = action
                     recorder.start { binding in
-                        HotkeyBindings.set(binding, for: action)
+                        displaced = HotkeyBindings.set(binding, for: action)
                         appState.reloadHotkeys()
                         listeningFor = nil
                         bindingsTick += 1

@@ -264,9 +264,9 @@ struct AuroraWorkspaceView: View {
                             } label: {
                                 Text(f.label)
                                     .font(Aurora.ui(13.5))
-                                    .foregroundStyle(filter == f ? Aurora.ground : Aurora.ink2)
+                                    .foregroundStyle(filter == f ? Aurora.onSolid : Aurora.ink2)
                                     .padding(.horizontal, 15).padding(.vertical, 7)
-                                    .background(filter == f ? AnyShapeStyle(Aurora.ink) : AnyShapeStyle(Aurora.surface2.opacity(0.85)),
+                                    .background(filter == f ? AnyShapeStyle(Aurora.solid) : AnyShapeStyle(Aurora.surface2.opacity(0.85)),
                                                 in: Capsule())
                             }
                             .buttonStyle(.plain)
@@ -398,9 +398,9 @@ struct AuroraWorkspaceView: View {
                 Button(action: create) {
                     Text("Create")
                         .font(Aurora.ui(15, .bold))
-                        .foregroundStyle(Aurora.ground)
+                        .foregroundStyle(Aurora.onSolid)
                         .padding(.horizontal, 17).padding(.vertical, 10)
-                        .background(Aurora.ink, in: Capsule())
+                        .background(Aurora.solid, in: Capsule())
                 }
                 .buttonStyle(.plain)
             }

@@ -179,10 +179,10 @@ struct AuroraCaptureActions: View {
                 Text(title).font(Aurora.mono(10.5)).tracking(1.1)
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(Aurora.ground)
+            .foregroundStyle(Aurora.onSolid)
             .padding(.horizontal, 15).padding(.vertical, 10)
             .frame(width: 224, alignment: .leading)
-            .background(Aurora.ink, in: Capsule())
+            .background(Aurora.solid, in: Capsule())
             .shadow(color: .black.opacity(0.22), radius: 16, y: 8)
         }
         .buttonStyle(AuroraPressStyle())
@@ -310,10 +310,10 @@ struct AuroraNoteActions: View {
                 Text(title).font(Aurora.mono(10.5)).tracking(1.1)
                 Spacer(minLength: 0)
             }
-            .foregroundStyle(Aurora.ground)
+            .foregroundStyle(Aurora.onSolid)
             .padding(.horizontal, 15).padding(.vertical, 10)
             .frame(width: 178, alignment: .leading)
-            .background(Aurora.ink, in: Capsule())
+            .background(Aurora.solid, in: Capsule())
             .shadow(color: .black.opacity(0.22), radius: 16, y: 8)
         }
         .buttonStyle(AuroraPressStyle())

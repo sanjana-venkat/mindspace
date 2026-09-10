@@ -116,9 +116,9 @@ struct AuroraNoteView: View {
         } label: {
             Image(systemName: m.icon)
                 .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(mode == m ? Aurora.ground : Aurora.ink2)
+                .foregroundStyle(mode == m ? Aurora.onSolid : Aurora.ink2)
                 .frame(width: 40, height: 30)
-                .background(mode == m ? AnyShapeStyle(Aurora.ink) : AnyShapeStyle(Color.clear), in: Capsule())
+                .background(mode == m ? AnyShapeStyle(Aurora.solid) : AnyShapeStyle(Color.clear), in: Capsule())
         }
         .buttonStyle(.plain)
         .help(m.rawValue)
@@ -159,9 +159,9 @@ struct AuroraNoteView: View {
                     withAnimation(.smooth(duration: 0.28)) { mode = .organized }
                 } label: {
                     Text("Organize").font(Aurora.ui(13))
-                    .foregroundStyle(mode == .organized ? Aurora.ground : Aurora.ink)
+                    .foregroundStyle(mode == .organized ? Aurora.onSolid : Aurora.ink)
                     .padding(.horizontal, 15).padding(.vertical, 10)
-                    .background(mode == .organized ? AnyShapeStyle(Aurora.ink) : AnyShapeStyle(.regularMaterial),
+                    .background(mode == .organized ? AnyShapeStyle(Aurora.solid) : AnyShapeStyle(.regularMaterial),
                                 in: Capsule())
                     .overlay(Capsule().strokeBorder(mode == .organized ? .clear : Aurora.line, lineWidth: 1))
                 }

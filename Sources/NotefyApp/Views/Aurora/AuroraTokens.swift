@@ -32,26 +32,31 @@ enum Aurora {
     static let ground    = dyn((233, 234, 231), (11, 14, 12))
     static let surface   = dyn((255, 255, 255), (20, 26, 23))
     static let surface2  = dyn((238, 240, 236), (26, 33, 29))
-    static let ink       = dyn((16, 20, 16), (238, 241, 253))
+    static let ink       = dyn((16, 20, 16), (255, 255, 255))
     // Dark mode needs far more contrast than a straight inversion gives:
     // these two carry most of the running text and were unreadable at the
     // light-mode weights.
-    static let ink2      = dyn((89, 99, 90), (198, 204, 230))
-    static let ink3      = dyn((139, 148, 139), (150, 158, 190))
-    static let line      = dyn((214, 219, 211), (62, 68, 102))
-    static let accent    = dyn((14, 109, 85), (120, 232, 190))
-    static let accentSoft = dyn((220, 239, 231), (28, 60, 60))
+    static let ink2      = dyn((89, 99, 90), (201, 207, 216))
+    static let ink3      = dyn((139, 148, 139), (139, 146, 156))
+    static let line      = dyn((214, 219, 211), (42, 47, 55))
+    static let accent    = dyn((14, 109, 85), (52, 211, 153))
+    static let accentSoft = dyn((220, 239, 231), (17, 41, 31))
+
+    /// Primary buttons and selected chips. Light puts near-black on paper;
+    /// dark uses the green rather than a stark white slab.
+    static let solid     = dyn((16, 20, 16), (23, 122, 88))
+    static let onSolid   = dyn((233, 234, 231), (255, 255, 255))
 
     /// Five desaturated polar-light hues. Folders and captures pick one by id,
     /// so the same folder is the same colour every launch.
     static let tints: [Color] = [
-        // Folders keep their hue in the dark: flattening them all to green was
-        // most of why the canvas read as a terminal.
-        dyn((157, 188, 171), (44, 96, 76)),    // sage
-        dyn((205, 187, 209), (80, 66, 122)),   // mauve
-        dyn((233, 226, 211), (102, 84, 56)),   // sand
-        dyn((147, 170, 188), (44, 80, 122)),   // slate
-        dyn((180, 213, 189), (34, 96, 104))    // teal
+        // Folders keep their hue in the dark, deep enough to sit on near-black
+        // without glowing.
+        dyn((157, 188, 171), (39, 92, 70)),    // sage
+        dyn((205, 187, 209), (72, 60, 110)),   // mauve
+        dyn((233, 226, 211), (94, 76, 48)),    // sand
+        dyn((147, 170, 188), (38, 72, 108)),   // slate
+        dyn((180, 213, 189), (28, 88, 94))     // teal
     ]
 
     /// The deep end of the palette — used where the wash needs to land, not tint.

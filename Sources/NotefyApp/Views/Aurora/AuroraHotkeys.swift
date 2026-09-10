@@ -49,7 +49,13 @@ struct HotkeyBinding: Equatable {
     var keyCode: UInt32
     var modifiers: UInt32   // Carbon modifier mask
 
+    /// An action can be left without a shortcut — which is what happens to the
+    /// old owner when a combination is reassigned.
+    static let unassigned = HotkeyBinding(keyCode: 0, modifiers: 0)
+    var isAssigned: Bool { !(keyCode == 0 && modifiers == 0) }
+
     var label: String {
+        guard isAssigned else { return "not set" }
         var text = ""
         if modifiers & UInt32(controlKey) != 0 { text += "⌃" }
         if modifiers & UInt32(optionKey) != 0 { text += "⌥" }
@@ -71,9 +77,17 @@ enum HotkeyBindings {
         return HotkeyBinding(keyCode: action.defaultKeyCode, modifiers: HotkeyAction.defaultModifiers)
     }
 
-    static func set(_ binding: HotkeyBinding, for action: HotkeyAction) {
+    /// Assigns a combination, taking it off whichever action had it. Without
+    /// this the duplicate simply failed to register and the click looked dead.
+    @discardableResult
+    static func set(_ binding: HotkeyBinding, for action: HotkeyAction) -> HotkeyAction? {
+        let displaced = binding.isAssigned ? conflict(for: binding, excluding: action) : nil
+        if let displaced {
+            UserDefaults.standard.set(["keyCode": 0, "modifiers": 0], forKey: key(displaced))
+        }
         UserDefaults.standard.set(["keyCode": Int(binding.keyCode), "modifiers": Int(binding.modifiers)],
                                   forKey: key(action))
+        return displaced
     }
 
     static func resetAll() {

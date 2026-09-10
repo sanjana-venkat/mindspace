@@ -72,6 +72,7 @@ final class GlobalHotkeyController {
         ]
         for (id, action, callback) in pairs {
             let binding = HotkeyBindings.binding(for: action)
+            guard binding.isAssigned else { continue }
             if !register(id: id, keyCode: binding.keyCode, modifiers: binding.modifiers, callback: callback) {
                 failures.append(action)
             }
