@@ -547,9 +547,6 @@ struct AuroraFolderRow: View {
             .contentShape(Rectangle())
             .background(hover ? Aurora.surface.opacity(0.55) : .clear,
                         in: RoundedRectangle(cornerRadius: 14, style: .continuous))
-            .overlay(alignment: .bottom) {
-                Rectangle().fill(Aurora.line).frame(height: 1).padding(.horizontal, 6)
-            }
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
