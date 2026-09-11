@@ -27,12 +27,12 @@ and Apple notarization without changing the build workflow.
 ```bash
 brew tap sanjana-venkat/mindspace
 brew trust sanjana-venkat/mindspace
-brew install --cask mindspace
+brew install --cask --no-quarantine mindspace
 ```
 
-Homebrew refuses casks from a personal tap until you trust it — that's the middle
-line. The cask also clears the quarantine flag on install, so Homebrew installs
-skip the right-click dance below.
+Two extra words, both because this build isn't notarized yet: Homebrew won't load a
+cask from a personal tap until you trust it, and `--no-quarantine` saves you the
+right-click dance below. Both go away once the app is signed with a Developer ID.
 
 ### Build from source
 

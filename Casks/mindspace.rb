@@ -11,6 +11,10 @@ cask "mindspace" do
 
   app "Mindspace.app"
 
+  # Ad-hoc signed rather than notarized, so Homebrew quarantines it and a
+  # postflight xattr can't help — the flag is applied after postflight runs.
+  # Installs need --no-quarantine until this ships with a Developer ID.
+
   zap trash: [
     "~/Library/Application Support/Notefy",
     "~/Library/Preferences/com.notefy.app.plist",
