@@ -104,8 +104,8 @@ the captures and text being organized are sent to that provider under its own te
 ## Where your notes live
 
 `~/Desktop/Mindspace` — one Markdown file per note, with a JSON sidecar holding the captures,
-your thoughts, and any organized versions. Settings live beside them. Existing
-`~/Desktop/Notefy_Sessions` data is moved here automatically the first time you launch an update.
+your thoughts, and any organized versions. Settings live beside them. If you used an
+earlier build, its `Notefy_Sessions` folder is moved here the first time you launch.
 
 ## License
 
