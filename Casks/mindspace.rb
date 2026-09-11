@@ -7,7 +7,7 @@ cask "mindspace" do
   desc "Infinite canvas for screen captures and the thoughts behind them"
   homepage "https://github.com/sanjana-venkat/mindspace"
 
-  depends_on macos: ">= :sonoma"
+  depends_on macos: :sonoma
 
   app "Mindspace.app"
 
