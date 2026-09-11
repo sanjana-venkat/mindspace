@@ -239,7 +239,12 @@ final class AppState: ObservableObject {
     private var workspaceURL: URL { sessionDir.appendingPathComponent("workspace.json") }
 
     @Published var workspace: Workspace = Workspace()
-    @Published var settings: NotefySettings
+    /// Settings persist themselves. They used to save only when something
+    /// called `saveSettings()`, so a key typed into Settings and then dismissed
+    /// was lost — and worse, the vision client kept the config it was built
+    /// with at launch, which is why a freshly typed Gemini key still ran the
+    /// on-device model.
+    @Published var settings: NotefySettings { didSet { scheduleSettingsSave() } }
     @Published var steps: [ExplorationStep] = []
     @Published var vlmResults: [UUID: String] = [:]
     @Published var isTracking = false
@@ -1367,26 +1372,47 @@ final class AppState: ObservableObject {
 
         var sections: [String] = []
         var failures: [String] = []
+
+        /// A side of the conversation is only worth a heading when there are two
+        /// of them, and silence is worth nothing at all — the old format printed
+        /// markdown hashes and a literal [BLANK_AUDIO] into the capture.
+        func spoken(_ text: String) -> String? {
+            let trimmed = text
+                .replacingOccurrences(of: "[BLANK_AUDIO]", with: "")
+                .replacingOccurrences(of: "[SILENCE]", with: "")
+                .trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+
+        var mine: String?
+        var theirs: String?
+
         if let microphoneURL = artifacts.microphoneURL {
-            let microphoneResult = await transcribe(audioURL: microphoneURL)
-            switch microphoneResult {
-            case .success(let text):
-                sections.append("## You (microphone)\n\n\(text)")
-            case .failure(let error):
-                failures.append("Microphone: \(error.localizedDescription)")
+            switch await transcribe(audioURL: microphoneURL) {
+            case .success(let text): mine = spoken(text)
+            case .failure(let error): failures.append("Microphone: \(error.localizedDescription)")
             }
             try? FileManager.default.removeItem(at: microphoneURL)
         }
 
         if let systemURL = artifacts.systemAudioURL {
-            let systemResult = await transcribe(audioURL: systemURL)
-            switch systemResult {
-            case .success(let text):
-                sections.append("## Other participants (computer audio)\n\n\(text)")
-            case .failure(let error):
-                failures.append("Computer audio: \(error.localizedDescription)")
+            switch await transcribe(audioURL: systemURL) {
+            case .success(let text): theirs = spoken(text)
+            case .failure(let error): failures.append("Computer audio: \(error.localizedDescription)")
             }
             try? FileManager.default.removeItem(at: systemURL)
+        }
+
+        switch (mine, theirs) {
+        case let (mine?, theirs?):
+            sections.append("You\n\(mine)")
+            sections.append("Others\n\(theirs)")
+        case let (mine?, nil):
+            sections.append(mine)
+        case let (nil, theirs?):
+            sections.append(theirs)
+        case (nil, nil):
+            break
         }
 
         handleTranscription(
@@ -1846,7 +1872,23 @@ final class AppState: ObservableObject {
 
     // MARK: - Settings
 
+    private var settingsSaveTask: Task<Void, Never>?
+
+    private func scheduleSettingsSave() {
+        settingsSaveTask?.cancel()
+        settingsSaveTask = Task { @MainActor [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled, let self else { return }
+            self.persistSettings()
+        }
+    }
+
     func saveSettings() {
+        settingsSaveTask?.cancel()
+        persistSettings()
+    }
+
+    private func persistSettings() {
         settings.save(to: settingsURL)
         audioClient = AudioClient(config: settings.audio)
         visionClient = VisionClient(config: settings.vision)

@@ -339,25 +339,28 @@ struct AuroraOnboarding: View {
                 .background(panelFill, in: Capsule())
 
                 VStack(alignment: .leading, spacing: 12) {
-                    switch appState.settings.vision.provider {
-                    case .local:
-                        field("Model", ModelProvider.local.defaultVisionModel, text: $appState.settings.vision.modelName)
-                        Text("Runs against Ollama on this Mac — install it, run `ollama pull \(appState.settings.vision.modelName)`, and leave it running. Slower than a hosted model, and nothing leaves the machine.")
+                    let provider = appState.settings.vision.provider
+                    if provider.needsKey {
+                        secure(provider.keyLabel, provider.keyPlaceholder, text: $appState.settings.vision.apiKey)
+                        Text(provider.keyHint)
                             .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
                             .fixedSize(horizontal: false, vertical: true)
-                    case .anthropic:
-                        secure("Claude API key", "sk-ant-…", text: $appState.settings.vision.apiKey)
-                        Text("Claude writes the organized note. Voice stays on-device. Key from \(ModelProvider.anthropic.keyURL).")
+                    }
+
+                    AuroraSelect(
+                        label: "Model",
+                        options: provider.visionModels.map { AuroraSelect.Option(id: $0, title: $0) },
+                        selection: Binding(
+                            get: { appState.settings.vision.modelName },
+                            set: { appState.settings.vision.modelName = $0 ?? provider.defaultVisionModel }
+                        ),
+                        dark: dark
+                    )
+
+                    if provider == .local {
+                        Text("Runs against Ollama on this Mac — install it, `ollama pull` the model you picked, and leave it running. Slower than a hosted model, and nothing leaves the machine.")
                             .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
-                    case .gemini:
-                        secure("Gemini API key", "AIza…", text: $appState.settings.vision.apiKey)
-                        Text("One key covers transcription and the organized note. Key from \(ModelProvider.gemini.keyURL).")
-                            .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
-                    case .api:
-                        secure("OpenAI API key", "sk-…", text: $appState.settings.vision.apiKey)
-                        Text("Reads your captures and writes the organized note. Key from \(ModelProvider.api.keyURL).")
-                            .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
-                        field("Model", "gpt-4o", text: $appState.settings.vision.modelName)
+                            .fixedSize(horizontal: false, vertical: true)
                     }
 
                     if needsKeyWarning {

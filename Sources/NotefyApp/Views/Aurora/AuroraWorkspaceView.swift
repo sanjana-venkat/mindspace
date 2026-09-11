@@ -167,7 +167,11 @@ struct AuroraWorkspaceView: View {
 
     private var sortedTiles: [AuroraFolderTile] {
         switch sort {
-        case .name: return visibleTiles.sorted { $0.name < $1.name }
+        case .name: return visibleTiles.sorted { $0.name.localizedCaseInsensitiveCompare($1.name) == .orderedAscending }
+        case .recent:
+            return visibleTiles.sorted {
+                ($0.notes.first?.createdAt ?? .distantPast) > ($1.notes.first?.createdAt ?? .distantPast)
+            }
         case .size: return visibleTiles.sorted { $0.notes.count > $1.notes.count }
         }
     }
@@ -399,7 +403,7 @@ struct AuroraWorkspaceView: View {
                     .focused($searchFocused)
                     .onSubmit { create() }
                 Button(action: create) {
-                    Text("Create")
+                    Text("Search")
                         .font(Aurora.ui(15, .bold))
                         .foregroundStyle(Aurora.onSolid)
                         .padding(.horizontal, 17).padding(.vertical, 10)

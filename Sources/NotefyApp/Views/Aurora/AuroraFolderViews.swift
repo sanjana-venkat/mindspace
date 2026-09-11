@@ -406,7 +406,7 @@ struct AuroraNoteCard: View {
 }
 
 /// Applies the right-click reporter only when the card's owner wants it.
-private struct AuroraOptionalRightClick: ViewModifier {
+struct AuroraOptionalRightClick: ViewModifier {
     let action: ((CGPoint) -> Void)?
     func body(content: Content) -> some View {
         if let action {
@@ -486,7 +486,7 @@ struct AuroraFeedView: View {
     }
 
     private func notes(in tile: AuroraFolderTile) -> some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 2) {
             HStack {
                 Text("\(tile.notes.count) notes in \(tile.name)")
                 Spacer()
@@ -494,19 +494,85 @@ struct AuroraFeedView: View {
             }
             .font(Aurora.mono(10.5)).tracking(1.4).textCase(.uppercase)
             .foregroundStyle(Aurora.ink3)
-            .padding(.horizontal, 6).padding(.bottom, 6)
-            .overlay(alignment: .bottom) { Rectangle().fill(Aurora.line).frame(height: 1) }
+            .padding(.horizontal, 6).padding(.bottom, 12)
 
-            LazyVGrid(columns: [GridItem(.adaptive(minimum: 250, maximum: 320), spacing: 16)], spacing: 16) {
-                ForEach(Array(tile.notes.enumerated()), id: \.element.id) { i, note in
-                    AuroraNoteCard(note: note, tint: tile.tints[i % tile.tints.count],
-                                   open: { onOpenNote(note.url) },
-                                   onRightClick: { point in onNoteRightClick?(note, point) })
-                    .frame(maxWidth: .infinity)
+            // A list view stays a list when you open a folder — dropping into a
+            // grid halfway through was a change of mode nobody asked for.
+            ForEach(Array(tile.notes.enumerated()), id: \.element.id) { i, note in
+                AuroraNoteRow(note: note,
+                              tint: tile.tints[i % tile.tints.count],
+                              open: { onOpenNote(note.url) },
+                              onRightClick: { point in onNoteRightClick?(note, point) })
+            }
+
+            if tile.notes.isEmpty {
+                Text("Nothing in here yet.")
+                    .font(Aurora.ui(14, .medium)).foregroundStyle(Aurora.ink3)
+                    .padding(.vertical, 30)
+            }
+        }
+    }
+}
+
+/// A note as a row, for the list view.
+struct AuroraNoteRow: View {
+    let note: CanvasNoteSnapshot
+    var tint: Int
+    var open: () -> Void
+    var onRightClick: ((CGPoint) -> Void)? = nil
+
+    @State private var hover = false
+
+    var body: some View {
+        Button(action: open) {
+            HStack(spacing: 18) {
+                LinearGradient(colors: [Aurora.tint(tint), Aurora.tint(tint + 2)],
+                               startPoint: .topLeading, endPoint: .bottomTrailing)
+                    .saturation(1.35)
+                    .brightness(-0.08)
+                    .frame(width: 46, height: 38)
+                    .clipShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(note.title).font(Aurora.title(15.5)).foregroundStyle(Aurora.ink)
+                        if note.hasOrganizedNote {
+                            Text("ORGANIZED")
+                                .font(Aurora.mono(8.5)).tracking(1)
+                                .foregroundStyle(Aurora.ink2)
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(Aurora.surface2, in: Capsule())
+                        }
+                    }
+                    if !note.excerpt.isEmpty {
+                        Text(note.excerpt)
+                            .font(Aurora.ui(12.5, .regular)).foregroundStyle(Aurora.ink3).lineLimit(1)
+                    }
+                }
+                Spacer(minLength: 12)
+                HStack(spacing: 16) {
+                    Text("\(note.captureCount) captures")
+                        .font(Aurora.mono(9.5)).tracking(1)
+                        .foregroundStyle(Aurora.ink2)
+                        .padding(.horizontal, 9).padding(.vertical, 5)
+                        .background(Aurora.surface2, in: Capsule())
+                    Text(note.createdAt.auroraRelative)
+                        .font(Aurora.ui(12, .regular)).foregroundStyle(Aurora.ink3)
+                        .frame(width: 70, alignment: .trailing)
+                    Image(systemName: "chevron.right")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(hover ? Aurora.focusRing : Aurora.ink3)
                 }
             }
-            .padding(.horizontal, 4)
+            .padding(.horizontal, 10).padding(.vertical, 13)
+            .contentShape(Rectangle())
+            .background(hover ? Aurora.surface.opacity(0.55) : .clear,
+                        in: RoundedRectangle(cornerRadius: 14, style: .continuous))
         }
+        .buttonStyle(.plain)
+        .onHover { hover = $0 }
+        .animation(.smooth(duration: 0.18), value: hover)
+        .modifier(AuroraOptionalRightClick(action: onRightClick))
     }
 }
 

@@ -8,6 +8,7 @@ struct AuroraSettingsView: View {
     @Environment(\.dismiss) private var dismiss
     @State private var saved = false
     @AppStorage(AuroraAppearance.storageKey) private var appearanceRaw = AuroraAppearance.system.rawValue
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         ZStack {
@@ -159,35 +160,25 @@ struct AuroraSettingsView: View {
                 .padding(3)
                 .background(Aurora.surface2.opacity(0.8), in: Capsule())
 
-                switch provider.wrappedValue {
-                case .local:
+                let current = provider.wrappedValue
+                if current.needsKey {
+                    secure(current.keyLabel, current.keyPlaceholder, apiKey)
+                    hint(current.keyHint)
+                }
+
+                AuroraSelect(
+                    label: "Model",
+                    options: current.visionModels.map { AuroraSelect.Option(id: $0, title: $0) },
+                    selection: Binding(
+                        get: { modelName.wrappedValue },
+                        set: { modelName.wrappedValue = $0 ?? current.defaultVisionModel }
+                    ),
+                    dark: scheme == .dark
+                )
+
+                if current.showsEndpointField {
+                    field("Endpoint", "http://localhost:11434/api/chat", apiURL)
                     hint(localHint)
-                    field("Model", modelPlaceholder, modelName)
-                case .api:
-                    field("API URL", "https://…", apiURL)
-                    secure("API key", "sk-…", apiKey)
-                    field("Model", modelPlaceholder, modelName)
-                case .anthropic:
-                    hint("Claude writes the organized note. Transcription stays on-device — Anthropic has no speech-to-text endpoint.")
-                    secure("Claude API key", "sk-ant-…", apiKey)
-                    field("Model", "claude-sonnet-4-5", modelName)
-                case .gemini:
-                    hint("One Gemini key covers both transcription and note synthesis.")
-                    secure("Gemini API key", "AIza…", apiKey)
-                    HStack(spacing: 8) {
-                        label("Model")
-                        ForEach(["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"], id: \.self) { m in
-                            Button { modelName.wrappedValue = m } label: {
-                                Text(m.replacingOccurrences(of: "gemini-", with: ""))
-                                    .font(Aurora.mono(10.5))
-                                    .foregroundStyle(modelName.wrappedValue == m ? Aurora.accent : Aurora.ink3)
-                                    .padding(.horizontal, 10).padding(.vertical, 6)
-                                    .background(modelName.wrappedValue == m ? Aurora.accentSoft : Aurora.surface2, in: Capsule())
-                            }
-                            .buttonStyle(.plain)
-                        }
-                        Spacer(minLength: 0)
-                    }
                 }
 
                 Rectangle().fill(Aurora.line).frame(height: 1)

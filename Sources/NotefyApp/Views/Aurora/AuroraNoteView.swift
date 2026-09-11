@@ -158,18 +158,40 @@ struct AuroraNoteView: View {
                 Button {
                     withAnimation(.smooth(duration: 0.28)) { mode = .organized }
                 } label: {
-                    Text("Organize").font(Aurora.ui(13))
-                    .foregroundStyle(mode == .organized ? Aurora.onSolid : Aurora.ink)
-                    .padding(.horizontal, 15).padding(.vertical, 10)
-                    .background(mode == .organized ? AnyShapeStyle(Aurora.solid) : AnyShapeStyle(.regularMaterial),
-                                in: Capsule())
-                    .overlay(Capsule().strokeBorder(mode == .organized ? .clear : Aurora.line, lineWidth: 1))
+                    OverlayIcon(kind: .spark, tint: mode == .organized ? Aurora.onSolid : Aurora.ink)
+                        .frame(width: 18, height: 18)
+                        .frame(width: 44, height: 38)
+                        .background(mode == .organized ? AnyShapeStyle(Aurora.solid) : AnyShapeStyle(.regularMaterial),
+                                    in: Capsule())
+                        .overlay(Capsule().strokeBorder(mode == .organized ? .clear : Aurora.line, lineWidth: 1))
                 }
                 .buttonStyle(.plain)
+                .help("Organize this note")
             }
         }
         .padding(.horizontal, 26)
-        .padding(.top, 46).padding(.bottom, 18)
+        .padding(.top, 46).padding(.bottom, 8)
+        .overlay(alignment: .bottomTrailing) {
+            if mode == .organized, !appState.organizedDraft.isEmpty {
+                Button {
+                    appState.showOrganized(appState.organizedTemplate, force: true)
+                } label: {
+                    HStack(spacing: 7) {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 10.5, weight: .bold))
+                        Text("Re-organize").font(Aurora.ui(12))
+                    }
+                    .foregroundStyle(Aurora.ink)
+                    .padding(.horizontal, 13).padding(.vertical, 7)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
+                }
+                .buttonStyle(.plain)
+                .disabled(appState.isOrganizing)
+                .padding(.trailing, 26)
+                .offset(y: 26)
+            }
+        }
+        .padding(.bottom, mode == .organized ? 30 : 10)
     }
 }
 
@@ -263,6 +285,9 @@ struct AuroraPanels: View {
                     .buttonStyle(.plain).disabled(active >= steps.count - 1)
             }
 
+            // TextEditor insets its text by ~5pt on the leading edge and 8pt on
+            // top; the placeholder has to sit on exactly that, or the caret
+            // appears to start in the wrong place.
             TextEditor(text: thought(step.id))
                 .font(Aurora.serif(20))
                 .foregroundStyle(.white)
@@ -270,6 +295,9 @@ struct AuroraPanels: View {
                 .scrollContentBackground(.hidden)
                 .scrollDisabled(true)
                 .focused($editing)
+                .textEditorStyle(.plain)
+                .padding(.leading, -5)
+                .padding(.top, -8)
                 .frame(minHeight: 120, alignment: .topLeading)
                 .overlay(alignment: .topLeading) {
                     if thought(step.id).wrappedValue.isEmpty {
@@ -277,7 +305,6 @@ struct AuroraPanels: View {
                             .font(Aurora.serif(20))
                             .foregroundStyle(.white.opacity(0.45))
                             .allowsHitTesting(false)
-                            .padding(.top, 8).padding(.leading, 5)
                     }
                 }
 

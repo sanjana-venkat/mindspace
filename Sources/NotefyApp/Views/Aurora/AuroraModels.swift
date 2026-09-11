@@ -28,8 +28,16 @@ final class AuroraCanvasState: ObservableObject {
 enum AuroraViewMode: String { case map, feed }
 
 enum AuroraSort: String, CaseIterable {
-    case name, size
-    var label: String { self == .size ? "Notes" : rawValue.capitalized }
+    case name, recent, size
+
+    /// Says what the order is, rather than which field it sorts on.
+    var label: String {
+        switch self {
+        case .name: return "A–Z"
+        case .recent: return "Recent"
+        case .size: return "Most notes"
+        }
+    }
 }
 
 enum AuroraFilter: String, CaseIterable, Identifiable {

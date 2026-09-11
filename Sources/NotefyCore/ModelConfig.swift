@@ -87,6 +87,54 @@ public enum ModelProvider: String, Codable, CaseIterable {
     }
 
     public var needsKey: Bool { self != .local }
+
+    /// What the picker offers. Typing a model name by hand was a guessing
+    /// game — and an easy way to end up with a hosted name under the
+    /// on-device provider.
+    public var visionModels: [String] {
+        switch self {
+        case .local:
+            return ["qwen2.5vl:7b", "qwen2.5vl:3b", "llama3.2-vision:11b", "llava:13b", "minicpm-v"]
+        case .api:
+            return ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"]
+        case .gemini:
+            return ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"]
+        case .anthropic:
+            return ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"]
+        }
+    }
+
+    /// Only the on-device provider needs an endpoint in the interface; the
+    /// hosted ones have one address and prefilling it invited confusion —
+    /// an Ollama localhost URL sitting under OpenAI, for instance.
+    public var showsEndpointField: Bool { self == .local }
+
+    public var keyLabel: String {
+        switch self {
+        case .local: return ""
+        case .api: return "OpenAI API key"
+        case .gemini: return "Gemini API key"
+        case .anthropic: return "Claude API key"
+        }
+    }
+
+    public var keyPlaceholder: String {
+        switch self {
+        case .local: return ""
+        case .api: return "sk-…"
+        case .gemini: return "AIza…"
+        case .anthropic: return "sk-ant-…"
+        }
+    }
+
+    public var keyHint: String {
+        switch self {
+        case .local: return ""
+        case .api: return "Reads your captures and writes the organized note. Key from \(keyURL)."
+        case .gemini: return "One key covers transcription and the organized note. Key from \(keyURL)."
+        case .anthropic: return "Claude writes the organized note; voice stays on-device. Key from \(keyURL)."
+        }
+    }
 }
 
 public struct AudioConfig: Codable {

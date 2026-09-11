@@ -306,7 +306,7 @@ private struct RailPressStyle: ButtonStyle {
 }
 
 struct OverlayIcon: View {
-    enum Kind { case capture, text, audio, meeting, microphone, window, region }
+    enum Kind { case capture, text, audio, meeting, microphone, window, region, spark }
     let kind: Kind
     var tint: Color = NotefyTheme.ink
 
@@ -330,6 +330,14 @@ struct OverlayIcon: View {
                 path.move(to: p(20,16)); path.addLine(to: p(20,18)); path.addQuadCurve(to: p(18,20), control: p(20,20)); path.addLine(to: p(16,20))
                 path.move(to: p(8,20)); path.addLine(to: p(6,20)); path.addQuadCurve(to: p(4,18), control: p(4,20)); path.addLine(to: p(4,16)); stroke(path)
                 stroke(Path(ellipseIn: CGRect(x: 8.8*sx, y: 8.8*sy, width: 6.4*sx, height: 6.4*sy)))
+            case .spark:
+                // Four-point star, drawn on the same grid and stroke as the rest.
+                path.move(to: p(12,3))
+                path.addCurve(to: p(21,12), control1: p(12,9), control2: p(15,12))
+                path.addCurve(to: p(12,21), control1: p(15,12), control2: p(12,15))
+                path.addCurve(to: p(3,12), control1: p(12,15), control2: p(9,12))
+                path.addCurve(to: p(12,3), control1: p(9,12), control2: p(12,9))
+                stroke(path)
             case .text:
                 path.move(to: p(5,7)); path.addCurve(to: p(6.5,10.5), control1: p(5,4.5), control2: p(10,3.5)); path.addCurve(to: p(10,7), control1: p(8,10), control2: p(10,9))
                 path.move(to: p(13,7)); path.addCurve(to: p(14.5,10.5), control1: p(13,4.5), control2: p(18,3.5)); path.addCurve(to: p(18,7), control1: p(16,10), control2: p(18,9))
