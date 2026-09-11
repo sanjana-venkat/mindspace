@@ -30,6 +30,9 @@ struct AuroraNoteView: View {
     @State private var mode: AuroraNoteMode = .panels
     @State private var active: Int = 0
     @State private var menuTarget: AuroraCaptureTarget?
+    /// How much of the note fits on screen at once. Zooming out is how you see
+    /// twenty captures in one glance rather than scrolling through them.
+    @State private var zoom: Double = 1
 
     /// Display order matches the rest of the app: `steps` is stored one way and
     /// read the other.
@@ -55,7 +58,7 @@ struct AuroraNoteView: View {
                 Group {
                     switch mode {
                     case .panels:
-                        AuroraPanels(steps: steps, active: $active, thought: thought,
+                        AuroraPanels(steps: steps, active: $active, thought: thought, zoom: zoom,
                                      dimmedFor: menuTarget?.step.id,
                                      onRightClick: { step, point in
                                          menuTarget = AuroraCaptureTarget(step: step, point: point)
@@ -78,7 +81,12 @@ struct AuroraNoteView: View {
                                    open: { i in
                                        active = i
                                        withAnimation(.smooth(duration: 0.3)) { mode = .panels }
-                                   })
+                                   },
+                                   zoom: zoom,
+                                   selection: Binding(
+                                       get: { appState.selectedStepIDs },
+                                       set: { appState.selectedStepIDs = $0 }
+                                   ))
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -108,6 +116,17 @@ struct AuroraNoteView: View {
             get: { appState.stepAnnotations[id] ?? "" },
             set: { appState.stepAnnotations[id] = $0; appState.scheduleActiveNoteAutosave() }
         )
+    }
+
+    private func zoomButton(_ icon: String, enabled: Bool, _ action: @escaping () -> Void) -> some View {
+        Button { withAnimation(.smooth(duration: 0.2)) { action() } } label: {
+            Image(systemName: icon)
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(enabled ? Aurora.ink : Aurora.ink3)
+                .frame(width: 26, height: 26)
+        }
+        .buttonStyle(.plain)
+        .disabled(!enabled)
     }
 
     private func viewIcon(_ m: AuroraNoteMode) -> some View {
@@ -147,6 +166,20 @@ struct AuroraNoteView: View {
             Spacer(minLength: 20)
 
             HStack(spacing: 10) {
+                if mode != .organized {
+                    HStack(spacing: 2) {
+                        zoomButton("minus", enabled: zoom > 0.55) { zoom = max(0.5, zoom - 0.15) }
+                        Text("\(Int(zoom * 100))%")
+                            .font(Aurora.mono(11)).foregroundStyle(Aurora.ink2)
+                            .frame(width: 44)
+                            .onTapGesture { withAnimation(.smooth(duration: 0.2)) { zoom = 1 } }
+                        zoomButton("plus", enabled: zoom < 1.45) { zoom = min(1.5, zoom + 0.15) }
+                    }
+                    .padding(4)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
+                }
+
                 HStack(spacing: 3) {
                     viewIcon(.panels)
                     viewIcon(.grid)
@@ -205,6 +238,7 @@ struct AuroraPanels: View {
     let steps: [ExplorationStep]
     @Binding var active: Int
     var thought: (UUID) -> Binding<String>
+    var zoom: Double = 1
     var dimmedFor: UUID?
     var onRightClick: (ExplorationStep, CGPoint) -> Void
 
@@ -329,7 +363,7 @@ struct AuroraPanels: View {
                         Spacer(minLength: 14)
                         ForEach(Array(steps.enumerated()), id: \.element.id) { i, step in
                             AuroraCaptureView(step: step, index: i)
-                                .frame(maxWidth: 780)
+                                .frame(maxWidth: 780 * zoom)
                                 .clipShape(RoundedRectangle(cornerRadius: 16, style: .continuous))
                                 .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
                                     .strokeBorder(i == active ? Aurora.focusRing.opacity(0.75) : Aurora.line,

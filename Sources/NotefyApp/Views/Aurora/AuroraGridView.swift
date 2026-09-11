@@ -13,11 +13,15 @@ struct AuroraGrid: View {
     /// Called once, when the drag ends — not on every hover.
     var commit: ([ExplorationStep]) -> Void
     var open: (Int) -> Void
+    var zoom: Double = 1
+    @Binding var selection: Set<UUID>
 
     @State private var dragging: UUID?
     @State private var order: [ExplorationStep] = []
     @FocusState private var keyboard: Bool
-    private let columns = 3
+    /// Zooming out means more, smaller tiles rather than a scaled bitmap, so
+    /// the text on them stays readable.
+    private var columns: Int { max(2, min(6, Int((3.0 / zoom).rounded()))) }
 
     /// What the grid draws: the live local order while a drag is in flight, the
     /// note's own order otherwise. Rewriting the published array on every hover
@@ -83,12 +87,22 @@ struct AuroraGrid: View {
     private func tile(_ i: Int, _ step: ExplorationStep) -> some View {
         let isActive = i == active
         let note = thought(step.id).wrappedValue
+        let picked = selection.contains(step.id)
         return Button {
-            if isActive { open(i) } else { active = i; keyboard = true }
+            // While a selection is running, a click adds to it rather than
+            // opening — otherwise you'd have to right-click every capture.
+            if !selection.isEmpty {
+                if picked { selection.remove(step.id) } else { selection.insert(step.id) }
+            } else if isActive {
+                open(i)
+            } else {
+                active = i
+                keyboard = true
+            }
         } label: {
             VStack(alignment: .leading, spacing: 0) {
-                AuroraCaptureView(step: step, index: i, textLimit: 14,
-                                  imageHeight: step.screenshotPath != nil ? 170 : nil)
+                AuroraCaptureView(step: step, index: i, textLimit: Int(14 * zoom),
+                                  imageHeight: step.screenshotPath != nil ? 170 * zoom : nil)
                 VStack(alignment: .leading, spacing: 8) {
                     if note.isEmpty {
                         Text("No thought yet")
@@ -111,7 +125,17 @@ struct AuroraGrid: View {
             .background(Aurora.surface.opacity(0.72))
             .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
-                .strokeBorder(isActive ? Aurora.focusRing : Aurora.line, lineWidth: isActive ? 2 : 1))
+                .strokeBorder(picked ? Aurora.accent : (isActive ? Aurora.focusRing : Aurora.line),
+                              lineWidth: (picked || isActive) ? 2 : 1))
+            .overlay(alignment: .topTrailing) {
+                if !selection.isEmpty {
+                    Image(systemName: picked ? "checkmark.circle.fill" : "circle")
+                        .font(.system(size: 17, weight: .bold))
+                        .foregroundStyle(picked ? Aurora.accent : Aurora.ink3)
+                        .background(Circle().fill(Aurora.surface).padding(2))
+                        .padding(10)
+                }
+            }
             .scaleEffect(isActive ? 1.015 : 1)
             .opacity(dragging == step.id ? 0.35 : 1)
         }
