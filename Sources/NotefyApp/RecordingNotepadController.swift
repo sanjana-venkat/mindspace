@@ -25,7 +25,7 @@ final class RecordingNotepadController {
     ) {
         close(clearNotes: true)
         let model = RecordingNotepadModel(kind: kind, sourceApp: sourceApp)
-        let size = NSSize(width: 330, height: 400)
+        let size = NSSize(width: 420, height: 480)
         let frame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
         let origin = NSPoint(x: frame.minX + 26, y: frame.maxY - size.height - 44)
         let panel = CaptureKeyPanel(
@@ -112,121 +112,175 @@ private struct RecordingNotepadView: View {
     let microphoneDB: () -> Float
     let systemDB: () -> Float
     let onEnd: () -> Void
+    @Environment(\.colorScheme) private var scheme
+    @AppStorage(AuroraAppearance.storageKey) private var appearanceRaw = AuroraAppearance.system.rawValue
+
+    private var appearance: AuroraAppearance {
+        AuroraAppearance(rawValue: appearanceRaw) ?? .system
+    }
 
     var body: some View {
-        VStack(spacing: 0) {
-            header
-            ZStack(alignment: .topLeading) {
-                RuledNotepadLines()
-                TextEditor(text: Binding(
-                    get: { model.notes },
-                    set: { model.notes = String($0.prefix(5000)) }
-                ))
-                .font(NotefyFont.hand)
-                .foregroundStyle(NotefyTheme.ink)
-                .scrollContentBackground(.hidden)
-                .padding(.horizontal, 10)
-                .padding(.vertical, 8)
+        ZStack {
+            AuroraVisualEffect()
+            Aurora.surface.opacity(scheme == .dark ? 0.92 : 0.88)
+            AuroraGrain.tile
+                .resizable(resizingMode: .tile)
+                .blendMode(scheme == .dark ? .screen : .multiply)
+                .opacity(scheme == .dark ? 0.07 : 0.12)
+
+            VStack(alignment: .leading, spacing: 16) {
+                header
+                recordingSignal
+                noteField
+                footer
             }
-            footer
+            .padding(22)
         }
-        .background(NotefyTheme.cardPaper)
-        .clipShape(RoundedRectangle(cornerRadius: 16))
-        .overlay(RoundedRectangle(cornerRadius: 16).stroke(NotefyTheme.ink.opacity(0.14), lineWidth: 1))
-        .padding(8)
+        .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
+            .strokeBorder(Aurora.line, lineWidth: 1))
+        .shadow(color: .black.opacity(scheme == .dark ? 0.34 : 0.20), radius: 34, y: 16)
+        .padding(12)
+        .background(AuroraWindowGlass())
+        .preferredColorScheme(appearance.scheme)
     }
 
     private var header: some View {
-        HStack(spacing: 8) {
+        HStack(spacing: 10) {
             OverlayIcon(kind: model.kind == .audio ? .audio : .meeting)
-                .frame(width: 18, height: 18)
+                .frame(width: 17, height: 17)
             Text(model.kind == .audio ? "COMPUTER AUDIO" : "MEETING NOTES")
-                .font(NotefyFont.label).tracking(1.2)
-                .foregroundStyle(NotefyTheme.ink)
+                .font(Aurora.mono(10.5)).tracking(1.5)
+                .foregroundStyle(Aurora.ink)
             Spacer()
-            Text("\(model.sourceApp) · \(clock)")
-                .font(NotefyFont.caption)
-                .foregroundStyle(NotefyTheme.inkFaint)
+            Text(model.sourceApp)
+                .font(Aurora.ui(11.5, .medium))
+                .foregroundStyle(Aurora.ink2)
                 .lineLimit(1)
-            NotedMark(tint: NotefyTheme.ink, knockout: NotefyTheme.sand).frame(width: 22, height: 20)
+                .padding(.horizontal, 10).padding(.vertical, 6)
+                .background(Aurora.surface2, in: Capsule())
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 12)
         .contentShape(Rectangle())
-        .overlay(alignment: .bottom) { Divider().opacity(0.35) }
+    }
+
+    private var recordingSignal: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(alignment: .firstTextBaseline) {
+                Text(shortClock)
+                    .font(Aurora.display(42))
+                    .foregroundStyle(Aurora.ink)
+                Spacer()
+                HStack(spacing: 6) {
+                    Circle().fill(Aurora.accent).frame(width: 7, height: 7)
+                    Text("RECORDING · PRIVATE")
+                        .font(Aurora.mono(9.5)).tracking(1.1)
+                        .foregroundStyle(Aurora.ink2)
+                }
+            }
+
+            HStack(alignment: .center, spacing: 3) {
+                ForEach(0..<32, id: \.self) { index in
+                    Capsule()
+                        .fill(index < activeBars ? Aurora.accent : Aurora.line)
+                        .frame(height: signalHeight(index))
+                }
+            }
+            .frame(maxWidth: .infinity, minHeight: 32)
+
+            HStack(spacing: 12) {
+                if model.kind == .meeting {
+                    meter("YOU", microphoneDB())
+                    meter("OTHERS", systemDB())
+                } else {
+                    meter("MAC AUDIO", systemDB())
+                }
+            }
+        }
+        .padding(16)
+        .background(Aurora.accentSoft.opacity(0.72), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .strokeBorder(Aurora.accent.opacity(0.35), lineWidth: 1))
+    }
+
+    private var noteField: some View {
+        ZStack(alignment: .topLeading) {
+            if model.notes.isEmpty {
+                Text("Add a thought, or mark a moment with a timestamp…")
+                    .font(Aurora.serif(16))
+                    .foregroundStyle(Aurora.ink3)
+                    .padding(.horizontal, 15).padding(.vertical, 14)
+                    .allowsHitTesting(false)
+            }
+            TextEditor(text: Binding(
+                get: { model.notes },
+                set: { model.notes = String($0.prefix(5000)) }
+            ))
+            .font(Aurora.serif(16))
+            .foregroundStyle(Aurora.ink)
+            .scrollContentBackground(.hidden)
+            .padding(9)
+        }
+        .frame(maxWidth: .infinity, minHeight: 150, maxHeight: .infinity)
+        .background(Aurora.surface2.opacity(0.78), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
+            .strokeBorder(Aurora.line, lineWidth: 1))
     }
 
     private var footer: some View {
-        VStack(spacing: 8) {
-            HStack(spacing: 12) {
-                if model.kind == .meeting {
-                    meter("YOU", microphoneDB(), NotefyTheme.marginRose)
-                    meter("OTHERS", systemDB(), NotefyTheme.pebbleOlive)
-                } else {
-                    meter("COMPUTER AUDIO", systemDB(), NotefyTheme.pebbleOlive)
+        HStack(spacing: 10) {
+            if model.kind == .audio {
+                Button(action: model.insertTimestamp) {
+                    Label("TIMESTAMP", systemImage: "bookmark")
+                        .font(Aurora.mono(9.5)).tracking(1)
+                        .foregroundStyle(Aurora.ink2)
+                        .padding(.horizontal, 14).padding(.vertical, 11)
+                        .background(Aurora.surface2, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
                 }
+                .buttonStyle(AuroraPressStyle())
             }
-            HStack(spacing: 8) {
-                Circle().fill(NotefyTheme.marginRose).frame(width: 7, height: 7)
-                Text(model.kind == .meeting ? "CAPTURING LOCALLY · PRIVATE" : "RECORDING MAC AUDIO · PRIVATE")
-                    .font(NotefyFont.caption).tracking(0.7)
-                    .foregroundStyle(NotefyTheme.inkFaint)
-                Spacer()
-                if model.kind == .audio {
-                    Button("ADD TIMESTAMP", action: model.insertTimestamp)
-                        .buttonStyle(.plain).font(NotefyFont.caption)
-                }
-            }
+
             Button(action: onEnd) {
-                Label("STOP & SAVE NOTE", systemImage: "stop.fill")
-                    .font(NotefyFont.label).tracking(1)
+                Label("STOP & SAVE", systemImage: "stop.fill")
+                    .font(Aurora.mono(10.5)).tracking(1.1)
                     .frame(maxWidth: .infinity)
-                    .padding(.vertical, 10)
-                    .background(NotefyTheme.ink, in: Capsule())
-                    .foregroundStyle(NotefyTheme.sand)
+                    .padding(.vertical, 12)
+                    .background(Aurora.ink, in: Capsule())
+                    .foregroundStyle(Aurora.ground)
             }
-            .buttonStyle(.plain)
+            .buttonStyle(AuroraPressStyle())
             .accessibilityLabel("Stop recording and save note")
         }
-        .padding(.horizontal, 14)
-        .padding(.vertical, 10)
-        .overlay(alignment: .top) { Divider().opacity(0.35) }
     }
 
-    private func meter(_ label: String, _ db: Float, _ color: Color) -> some View {
-        HStack(spacing: 5) {
-            Text(label).font(NotefyFont.caption).foregroundStyle(NotefyTheme.inkSoft)
+    private func meter(_ label: String, _ db: Float) -> some View {
+        HStack(spacing: 7) {
+            Text(label).font(Aurora.mono(8.5)).tracking(0.8).foregroundStyle(Aurora.ink2)
             GeometryReader { proxy in
                 ZStack(alignment: .leading) {
-                    Capsule().fill(NotefyTheme.ink.opacity(0.08))
-                    Capsule().fill(color).frame(width: proxy.size.width * normalized(db))
+                    Capsule().fill(Aurora.line)
+                    Capsule().fill(Aurora.accent).frame(width: proxy.size.width * normalized(db))
                 }
             }
-            .frame(height: 4)
+            .frame(height: 3)
         }
         .frame(maxWidth: .infinity)
     }
 
-    private var clock: String {
-        String(format: "%02d:%02d:%02d", Int(model.elapsed) / 3600, (Int(model.elapsed) / 60) % 60, Int(model.elapsed) % 60)
+    private var shortClock: String {
+        String(format: "%d:%02d", Int(model.elapsed) / 60, Int(model.elapsed) % 60)
+    }
+
+    private var activeBars: Int {
+        max(2, Int(normalized(model.kind == .meeting ? max(microphoneDB(), systemDB()) : systemDB()) * 32))
+    }
+
+    private func signalHeight(_ index: Int) -> CGFloat {
+        let rhythm: [CGFloat] = [0.34, 0.62, 0.88, 0.48, 1, 0.72, 0.42]
+        return 7 + rhythm[index % rhythm.count] * 23
     }
 
     private func normalized(_ db: Float) -> CGFloat {
         CGFloat(max(0, min(1, (db + 60) / 60)))
-    }
-}
-
-private struct RuledNotepadLines: View {
-    var body: some View {
-        Canvas { context, size in
-            for y in stride(from: CGFloat(26), through: size.height, by: 27) {
-                var path = Path()
-                path.move(to: CGPoint(x: 0, y: y))
-                path.addLine(to: CGPoint(x: size.width, y: y))
-                context.stroke(path, with: .color(NotefyTheme.inkSoft.opacity(0.16)), lineWidth: 1)
-            }
-        }
-        .background(NotefyTheme.cardPaper)
-        .allowsHitTesting(false)
     }
 }

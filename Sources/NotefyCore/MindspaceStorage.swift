@@ -36,4 +36,33 @@ public enum MindspaceStorage {
             return fileManager.fileExists(atPath: legacy.path) ? legacy : current
         }
     }
+
+    /// Resolves an absolute asset reference written before the data directory
+    /// was renamed. The folder migration moves the files, but JSON sidecars
+    /// created by older versions contain absolute paths and therefore still
+    /// point at `Notefy_Sessions`. Existing paths are never changed.
+    public static func rebasedAssetPath(
+        _ storedPath: String?,
+        in currentDirectory: URL,
+        fileManager: FileManager = .default
+    ) -> String? {
+        guard let storedPath, !storedPath.isEmpty else { return storedPath }
+        if fileManager.fileExists(atPath: storedPath) { return storedPath }
+
+        let oldURL = URL(fileURLWithPath: storedPath)
+        let components = oldURL.pathComponents
+        if let legacyIndex = components.firstIndex(of: legacyDirectoryName),
+           legacyIndex + 1 < components.count {
+            let relativeComponents = components[(legacyIndex + 1)...]
+            let candidate = relativeComponents.reduce(currentDirectory) {
+                $0.appendingPathComponent($1)
+            }
+            if fileManager.fileExists(atPath: candidate.path) { return candidate.path }
+        }
+
+        // Early builds kept every capture at the data-root. This fallback also
+        // repairs references whose original parent path was customized.
+        let rootCandidate = currentDirectory.appendingPathComponent(oldURL.lastPathComponent)
+        return fileManager.fileExists(atPath: rootCandidate.path) ? rootCandidate.path : storedPath
+    }
 }

@@ -78,6 +78,7 @@ struct AuroraCaptureView: View {
                     .font(Aurora.serif(15))
                     .lineSpacing(5)
                     .foregroundStyle(Aurora.ink)
+                    .textSelection(.enabled)
                     .lineLimit(textLimit ?? (imageHeight == nil ? nil : 7))
                     .frame(maxWidth: .infinity, alignment: .leading)
                     .padding(16)

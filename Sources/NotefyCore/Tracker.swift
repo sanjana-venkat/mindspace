@@ -14,6 +14,8 @@ public struct ExplorationStep: Codable, Identifiable, Hashable {
     public let pageText: String?
 
     public init(
+        id: UUID = UUID(),
+        timestamp: Date = Date(),
         appName: String,
         windowTitle: String,
         url: String? = nil,
@@ -22,8 +24,8 @@ public struct ExplorationStep: Codable, Identifiable, Hashable {
         htmlPath: String? = nil,
         pageText: String? = nil
     ) {
-        self.id = UUID()
-        self.timestamp = Date()
+        self.id = id
+        self.timestamp = timestamp
         self.appName = appName
         self.windowTitle = windowTitle
         self.url = url
