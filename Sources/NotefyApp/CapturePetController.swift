@@ -146,9 +146,9 @@ private struct CaptureRailView: View {
                         hovered = (hovered == .capture) ? nil : .capture
                     }
                 }
-                railButton(.text, icon: .text, help: "Selected text — ⌘⇧T") { perform(captureText) }
-                railButton(.audio, icon: .audio, help: "Computer audio — ⌘⇧A") { perform(toggleAudio) }
-                railButton(.meeting, icon: .meeting, help: "Meeting notes — ⌘⇧M") { perform(toggleMeeting) }
+                railButton(.text, icon: .text, help: "Selected text — \(HotkeyBindings.label(for: .selectedText))") { perform(captureText) }
+                railButton(.audio, icon: .systemAudio, help: "Computer audio — \(HotkeyBindings.label(for: .voice))") { perform(toggleAudio) }
+                railButton(.meeting, icon: .audio, help: "Meeting notes — \(HotkeyBindings.label(for: .meeting))") { perform(toggleMeeting) }
             }
             .padding(.horizontal, 6)
             .padding(.top, 7)
@@ -306,7 +306,7 @@ private struct RailPressStyle: ButtonStyle {
 }
 
 struct OverlayIcon: View {
-    enum Kind { case capture, text, audio, meeting, microphone, window, region, spark }
+    enum Kind { case capture, text, audio, meeting, microphone, window, region, spark, systemAudio }
     let kind: Kind
     var tint: Color = NotefyTheme.ink
 
@@ -330,6 +330,18 @@ struct OverlayIcon: View {
                 path.move(to: p(20,16)); path.addLine(to: p(20,18)); path.addQuadCurve(to: p(18,20), control: p(20,20)); path.addLine(to: p(16,20))
                 path.move(to: p(8,20)); path.addLine(to: p(6,20)); path.addQuadCurve(to: p(4,18), control: p(4,20)); path.addLine(to: p(4,16)); stroke(path)
                 stroke(Path(ellipseIn: CGRect(x: 8.8*sx, y: 8.8*sy, width: 6.4*sx, height: 6.4*sy)))
+            case .systemAudio:
+                // A display with sound coming off it — computer audio, rather
+                // than the waveform that now belongs to meetings.
+                path.addRoundedRect(in: CGRect(x: 3*sx, y: 5*sy, width: 13*sx, height: 10*sy),
+                                    cornerSize: CGSize(width: 2*sx, height: 2*sy))
+                path.move(to: p(7,19)); path.addLine(to: p(12,19))
+                path.move(to: p(9.5,15)); path.addLine(to: p(9.5,19))
+                stroke(path)
+                var waves = Path()
+                waves.move(to: p(18,8)); waves.addQuadCurve(to: p(18,16), control: p(21,12))
+                waves.move(to: p(20.5,6)); waves.addQuadCurve(to: p(20.5,18), control: p(24,12))
+                stroke(waves)
             case .spark:
                 // Four-point star, drawn on the same grid and stroke as the rest.
                 path.move(to: p(12,3))

@@ -51,8 +51,8 @@ struct AuroraOnboarding: View {
                     case 1: permissions
                     case 2: microphone
                     case 3: model
-                    case 4: shortcuts
-                    default: tryIt
+                    case 4: tryIt
+                    default: shortcuts
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
@@ -118,12 +118,6 @@ struct AuroraOnboarding: View {
             if step == 1, !canLeavePermissions {
                 Text("Screen recording is the one Mindspace can't work without.")
                     .font(Aurora.ui(12, .medium)).foregroundStyle(fgFaint)
-            }
-            if step == lastStep, !capturedSomething {
-                Button("Skip for now") { finish() }
-                    .buttonStyle(.plain)
-                    .font(Aurora.ui(13))
-                    .foregroundStyle(fgFaint)
             }
             Button {
                 if step >= lastStep { finish() } else { withAnimation(.smooth(duration: 0.3)) { step += 1 } }
@@ -506,7 +500,7 @@ struct AuroraOnboarding: View {
     private var tryIt: some View {
         page(capturedSomething ? "Nice — that's the whole loop" : "Let's try it out",
              capturedSomething
-             ? "It's saved in your first note with your thought attached. Open Mindspace and it'll be sitting there waiting for you."
+             ? "It's saved in your first note with your thought attached. Next, pick the keys you'll use to do that from anywhere."
              : "Hit \(HotkeyBindings.label(for: .captureRail)) and grab anything on screen — this window works fine. Jot a line about why you kept it, hit Keep, and you'll land in Mindspace with something already in it.") {
             VStack(spacing: 16) {
                 if capturedSomething {
