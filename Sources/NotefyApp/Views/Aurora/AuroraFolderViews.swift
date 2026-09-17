@@ -66,9 +66,13 @@ struct AuroraFolderNode: View {
     var onOpen: () -> Void
     var onMove: (CGPoint) -> Void
     var onRename: (String) -> Void
+    var onRightClick: ((CGPoint) -> Void)? = nil
+    /// Notes dropped on this folder. Returns true when they were filed.
+    var onDropNotes: (([URL]) -> Bool)? = nil
 
     @State private var drag: CGSize = .zero
     @State private var hover = false
+    @State private var targeted = false
     @State private var editing = false
     @State private var draft = ""
     @Environment(\.accessibilityReduceMotion) private var reduceMotion
@@ -126,8 +130,9 @@ struct AuroraFolderNode: View {
             }
         }
         .frame(width: 212)
-        .opacity(dimmed ? 0.28 : 1)
-        .saturation(dimmed ? 0.25 : 1)
+        // Search dims what doesn't match. It used to drain the colour too,
+        // which made the folders look x-rayed rather than quiet.
+        .opacity(dimmed ? 0.34 : 1)
         .offset(drag)
         .onHover { hover = $0 && !dimmed }
         .onTapGesture(count: 2) { if !tile.isUnfiled { draft = tile.name; editing = true } }
@@ -149,6 +154,23 @@ struct AuroraFolderNode: View {
             if editing { onRename(draft) }
             editing = false
         }
+        .modifier(AuroraOptionalRightClick(action: onRightClick))
+        // A note dropped on the folder is filed in it. The pile lifts and
+        // lights while it is over the target, so the aim is never a guess.
+        .scaleEffect(targeted ? 1.06 : 1)
+        .background {
+            RoundedRectangle(cornerRadius: 24, style: .continuous)
+                .fill(Aurora.accentSoft.opacity(targeted ? 0.9 : 0))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 24, style: .continuous)
+                        .strokeBorder(Aurora.accent.opacity(targeted ? 0.85 : 0), lineWidth: 2)
+                }
+                .padding(-10)
+        }
+        .animation(.smooth(duration: 0.16), value: targeted)
+        .dropDestination(for: URL.self) { urls, _ in
+            onDropNotes?(urls) ?? false
+        } isTargeted: { targeted = $0 && onDropNotes != nil }
     }
 
     private func tabOffset(_ index: Int) -> CGSize {
@@ -173,6 +195,8 @@ struct AuroraFocusOverlay: View {
     var onClose: () -> Void
     var onOpenNote: (URL) -> Void
     var onNoteRightClick: ((CanvasNoteSnapshot, CGPoint) -> Void)? = nil
+    /// Dragging a note out is a request to see the rest of the library.
+    var onDragNoteOut: (() -> Void)? = nil
 
     @State private var bloom = false
     @State private var hovered: URL?
@@ -227,10 +251,13 @@ struct AuroraFocusOverlay: View {
             } else {
                 ScrollView(.horizontal, showsIndicators: false) {
                     HStack(spacing: spacing) {
-                        ForEach(Array(tile.notes.enumerated()), id: \.element.id) { i, note in
-                            AuroraNoteCard(note: note, tint: tile.tints[i % tile.tints.count]) {
-                                onOpenNote(note.url)
-                            }
+                        ForEach(Array(tile.notesByRecency.enumerated()), id: \.element.id) { i, note in
+                            AuroraNoteCard(note: note,
+                                           tint: tile.tints[i % tile.tints.count],
+                                           isNew: note.url == tile.freshNoteID,
+                                           open: { onOpenNote(note.url) },
+                                           onRightClick: { point in onNoteRightClick?(note, point) },
+                                           onDragStart: onDragNoteOut)
                             .offset(
                                 x: bloom ? 0 : collapsedX(i),
                                 y: bloom ? crest(i) + (hovered == note.url ? -16 : 0) : 270
@@ -348,24 +375,40 @@ struct AuroraFocusOverlay: View {
 struct AuroraNoteCard: View {
     let note: CanvasNoteSnapshot
     var tint: Int
+    /// The most recent note in its folder, when that was today.
+    var isNew: Bool = false
     var open: () -> Void
     var onRightClick: ((CGPoint) -> Void)? = nil
+    /// Called as the card is picked up, so an open folder can get out of the
+    /// way and let you see where you might put it.
+    var onDragStart: (() -> Void)? = nil
     @State private var hover = false
 
     var body: some View {
         Button(action: open) {
             VStack(alignment: .leading, spacing: 0) {
-                ZStack(alignment: .bottomLeading) {
-                    LinearGradient(colors: [Aurora.tint(tint).opacity(0.95), Aurora.tint(tint).opacity(0.5)],
+                // Badges ride in the top-right corner of the colour band, out
+                // of the way of the title underneath it.
+                ZStack(alignment: .topTrailing) {
+                    LinearGradient(colors: [Aurora.tint(tint), Aurora.tint(tint).opacity(0.74)],
                                    startPoint: .topLeading, endPoint: .bottomTrailing)
-                    if note.hasOrganizedNote {
-                        Text("ORGANIZED")
-                            .font(Aurora.mono(8.5)).tracking(1)
-                            .foregroundStyle(Aurora.ink2)
-                            .padding(.horizontal, 7).padding(.vertical, 3)
-                            .background(Aurora.surface.opacity(0.8), in: Capsule())
-                            .padding(9)
+                    HStack(spacing: 5) {
+                        if isNew {
+                            Text("NEW")
+                                .font(Aurora.mono(8.5)).tracking(1)
+                                .foregroundStyle(Aurora.onSolid)
+                                .padding(.horizontal, 7).padding(.vertical, 3)
+                                .background(Aurora.solid, in: Capsule())
+                        }
+                        if note.hasOrganizedNote {
+                            Text("ORGANIZED")
+                                .font(Aurora.mono(8.5)).tracking(1)
+                                .foregroundStyle(Aurora.ink2)
+                                .padding(.horizontal, 7).padding(.vertical, 3)
+                                .background(Aurora.surface.opacity(0.8), in: Capsule())
+                        }
                     }
+                    .padding(9)
                 }
                 .frame(height: 66)
                 .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
@@ -402,6 +445,42 @@ struct AuroraNoteCard: View {
         .onHover { hover = $0 }
         .animation(.smooth(duration: 0.2), value: hover)
         .modifier(AuroraOptionalRightClick(action: onRightClick))
+        // Pick a note up and drop it on a folder to file it there. The note's
+        // own file is what travels, so it can also be dropped into Finder.
+        // The payload is evaluated when the drag actually begins, which is
+        // the only hook SwiftUI gives for "picked up".
+        .draggable(dragPayload()) {
+            AuroraDragChip(title: note.title, tint: tint)
+        }
+    }
+
+    private func dragPayload() -> URL {
+        if let onDragStart {
+            DispatchQueue.main.async { onDragStart() }
+        }
+        return note.url
+    }
+}
+
+/// What a dragged note looks like under the cursor: small, legible, and the
+/// note's own colour, so you can see what you are carrying.
+struct AuroraDragChip: View {
+    let title: String
+    let tint: Int
+
+    var body: some View {
+        HStack(spacing: 8) {
+            RoundedRectangle(cornerRadius: 4, style: .continuous)
+                .fill(Aurora.tint(tint))
+                .frame(width: 14, height: 14)
+            Text(title)
+                .font(Aurora.ui(13, .medium))
+                .foregroundStyle(Aurora.ink)
+                .lineLimit(1)
+        }
+        .padding(.horizontal, 12).padding(.vertical, 9)
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
     }
 }
 
@@ -424,7 +503,13 @@ struct AuroraFeedView: View {
     @Binding var sort: AuroraSort
     @Binding var focused: String?
     var onOpenNote: (URL) -> Void
+    var onRenameFolder: (AuroraFolderTile, String) -> Void
+    var onDeleteFolder: (AuroraFolderTile) -> Void
+    var onRenameNote: (CanvasNoteSnapshot, String) -> Void
+    var onDeleteNote: (CanvasNoteSnapshot) -> Void
     var onNoteRightClick: ((CanvasNoteSnapshot, CGPoint) -> Void)? = nil
+    /// Notes dropped onto a folder row.
+    var onDropNotes: ((AuroraFolderTile, [URL]) -> Bool)? = nil
 
     var body: some View {
         ScrollView {
@@ -434,9 +519,15 @@ struct AuroraFeedView: View {
                 } else {
                     header
                     ForEach(tiles) { tile in
-                        AuroraFolderRow(tile: tile) {
-                            withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) { focused = tile.id }
-                        }
+                        AuroraFolderRow(tile: tile,
+                                        open: {
+                                            withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) { focused = tile.id }
+                                        },
+                                        onRename: { onRenameFolder(tile, $0) },
+                                        onDelete: { onDeleteFolder(tile) },
+                                        onDropNotes: onDropNotes.map { handler in
+                                            { urls in handler(tile, urls) }
+                                        })
                     }
                     if tiles.isEmpty {
                         Text("Nothing here yet.")
@@ -447,7 +538,7 @@ struct AuroraFeedView: View {
             }
             .frame(maxWidth: 900, alignment: .leading)
             .frame(maxWidth: .infinity)
-            .padding(.top, 150).padding(.bottom, 160)
+            .padding(.top, 194).padding(.bottom, 160)
         }
         .scrollIndicators(.never)
     }
@@ -456,7 +547,7 @@ struct AuroraFeedView: View {
         HStack(spacing: 14) {
             Text("\(tiles.count) folders")
                 .font(Aurora.mono(10.5)).tracking(1.4).textCase(.uppercase)
-                .foregroundStyle(Aurora.ink3)
+                .foregroundStyle(Aurora.ink)
             Spacer()
             sortRail
         }
@@ -498,10 +589,13 @@ struct AuroraFeedView: View {
 
             // A list view stays a list when you open a folder — dropping into a
             // grid halfway through was a change of mode nobody asked for.
-            ForEach(Array(tile.notes.enumerated()), id: \.element.id) { i, note in
+            ForEach(Array(tile.notesByRecency.enumerated()), id: \.element.id) { i, note in
                 AuroraNoteRow(note: note,
                               tint: tile.tints[i % tile.tints.count],
+                              isNew: note.url == tile.freshNoteID,
                               open: { onOpenNote(note.url) },
+                              onRename: { onRenameNote(note, $0) },
+                              onDelete: { onDeleteNote(note) },
                               onRightClick: { point in onNoteRightClick?(note, point) })
             }
 
@@ -514,17 +608,97 @@ struct AuroraFeedView: View {
     }
 }
 
-/// A note as a row, for the list view.
+
+/// Swipe a row to the right and Delete appears behind it. Folders and notes
+/// both use it, so the gesture means the same thing wherever you are in the
+/// list. The first press arms; the second one does it.
+struct AuroraSwipeRow<Content: View>: View {
+    var enabled: Bool = true
+    /// One press. Whether it actually happens is settled in a confirmation
+    /// window, not by pressing the same red button twice.
+    var onDelete: () -> Void
+    @ViewBuilder var content: (_ revealed: Bool, _ close: @escaping () -> Void) -> Content
+
+    @State private var offset: CGFloat = 0
+
+    private let revealed: CGFloat = 116
+
+    var body: some View {
+        ZStack(alignment: .leading) {
+            if offset > 2 {
+                Button {
+                    onDelete()
+                    offset = 0
+                } label: {
+                    VStack(spacing: 3) {
+                        Image(systemName: "trash").font(.system(size: 13, weight: .bold))
+                        Text("DELETE")
+                            .font(Aurora.mono(9)).tracking(1)
+                    }
+                    .foregroundStyle(.white)
+                    .frame(width: revealed - 14, height: 58)
+                    .background(Aurora.danger, in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                }
+                .buttonStyle(AuroraPressStyle())
+                .padding(.leading, 2)
+                .transition(.opacity)
+            }
+
+            content(offset > 0, close)
+                .background(Aurora.ground.opacity(offset > 0 ? 0.92 : 0),
+                            in: RoundedRectangle(cornerRadius: 14, style: .continuous))
+                .offset(x: offset)
+                // High priority, or the row's own button swallows the drag and
+                // opens the thing mid-swipe.
+                .highPriorityGesture(
+                    DragGesture(minimumDistance: 12)
+                        .onChanged { v in
+                            guard enabled else { return }
+                            offset = max(0, min(revealed, v.translation.width))
+                        }
+                        .onEnded { v in
+                            guard enabled else { return }
+                            offset = v.translation.width > revealed / 2.2 ? revealed : 0
+                        }
+                )
+        }
+        .animation(.spring(response: 0.32, dampingFraction: 0.86), value: offset)
+    }
+
+    private func close() {
+        offset = 0
+    }
+}
+
+/// A note as a row. Renames on a double-click, deletes on a swipe, and
+/// right-clicks into the one thing neither gesture covers: filing it somewhere
+/// else.
 struct AuroraNoteRow: View {
     let note: CanvasNoteSnapshot
     var tint: Int
+    /// The most recent note in its folder, when that was today.
+    var isNew: Bool = false
     var open: () -> Void
+    var onRename: (String) -> Void
+    var onDelete: () -> Void
     var onRightClick: ((CGPoint) -> Void)? = nil
 
     @State private var hover = false
+    @State private var editing = false
+    @State private var draft = ""
+    @FocusState private var nameFocused: Bool
 
     var body: some View {
-        Button(action: open) {
+        AuroraSwipeRow(enabled: !editing, onDelete: onDelete) { revealed, close in
+            row(revealed: revealed, close: close)
+        }
+        .draggable(note.url) {
+            AuroraDragChip(title: note.title, tint: tint)
+        }
+    }
+
+    private func row(revealed: Bool, close: @escaping () -> Void) -> some View {
+        Button(action: { if revealed { close() } else if !editing { open() } }) {
             HStack(spacing: 18) {
                 LinearGradient(colors: [Aurora.tint(tint), Aurora.tint(tint + 2)],
                                startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -535,7 +709,30 @@ struct AuroraNoteRow: View {
 
                 VStack(alignment: .leading, spacing: 3) {
                     HStack(spacing: 8) {
-                        Text(note.title).font(Aurora.title(15.5)).foregroundStyle(Aurora.ink)
+                        if editing {
+                            TextField("", text: $draft)
+                                .textFieldStyle(.plain)
+                                .font(Aurora.title(15.5))
+                                .foregroundStyle(Aurora.ink)
+                                .focused($nameFocused)
+                                .frame(maxWidth: 260, alignment: .leading)
+                                .padding(.horizontal, 7).padding(.vertical, 3)
+                                .background(Aurora.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                                .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                    .strokeBorder(Aurora.focusRing, lineWidth: 2))
+                                .onSubmit { onRename(draft); editing = false }
+                                // Esc abandons the edit; anywhere else commits it.
+                                .onExitCommand { draft = note.title; editing = false }
+                        } else {
+                            Text(note.title).font(Aurora.title(15.5)).foregroundStyle(Aurora.ink)
+                        }
+                        if isNew {
+                            Text("NEW")
+                                .font(Aurora.mono(8.5)).tracking(1)
+                                .foregroundStyle(Aurora.onSolid)
+                                .padding(.horizontal, 7).padding(.vertical, 2)
+                                .background(Aurora.solid, in: Capsule())
+                        }
                         if note.hasOrganizedNote {
                             Text("ORGANIZED")
                                 .font(Aurora.mono(8.5)).tracking(1)
@@ -551,11 +748,13 @@ struct AuroraNoteRow: View {
                 }
                 Spacer(minLength: 12)
                 HStack(spacing: 16) {
+                    // The count is the one piece of colour in the row, so it
+                    // carries the app's own green rather than another grey.
                     Text("\(note.captureCount) captures")
                         .font(Aurora.mono(9.5)).tracking(1)
-                        .foregroundStyle(Aurora.ink2)
+                        .foregroundStyle(Aurora.accent)
                         .padding(.horizontal, 9).padding(.vertical, 5)
-                        .background(Aurora.surface2, in: Capsule())
+                        .background(Aurora.accentSoft, in: Capsule())
                     Text(note.createdAt.auroraRelative)
                         .font(Aurora.ui(12, .regular)).foregroundStyle(Aurora.ink3)
                         .frame(width: 70, alignment: .trailing)
@@ -571,18 +770,54 @@ struct AuroraNoteRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
+        .onTapGesture(count: 2) {
+            draft = note.title
+            editing = true
+            nameFocused = true
+        }
         .animation(.smooth(duration: 0.18), value: hover)
         .modifier(AuroraOptionalRightClick(action: onRightClick))
     }
 }
 
+/// A folder as a row. Swipe it to the right to uncover Delete, and rename it
+/// in place with a double-click — the same gesture that renames one on the
+/// canvas, so the list is not a lesser view of the same thing.
 struct AuroraFolderRow: View {
     let tile: AuroraFolderTile
     var open: () -> Void
+    var onRename: (String) -> Void
+    var onDelete: () -> Void
+    /// Notes dropped on this row. Returns true when they were filed.
+    var onDropNotes: (([URL]) -> Bool)? = nil
+
     @State private var hover = false
+    @State private var targeted = false
+    @State private var editing = false
+    @State private var draft = ""
+    @FocusState private var nameFocused: Bool
 
     var body: some View {
-        Button(action: open) {
+        // Unfiled is not a folder anyone can delete, so its row never opens.
+        AuroraSwipeRow(enabled: !tile.isUnfiled && !editing, onDelete: onDelete) { revealed, close in
+            row(revealed: revealed, close: close)
+        }
+        .background {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .fill(Aurora.accentSoft.opacity(targeted ? 1 : 0))
+                .overlay {
+                    RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(Aurora.accent.opacity(targeted ? 0.8 : 0), lineWidth: 1.5)
+                }
+        }
+        .animation(.smooth(duration: 0.16), value: targeted)
+        .dropDestination(for: URL.self) { urls, _ in
+            onDropNotes?(urls) ?? false
+        } isTargeted: { targeted = $0 && onDropNotes != nil }
+    }
+
+    private func row(revealed: Bool, close: @escaping () -> Void) -> some View {
+        Button(action: { if revealed { close() } else if !editing { open() } }) {
             HStack(spacing: 18) {
                 LinearGradient(colors: tile.tints.map { Aurora.tint($0) },
                                startPoint: .topLeading, endPoint: .bottomTrailing)
@@ -590,7 +825,23 @@ struct AuroraFolderRow: View {
                     .clipShape(RoundedRectangle(cornerRadius: 13, style: .continuous))
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(tile.name).font(Aurora.title(18)).foregroundStyle(Aurora.ink)
+                    if editing {
+                        TextField("", text: $draft)
+                            .textFieldStyle(.plain)
+                            .font(Aurora.title(18))
+                            .foregroundStyle(Aurora.ink)
+                            .focused($nameFocused)
+                            .frame(maxWidth: 260, alignment: .leading)
+                            .padding(.horizontal, 7).padding(.vertical, 3)
+                            .background(Aurora.surface, in: RoundedRectangle(cornerRadius: 8, style: .continuous))
+                            .overlay(RoundedRectangle(cornerRadius: 8, style: .continuous)
+                                .strokeBorder(Aurora.focusRing, lineWidth: 2))
+                            .onSubmit { onRename(draft); editing = false }
+                            // Esc abandons the edit; anywhere else commits it.
+                            .onExitCommand { draft = tile.name; editing = false }
+                    } else {
+                        Text(tile.name).font(Aurora.title(18)).foregroundStyle(Aurora.ink)
+                    }
                     Text(tile.notes.prefix(3).map(\.title).joined(separator: " · "))
                         .font(Aurora.ui(12.5, .regular)).foregroundStyle(Aurora.ink3).lineLimit(1)
                 }
@@ -598,9 +849,9 @@ struct AuroraFolderRow: View {
                 HStack(spacing: 18) {
                     Text("\(tile.captureCount) captures")
                         .font(Aurora.mono(9.5)).tracking(1.1)
-                        .foregroundStyle(Aurora.ink2)
+                        .foregroundStyle(Aurora.accent)
                         .padding(.horizontal, 9).padding(.vertical, 5)
-                        .background(Aurora.surface2, in: Capsule())
+                        .background(Aurora.accentSoft, in: Capsule())
                     Text("\(tile.notes.count)")
                         .font(Aurora.ui(14, .semibold)).monospacedDigit()
                         .foregroundStyle(Aurora.ink2).frame(width: 22, alignment: .trailing)
@@ -616,6 +867,12 @@ struct AuroraFolderRow: View {
         }
         .buttonStyle(.plain)
         .onHover { hover = $0 }
+        .onTapGesture(count: 2) {
+            guard !tile.isUnfiled else { return }
+            draft = tile.name
+            editing = true
+            nameFocused = true
+        }
         .animation(.smooth(duration: 0.18), value: hover)
     }
 }

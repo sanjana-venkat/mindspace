@@ -13,6 +13,19 @@ struct AuroraFolderTile: Identifiable {
 
     var captureCount: Int { notes.reduce(0) { $0 + $1.captureCount } }
     var isUnfiled: Bool { folderID == nil }
+
+    /// Newest first. Opening a folder should put what you were last working on
+    /// in front of you, not whatever happens to sort first.
+    var notesByRecency: [CanvasNoteSnapshot] {
+        notes.sorted { $0.createdAt > $1.createdAt }
+    }
+
+    /// The note to mark as new, when it is recent enough to be worth marking.
+    var freshNoteID: URL? {
+        guard let newest = notesByRecency.first,
+              newest.createdAt > Date().addingTimeInterval(-86_400) else { return nil }
+        return newest.url
+    }
 }
 
 /// Pan and zoom in a reference type, so the AppKit scroll monitor always reads
@@ -44,4 +57,9 @@ enum AuroraFilter: String, CaseIterable, Identifiable {
     case all, recent
     var id: String { rawValue }
     var label: String { self == .all ? "All folders" : "Recent" }
+}
+
+/// Which input a session recording is listening to. The rail offers both.
+enum SessionAudioSource: String {
+    case systemAudio, microphone
 }

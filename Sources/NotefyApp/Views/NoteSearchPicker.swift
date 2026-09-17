@@ -3,6 +3,10 @@ import SwiftUI
 /// Searchable note picker (by name or folder path) reused wherever the user needs to choose
 /// a save/move/forward destination: the "Saving to" pill, chunk move/forward, and the
 /// capture-review popup.
+///
+/// Painted in the Aurora palette like the rest of the app — it used to keep the
+/// old cream theme, which made it look like a different application had opened
+/// on top of this one, and left it white while the app was dark.
 struct NoteSearchPicker: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
@@ -20,42 +24,54 @@ struct NoteSearchPicker: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: 11) {
             Text(title.uppercased())
-                .font(NotefyFont.label)
-                .tracking(1.1)
-                .foregroundStyle(NotefyTheme.inkSoft)
+                .font(Aurora.mono(9.5))
+                .tracking(1.3)
+                .foregroundStyle(Aurora.ink3)
 
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
                 Image(systemName: "magnifyingglass")
-                    .font(.system(size: 11))
-                    .foregroundStyle(NotefyTheme.inkFaint)
-                TextField("Search by name or folder…", text: $query)
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Aurora.ink3)
+                TextField("Search by name, folder or words inside", text: $query)
                     .textFieldStyle(.plain)
+                    .font(Aurora.ui(13))
+                    .foregroundStyle(Aurora.ink)
                     .focused($searchFocused)
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 7)
-            .background(NotefyTheme.sandDeep, in: RoundedRectangle(cornerRadius: 8))
+            .padding(.horizontal, 11)
+            .padding(.vertical, 9)
+            .background(Aurora.surface2, in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 11, style: .continuous)
+                    .strokeBorder(Aurora.line, lineWidth: 1)
+            }
 
             if let onCreateNew {
                 Button {
                     onCreateNew()
                     dismiss()
                 } label: {
-                    Label("New note", systemImage: "plus.circle")
-                        .font(NotefyFont.body.weight(.medium))
+                    HStack(spacing: 8) {
+                        Image(systemName: "plus.circle")
+                            .font(.system(size: 13, weight: .semibold))
+                        Text("New note").font(Aurora.ui(13.5, .medium))
+                    }
+                    .foregroundStyle(Aurora.ink)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(.horizontal, 8).padding(.vertical, 7)
+                    .contentShape(Rectangle())
                 }
-                .buttonStyle(.plain)
-                .foregroundStyle(NotefyTheme.ink)
+                .buttonStyle(AuroraHoverRow())
             }
 
-            Divider()
+            Rectangle().fill(Aurora.line).frame(height: 1)
 
             if results.isEmpty {
                 Text(query.isEmpty ? "No notes yet." : "No notes match \u{201C}\(query)\u{201D}.")
-                    .font(NotefyFont.caption)
-                    .foregroundStyle(NotefyTheme.inkFaint)
+                    .font(Aurora.ui(12.5))
+                    .foregroundStyle(Aurora.ink3)
                     .padding(.vertical, 6)
             } else {
                 ScrollView {
@@ -67,35 +83,44 @@ struct NoteSearchPicker: View {
                             } label: {
                                 row(for: destination)
                             }
-                            .buttonStyle(.plain)
+                            .buttonStyle(AuroraHoverRow())
                         }
                     }
                 }
+                .scrollIndicators(.never)
                 .frame(maxHeight: 260)
             }
         }
         .padding(16)
-        .frame(width: 320)
-        .background(NotefyTheme.cardPaper)
+        .frame(width: 330)
+        .background(AuroraGround())
         .onAppear { searchFocused = true }
     }
 
     private func row(for destination: NoteDestination) -> some View {
         let path = appState.folderPath(for: appState.folderID(for: destination.url))
-        return VStack(alignment: .leading, spacing: 2) {
-            Text(destination.title)
-                .font(NotefyFont.body.weight(.medium))
-                .foregroundStyle(NotefyTheme.ink)
-                .lineLimit(1)
-            if !path.isEmpty {
-                Label(path, systemImage: "folder")
-                    .font(NotefyFont.caption)
-                    .foregroundStyle(NotefyTheme.inkFaint)
+        return HStack(spacing: 10) {
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(Aurora.tint(Aurora.tintIndex(for: destination.title)))
+                .frame(width: 8, height: 8)
+
+            VStack(alignment: .leading, spacing: 2) {
+                Text(destination.title)
+                    .font(Aurora.ui(13.5, .medium))
+                    .foregroundStyle(Aurora.ink)
+                    .lineLimit(1)
+                if !path.isEmpty {
+                    Text(path)
+                        .font(Aurora.ui(11.5))
+                        .foregroundStyle(Aurora.ink3)
+                        .lineLimit(1)
+                }
             }
+            Spacer(minLength: 0)
         }
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.horizontal, 8)
-        .padding(.vertical, 6)
+        .padding(.horizontal, 9)
+        .padding(.vertical, 7)
         .contentShape(Rectangle())
     }
 }

@@ -11,7 +11,14 @@ let package = Package(
         .executable(name: "notefy-app", targets: ["NotefyApp"])
     ],
     dependencies: [
-        .package(url: "https://github.com/argmaxinc/WhisperKit.git", from: "0.9.0")
+        // Parakeet does all the on-device speech now — the live transcript and
+        // the finished one. WhisperKit used to do the second job; carrying two
+        // speech models meant two downloads and two sets of weights in memory
+        // for one task.
+        // Vendored under ThirdParty: upstream ships a 49MB prebuilt Rust
+        // xcframework this app never calls, and a build should not depend on
+        // a binary artifact download. See ThirdParty/FluidAudio/Package.swift.
+        .package(path: "ThirdParty/FluidAudio")
     ],
     targets: [
         .target(
@@ -28,7 +35,7 @@ let package = Package(
             name: "NotefyApp",
             dependencies: [
                 "NotefyCore",
-                .product(name: "WhisperKit", package: "WhisperKit")
+                .product(name: "FluidAudio", package: "FluidAudio")
             ],
             path: "Sources/NotefyApp",
             resources: [.process("Resources")]

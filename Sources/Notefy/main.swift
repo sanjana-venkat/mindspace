@@ -180,7 +180,7 @@ consoleQueue.async {
                 if !tracker.isTracking {
                     print("\n=== CURRENT MODEL CONFIGURATIONS ===")
                     print("🔊 AUDIO MODEL PROVIDER: \(settings.audio.provider.rawValue.uppercased())")
-                    print("   API URL:   \(settings.audio.apiURL.isEmpty ? "Local CoreML / WhisperKit" : settings.audio.apiURL)")
+                    print("   API URL:   \(settings.audio.apiURL.isEmpty ? "Local CoreML / Parakeet" : settings.audio.apiURL)")
                     print("   Model:     \(settings.audio.modelName)")
                     print("   API Key:   \(settings.audio.apiKey.isEmpty ? "None" : "••••••••")")
                     print("\n👁️ VISION MODEL PROVIDER: \(settings.vision.provider.rawValue.uppercased())")

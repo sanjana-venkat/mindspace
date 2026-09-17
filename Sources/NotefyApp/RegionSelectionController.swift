@@ -106,6 +106,8 @@ final class RegionSelectionController {
     }
 
     private func finish(_ result: Result<URL, Error>) {
+        // If this ends without a review panel — a cancel, or a region too
+        // small to keep — nothing else will give the screen back.
         NSCursor.arrow.set()
         panel?.orderOut(nil)
         panel = nil
@@ -113,6 +115,7 @@ final class RegionSelectionController {
         sourceURL = nil
         let callback = completion
         completion = nil
+        if case .failure = result { FocusKeeper.restore() }
         callback?(result)
     }
 

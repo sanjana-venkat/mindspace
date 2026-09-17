@@ -2,7 +2,12 @@ import Foundation
 
 public class VisionClient {
     private let config: VisionConfig
-    
+
+    /// Called when a request had to fall forward from a retired hosted model
+    /// to the one the provider named, so the app can save the new name instead
+    /// of failing the same way tomorrow.
+    public var onModelAdopted: ((String) -> Void)?
+
     public init(config: VisionConfig) {
         self.config = config
     }
@@ -63,7 +68,9 @@ public class VisionClient {
     }
 
     private var geminiClient: GeminiClient {
-        GeminiClient(apiKey: config.apiKey, model: config.modelName)
+        let client = GeminiClient(apiKey: config.apiKey, model: config.modelName)
+        client.didAdoptModel = onModelAdopted
+        return client
     }
 
     /// One capture fed into `generateMentalNote`: what the user was looking at (with its

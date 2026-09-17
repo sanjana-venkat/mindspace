@@ -54,35 +54,43 @@ struct AuroraSelect<ID: Hashable>: View {
             }
             .buttonStyle(.plain)
 
+            // Inline, in the flow: opening it pushes the page, and the page is
+            // clipped by the panel it sits in. Floating it as an overlay put
+            // it underneath the row below, which was worse.
             if open {
-                VStack(spacing: 1) {
-                    ForEach(options) { option in
-                        Button {
-                            selection = option.id
-                            withAnimation(.smooth(duration: 0.2)) { open = false }
-                        } label: {
-                            HStack(spacing: 8) {
-                                Image(systemName: "checkmark")
-                                    .font(.system(size: 9, weight: .bold))
-                                    .opacity(option.id == selection ? 1 : 0)
-                                Text(option.title)
-                                    .font(Aurora.ui(13, .regular))
-                                    .lineLimit(1)
-                                Spacer(minLength: 0)
-                            }
-                            .foregroundStyle(fg)
-                            .padding(.horizontal, 12).padding(.vertical, 9)
-                            .contentShape(Rectangle())
-                        }
-                        .buttonStyle(AuroraHoverRow())
-                    }
-                }
-                .padding(5)
-                .background(fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
-                    .strokeBorder(stroke, lineWidth: 1))
-                .transition(.opacity.combined(with: .move(edge: .top)))
+                list.transition(.opacity.combined(with: .move(edge: .top)))
             }
         }
+    }
+
+    private var list: some View {
+        VStack(spacing: 1) {
+            ForEach(options) { option in
+                Button {
+                    selection = option.id
+                    withAnimation(.smooth(duration: 0.2)) { open = false }
+                } label: {
+                    HStack(spacing: 8) {
+                        Image(systemName: "checkmark")
+                            .font(.system(size: 9, weight: .bold))
+                            .opacity(option.id == selection ? 1 : 0)
+                        Text(option.title)
+                            .font(Aurora.ui(13, .regular))
+                            .lineLimit(1)
+                        Spacer(minLength: 0)
+                    }
+                    .foregroundStyle(fg)
+                    .padding(.horizontal, 12).padding(.vertical, 9)
+                    .contentShape(Rectangle())
+                }
+                .buttonStyle(AuroraHoverRow())
+            }
+        }
+        .padding(5)
+        .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .background(fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+            .strokeBorder(stroke, lineWidth: 1))
+        .shadow(color: .black.opacity(0.3), radius: 22, y: 10)
     }
 }

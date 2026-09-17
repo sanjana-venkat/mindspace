@@ -81,7 +81,7 @@ public enum ModelProvider: String, Codable, CaseIterable {
         switch self {
         case .local: return "qwen2.5vl:7b"
         case .api: return "gpt-4o"
-        case .gemini: return "gemini-2.5-flash"
+        case .gemini: return GeminiClient.fallbackModel
         case .anthropic: return "claude-sonnet-4-5"
         }
     }
@@ -98,7 +98,7 @@ public enum ModelProvider: String, Codable, CaseIterable {
         case .api:
             return ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"]
         case .gemini:
-            return ["gemini-2.5-flash", "gemini-2.5-pro", "gemini-2.0-flash"]
+            return ["gemini-3.6-flash", "gemini-3-pro", "gemini-2.5-flash", "gemini-2.5-pro"]
         case .anthropic:
             return ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"]
         }
@@ -137,7 +137,7 @@ public enum ModelProvider: String, Codable, CaseIterable {
     }
 }
 
-public struct AudioConfig: Codable {
+public struct AudioConfig: Codable, Equatable {
     public var provider: ModelProvider
     public var apiURL: String // e.g. "https://api.openai.com/v1/audio/transcriptions"
     public var apiKey: String
@@ -153,7 +153,7 @@ public struct AudioConfig: Codable {
     }
 }
 
-public struct VisionConfig: Codable {
+public struct VisionConfig: Codable, Equatable {
     public var provider: ModelProvider
     public var apiURL: String // e.g. "https://api.openai.com/v1/chat/completions" or "http://localhost:11434/api/chat"
     public var apiKey: String
@@ -167,7 +167,7 @@ public struct VisionConfig: Codable {
     }
 }
 
-public struct NotefySettings: Codable {
+public struct NotefySettings: Codable, Equatable {
     public var audio: AudioConfig
     public var vision: VisionConfig
     /// One key per provider, so switching between them doesn't lose the others.
@@ -215,7 +215,12 @@ public struct NotefySettings: Codable {
         }
     }
     
-    // Load configuration settings from local JSON file
+    /// Reads the settings file only. Deliberately does not touch the Keychain:
+    /// `SecItemCopyMatching` blocks for as long as macOS takes to answer — and
+    /// it asks the user when the app's signature has changed, which every
+    /// unsigned rebuild does. Doing that before the first window exists left
+    /// the app running with nothing on screen at all. Call
+    /// `attachStoredKeys()` off the main thread once the UI is up.
     public static func load(from url: URL) -> NotefySettings {
         guard let data = try? Data(contentsOf: url),
               var settings = try? JSONDecoder().decode(NotefySettings.self, from: data) else {
@@ -224,23 +229,45 @@ public struct NotefySettings: Codable {
             defaults.save(to: url)
             return defaults
         }
-        let containedPlaintext = !settings.audio.apiKey.isEmpty
-            || !settings.vision.apiKey.isEmpty
-            || !(settings.savedKeys ?? [:]).values.allSatisfy(\.isEmpty)
-
         var keys = settings.savedKeys ?? [:]
         if !settings.audio.apiKey.isEmpty { keys["audio." + settings.audio.provider.rawValue] = settings.audio.apiKey }
         if !settings.vision.apiKey.isEmpty { keys[settings.vision.provider.rawValue] = settings.vision.apiKey }
+        settings.savedKeys = keys
+        settings.audio.apiKey = keys["audio." + settings.audio.provider.rawValue] ?? ""
+        settings.vision.apiKey = keys[settings.vision.provider.rawValue] ?? ""
+        return settings
+    }
+
+    /// Every key the Keychain is holding, read in one pass. Slow and possibly
+    /// interactive — never call it on the main thread.
+    public static func storedKeys() -> [String: String] {
+        var keys: [String: String] = [:]
         for provider in ModelProvider.allCases where provider.needsKey {
             let visionAccount = provider.rawValue
             let audioAccount = "audio." + provider.rawValue
             if let stored = ModelSecretStore.read(visionAccount) { keys[visionAccount] = stored }
             if let stored = ModelSecretStore.read(audioAccount) { keys[audioAccount] = stored }
         }
-        settings.savedKeys = keys
-        settings.audio.apiKey = keys["audio." + settings.audio.provider.rawValue] ?? ""
-        settings.vision.apiKey = keys[settings.vision.provider.rawValue] ?? ""
-        if containedPlaintext { settings.save(to: url) }
-        return settings
+        return keys
+    }
+
+    /// Folds those keys in. A key already in memory wins — it is either what
+    /// the user just typed or what was migrated out of the plaintext file.
+    /// Returns true when anything actually changed.
+    @discardableResult
+    public mutating func attachStoredKeys(_ stored: [String: String]) -> Bool {
+        var keys = savedKeys ?? [:]
+        var changed = false
+        for (account, value) in stored where !value.isEmpty {
+            if (keys[account] ?? "").isEmpty {
+                keys[account] = value
+                changed = true
+            }
+        }
+        guard changed else { return false }
+        savedKeys = keys
+        audio.apiKey = keys["audio." + audio.provider.rawValue] ?? audio.apiKey
+        vision.apiKey = keys[vision.provider.rawValue] ?? vision.apiKey
+        return true
     }
 }

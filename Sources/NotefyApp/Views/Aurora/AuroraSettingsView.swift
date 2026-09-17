@@ -7,6 +7,11 @@ struct AuroraSettingsView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var saved = false
+    /// What this Gemini key can actually call, asked of Google rather than
+    /// hardcoded — model names get retired.
+    @State private var geminiModels: [String] = []
+    @State private var loadingModels = false
+    @State private var modelListProblem: String?
     @AppStorage(AuroraAppearance.storageKey) private var appearanceRaw = AuroraAppearance.system.rawValue
     @Environment(\.colorScheme) private var scheme
 
@@ -25,8 +30,8 @@ struct AuroraSettingsView: View {
                         apiURL: $appState.settings.audio.apiURL,
                         apiKey: $appState.settings.audio.apiKey,
                         modelName: $appState.settings.audio.modelName,
-                        localHint: "WhisperKit downloads the chosen Whisper model once, then transcribes on-device.",
-                        modelPlaceholder: "tiny / base / small / medium"
+                        localHint: "Parakeet runs on-device — the same model writes the live transcript and the finished one. It downloads once, about 215MB.",
+                        modelPlaceholder: "parakeet"
                     ) { audioFooter }
                     provider(
                         title: "Screen understanding",
@@ -46,6 +51,9 @@ struct AuroraSettingsView: View {
                 .padding(.top, 34).padding(.bottom, 44)
             }
             .scrollIndicators(.never)
+
+            EmptyView()
+                .onChange(of: appState.settings) { _, _ in appState.saveSettings() }
 
             Button { dismiss() } label: {
                 Image(systemName: "xmark")
@@ -166,15 +174,49 @@ struct AuroraSettingsView: View {
                     hint(current.keyHint)
                 }
 
+                // Google retires model names on its own schedule, so for
+                // Gemini the list comes from the key itself rather than from
+                // whatever was true when this app was built.
+                let live = current == .gemini ? geminiModels : []
+                let offered = live.isEmpty ? current.visionModels : live
+
                 AuroraSelect(
                     label: "Model",
-                    options: current.visionModels.map { AuroraSelect.Option(id: $0, title: $0) },
+                    options: offered.map { AuroraSelect.Option(id: $0, title: $0) },
                     selection: Binding(
                         get: { modelName.wrappedValue },
                         set: { modelName.wrappedValue = $0 ?? current.defaultVisionModel }
                     ),
                     dark: scheme == .dark
                 )
+
+                if current == .gemini {
+                    HStack(spacing: 10) {
+                        Button(loadingModels ? "Checking…" : "Refresh model list") {
+                            Task { await loadGeminiModels(apiKey.wrappedValue) }
+                        }
+                        .buttonStyle(.plain)
+                        .font(Aurora.ui(12, .medium))
+                        .foregroundStyle(Aurora.accent)
+                        .contentShape(Rectangle())
+                        .disabled(loadingModels || apiKey.wrappedValue.isEmpty)
+
+                        if let problem = modelListProblem {
+                            Text(problem).font(Aurora.ui(11.5)).foregroundStyle(Aurora.warning)
+                        } else if !geminiModels.isEmpty {
+                            Text("\(geminiModels.count) models this key can use")
+                                .font(Aurora.ui(11.5)).foregroundStyle(Aurora.ink3)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .task(id: apiKey.wrappedValue) {
+                        guard !apiKey.wrappedValue.isEmpty, geminiModels.isEmpty else { return }
+                        // A key is typed or pasted a character at a time; wait
+                        // for it to settle before asking Google about it.
+                        try? await Task.sleep(for: .milliseconds(800))
+                        await loadGeminiModels(apiKey.wrappedValue)
+                    }
+                }
 
                 if current.showsEndpointField {
                     field("Endpoint", "http://localhost:11434/api/chat", apiURL)
@@ -184,6 +226,33 @@ struct AuroraSettingsView: View {
                 Rectangle().fill(Aurora.line).frame(height: 1)
                 footer()
             }
+        }
+    }
+
+    /// Asks the key what it can actually call. Keeps the picker honest through
+    /// model retirements without shipping a new build.
+    @MainActor
+    private func loadGeminiModels(_ key: String) async {
+        guard !key.isEmpty, !loadingModels else { return }
+        loadingModels = true
+        modelListProblem = nil
+        let result: Result<[String], Error> = await withCheckedContinuation { continuation in
+            GeminiClient.availableModels(apiKey: key) { continuation.resume(returning: $0) }
+        }
+        loadingModels = false
+        switch result {
+        case .success(let models):
+            geminiModels = models
+            if !models.isEmpty, !models.contains(appState.settings.vision.modelName),
+               appState.settings.vision.provider == .gemini {
+                // The saved model no longer exists — move to the closest thing
+                // this key has rather than failing on the next note.
+                appState.settings.vision.modelName = models.first(where: { $0.contains("flash") }) ?? models[0]
+                appState.saveSettings()
+            }
+        case .failure(let error):
+            geminiModels = []
+            modelListProblem = (error as? GeminiFailure)?.summary ?? error.localizedDescription
         }
     }
 
@@ -200,7 +269,7 @@ struct AuroraSettingsView: View {
                 }
                 if appState.audioModelState != .ready, appState.settings.audio.provider == .local {
                     Button("Prepare model") {
-                        Task { await appState.whisperTranscriber.ensureReady(variant: appState.settings.audio.modelName) }
+                        Task { await appState.localTranscriber.ensureReady() }
                     }
                         .buttonStyle(.plain)
                         .font(Aurora.ui(12))

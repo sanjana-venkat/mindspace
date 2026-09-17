@@ -17,6 +17,15 @@ struct AuroraWorkspaceView: View {
     @State private var settingsOpen = false
     @State private var cancelEdits = 0
     @State private var noteMenu: AuroraNoteTarget?
+    @State private var folderMenu: AuroraFolderTarget?
+    @State private var themeSwipe: AuroraThemeSwipe.Move?
+    /// Set when a folder has been asked to be deleted, and cleared when the
+    /// question is answered either way.
+    @State private var folderToDelete: AuroraFolderTarget?
+    /// True while the new-folder prompt is up.
+    @State private var namingFolder = false
+    /// What was searched for when the open note was chosen from a result.
+    @State private var openNoteMark: String?
     @FocusState private var searchFocused: Bool
     @AppStorage("aurora.unfiled.x") private var unfiledX: Double = 0
     @AppStorage("aurora.unfiled.y") private var unfiledY: Double = 0
@@ -55,11 +64,25 @@ struct AuroraWorkspaceView: View {
         return result
     }
 
+    /// Recent means *what you were just doing*, not "this week". A week's
+    /// cutoff showed nearly the whole library, which made the filter useless —
+    /// it is now the folders touched in the last day, at most two of them, and
+    /// if nothing was touched today, the one folder you worked in last.
     private var visibleTiles: [AuroraFolderTile] {
-        let cutoff = Date().addingTimeInterval(-7 * 86_400)
         switch filter {
-        case .all: return tiles
-        case .recent: return tiles.filter { t in t.notes.contains { $0.createdAt > cutoff } }
+        case .all:
+            return tiles
+        case .recent:
+            let today = Date().addingTimeInterval(-86_400)
+            let ranked = tiles
+                .compactMap { tile -> (tile: AuroraFolderTile, touched: Date)? in
+                    guard let latest = tile.notes.map(\.createdAt).max() else { return nil }
+                    return (tile, latest)
+                }
+                .sorted { $0.touched > $1.touched }
+            let fresh = ranked.filter { $0.touched > today }
+            let chosen = fresh.isEmpty ? Array(ranked.prefix(1)) : Array(fresh.prefix(2))
+            return chosen.map(\.tile)
         }
     }
 
@@ -99,7 +122,10 @@ struct AuroraWorkspaceView: View {
                                    onOpenNote: { open(note: $0) },
                                    onNoteRightClick: { note, point in
                                        noteMenu = AuroraNoteTarget(url: note.url, title: note.title, point: point)
-                                   })
+                                   },
+                                   // Lifting a note out closes the folder, so
+                                   // the other folders are there to drop it on.
+                                   onDragNoteOut: { closeFolder() })
                     .transition(.opacity)
             }
 
@@ -111,15 +137,51 @@ struct AuroraWorkspaceView: View {
                         Color.black.opacity(0.06)
                             .contentShape(Rectangle())
                             .onTapGesture { noteMenu = nil }
-                        AuroraNoteActions(target: target, bounds: geo.size) { noteMenu = nil }
+                        AuroraNoteActions(target: target, bounds: geo.size, style: target.style) { noteMenu = nil }
                     }
                 }
                 .transition(.opacity)
                 .zIndex(8)
             }
 
+            if let target = folderMenu {
+                folderMenuLayer(target)
+                    .transition(.opacity)
+                    .zIndex(9)
+            }
+
+            if let target = folderToDelete {
+                let count = noteCount(target)
+                AuroraConfirm(
+                    title: "Delete \u{201C}\(target.name)\u{201D}?",
+                    message: count == 0
+                        ? "The folder will be deleted permanently. Nothing is in it."
+                        : "The folder and all its notes and captures will be deleted permanently \u{2014} \(count) note\(count == 1 ? "" : "s") in this one.",
+                    onConfirm: {
+                        appState.deleteFolder(target.id)
+                        folderToDelete = nil
+                    },
+                    onCancel: { folderToDelete = nil })
+                    .transition(.opacity)
+                    .zIndex(30)
+            }
+
+            if namingFolder {
+                AuroraPrompt(
+                    title: "New folder",
+                    placeholder: "Name it",
+                    onConfirm: { createFolder(named: $0) },
+                    onCancel: { namingFolder = false })
+                    .transition(.opacity)
+                    .zIndex(31)
+            }
+
+            AuroraThemeSwipe(run: $themeSwipe)
+                .zIndex(60)
+
             if let url = openNoteURL {
-                AuroraNoteView(noteURL: url, onClose: { openNoteURL = nil })
+                AuroraNoteView(noteURL: url, searchMark: openNoteMark,
+                               onClose: { openNoteURL = nil; openNoteMark = nil })
                     .environmentObject(appState)
                     .transition(.opacity)
                     .zIndex(10)
@@ -129,13 +191,23 @@ struct AuroraWorkspaceView: View {
         .animation(.spring(response: 0.45, dampingFraction: 0.86), value: focusedFolder)
         .coordinateSpace(name: "auroraWorkspace")
         .animation(.smooth(duration: 0.22), value: noteMenu)
+        .animation(.smooth(duration: 0.22), value: folderMenu)
+        .animation(.smooth(duration: 0.2), value: folderToDelete)
+        .animation(.smooth(duration: 0.2), value: namingFolder)
         .background(shortcuts)
         .onAppear { canvas.enabled = canvasLive; seedFolderPoints() }
         .onChange(of: focusedFolder) { _, _ in canvas.enabled = canvasLive }
         .onChange(of: openNoteURL) { _, _ in canvas.enabled = canvasLive }
         .onChange(of: mode) { _, _ in canvas.enabled = canvasLive }
         .onChange(of: settingsOpen) { _, _ in canvas.enabled = canvasLive }
+        // A failure elsewhere can ask for Settings — a rejected key, say.
+        .onChange(of: appState.isShowingSettings) { _, wants in
+            guard wants else { return }
+            settingsOpen = true
+            appState.isShowingSettings = false
+        }
         .onChange(of: noteMenu) { _, _ in canvas.enabled = canvasLive }
+        .onChange(of: folderMenu) { _, _ in canvas.enabled = canvasLive }
         .sheet(isPresented: $settingsOpen) {
             AuroraSettingsView()
                 .environmentObject(appState)
@@ -155,9 +227,21 @@ struct AuroraWorkspaceView: View {
                 AuroraFeedView(tiles: sortedTiles, query: query, sort: $sort,
                                focused: $focusedFolder,
                                onOpenNote: { open(note: $0) },
+                               onRenameFolder: { tile, name in rename(tile, to: name) },
+                               onDeleteFolder: { tile in
+                                   guard let id = tile.folderID else { return }
+                                   folderToDelete = AuroraFolderTarget(id: id, name: tile.name, point: .zero)
+                               },
+                               onRenameNote: { note, name in appState.renameNote(note.url, to: name) },
+                               onDeleteNote: { note in appState.deleteNote(note.url) },
                                onNoteRightClick: { note, point in
-                                   noteMenu = AuroraNoteTarget(url: note.url, title: note.title, point: point)
-                               })
+                                   // The row already renames on a double-click
+                                   // and deletes on a swipe; filing is what is
+                                   // left for the menu.
+                                   noteMenu = AuroraNoteTarget(url: note.url, title: note.title,
+                                                               point: point, style: .moveOnly)
+                               },
+                               onDropNotes: { tile, urls in file(notes: urls, into: tile) })
             }
         }
         .blur(radius: focusing ? 9 : 0)
@@ -201,7 +285,13 @@ struct AuroraWorkspaceView: View {
                                          cancelEdits: cancelEdits,
                                          onOpen: { openFolder(tile.id) },
                                          onMove: { move(tile, to: $0) },
-                                         onRename: { rename(tile, to: $0) })
+                                         onRename: { rename(tile, to: $0) },
+                                         onRightClick: tile.folderID == nil ? nil : { point in
+                                             folderMenu = AuroraFolderTarget(id: tile.folderID!,
+                                                                             name: tile.name,
+                                                                             point: point)
+                                         },
+                                         onDropNotes: { file(notes: $0, into: tile) })
                             .position(x: geo.size.width / 2 + tile.point.x,
                                       y: geo.size.height / 2 + tile.point.y)
                     }
@@ -312,11 +402,37 @@ struct AuroraWorkspaceView: View {
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.top, 44).padding(.trailing, 28)
 
+            // Making something new sits in the far corner, opposite the light
+            // switch: both are things you reach for deliberately, neither
+            // belongs in the path of the search.
+            Button {
+                if focusedTile != nil { create() } else { namingFolder = true }
+            } label: {
+                HStack(spacing: 6) {
+                    Image(systemName: "plus")
+                        .font(.system(size: 10.5, weight: .bold))
+                    Text(focusedTile == nil ? "New folder" : "New note")
+                        .font(Aurora.ui(13.5))
+                }
+                .foregroundStyle(Aurora.onSolid)
+                .padding(.horizontal, 15).padding(.vertical, 7)
+                .background(Aurora.solid, in: Capsule())
+                .contentShape(Capsule())
+            }
+            .buttonStyle(AuroraTapDown())
+            .help(focusedTile == nil ? "Make a folder" : "Start a note in this folder")
+            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+            .padding(.trailing, 28).padding(.bottom, 30)
+
             VStack {
                 Spacer()
                 searchDock.padding(.bottom, 30)
             }
             .frame(maxWidth: .infinity)
+
+            AuroraThemeToggle(swipe: $themeSwipe)
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
+                .padding(.leading, 28).padding(.bottom, 30)
         }
     }
 
@@ -326,20 +442,23 @@ struct AuroraWorkspaceView: View {
             modeItem("list.bullet", "Feed", .feed)
         }
         .padding(4)
-        .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous).strokeBorder(Aurora.line, lineWidth: 1))
+        .background(.regularMaterial, in: Capsule())
+        .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
     }
 
     private func modeItem(_ icon: String, _ label: String, _ value: AuroraViewMode) -> some View {
         Button {
             withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { mode = value }
         } label: {
+            // The same selected state as the note's own view switcher: solid,
+            // not a slightly lighter grey. Two toggles doing the same job
+            // should not look like different controls.
             Image(systemName: icon)
-            .font(.system(size: 13, weight: .semibold))
-            .foregroundStyle(mode == value ? Aurora.ink : Aurora.ink3)
-            .frame(width: 38, height: 30)
-            .background(mode == value ? Aurora.surface2 : .clear,
-                        in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                .font(.system(size: 13, weight: .semibold))
+                .foregroundStyle(mode == value ? Aurora.onSolid : Aurora.ink2)
+                .frame(width: 40, height: 30)
+                .background(mode == value ? AnyShapeStyle(Aurora.solid) : AnyShapeStyle(Color.clear),
+                            in: Capsule())
         }
         .buttonStyle(.plain)
         .help(label)
@@ -365,16 +484,57 @@ struct AuroraWorkspaceView: View {
         VStack(spacing: 10) {
             // Results are a response to typing, not a standing panel.
             let typed = query.trimmingCharacters(in: .whitespaces)
+            let folderHits = typed.isEmpty ? [] : Array(matchingFolders(typed).prefix(3))
             let hits = typed.isEmpty ? [] : Array(appState.searchNotes(query: typed).prefix(7))
-            if !hits.isEmpty {
+            if !hits.isEmpty || !folderHits.isEmpty {
                 VStack(spacing: 2) {
+                    // Folders first, and marked as folders: a name you half
+                    // remember is as likely to be a folder's as a note's.
+                    ForEach(folderHits) { tile in
+                        Button {
+                            query = ""
+                            withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+                                focusedFolder = tile.id
+                            }
+                        } label: {
+                            HStack(spacing: 12) {
+                                Image(systemName: "folder.fill")
+                                    .font(.system(size: 11))
+                                    .foregroundStyle(Aurora.tint(tile.tints.first ?? 0))
+                                    .frame(width: 14)
+                                Text(tile.name).font(Aurora.ui(14.5)).foregroundStyle(Aurora.ink).lineLimit(1)
+                                Spacer(minLength: 8)
+                                Text("\(tile.notes.count) note\(tile.notes.count == 1 ? "" : "s")")
+                                    .font(Aurora.ui(12.5)).foregroundStyle(Aurora.ink3)
+                            }
+                            .padding(.horizontal, 13).padding(.vertical, 9)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(AuroraHoverRow())
+                    }
+
+                    if !folderHits.isEmpty && !hits.isEmpty {
+                        Rectangle().fill(Aurora.line).frame(height: 1).padding(.horizontal, 10)
+                    }
+
                     ForEach(hits) { hit in
-                        Button { open(note: hit.url) ; query = "" } label: {
+                        Button { openNoteMark = typed; open(note: hit.url); query = "" } label: {
                             HStack(spacing: 12) {
                                 RoundedRectangle(cornerRadius: 3, style: .continuous)
                                     .fill(Aurora.tint(Aurora.tintIndex(for: hit.title)))
                                     .frame(width: 9, height: 9)
-                                Text(hit.title).font(Aurora.ui(14.5)).foregroundStyle(Aurora.ink).lineLimit(1)
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(hit.title).font(Aurora.ui(14.5)).foregroundStyle(Aurora.ink).lineLimit(1)
+                                    // Where the words were found, when they
+                                    // weren't in the title.
+                                    if let snippet = appState.searchSnippet(for: hit.url, query: typed),
+                                       !hit.title.lowercased().contains(typed.lowercased()) {
+                                        Text(Aurora.marked(snippet, query: typed))
+                                            .font(Aurora.ui(11.5))
+                                            .foregroundStyle(Aurora.ink3)
+                                            .lineLimit(1)
+                                    }
+                                }
                                 Spacer(minLength: 8)
                                 Text(appState.folderPath(for: appState.folderID(for: hit.url)).isEmpty
                                      ? "Unfiled" : appState.folderPath(for: appState.folderID(for: hit.url)))
@@ -394,30 +554,43 @@ struct AuroraWorkspaceView: View {
             }
 
             HStack(spacing: 10) {
-                Image(systemName: "magnifyingglass")
-                    .font(.system(size: 15, weight: .semibold)).foregroundStyle(Aurora.ink3)
-                TextField(dockPlaceholder, text: $query)
-                    .textFieldStyle(.plain)
-                    .font(Aurora.ui(16, .regular))
-                    .foregroundStyle(Aurora.ink)
-                    .focused($searchFocused)
-                    .onSubmit { create() }
-                Button(action: create) {
-                    Text("Search")
-                        .font(Aurora.ui(15, .bold))
-                        .foregroundStyle(Aurora.onSolid)
-                        .padding(.horizontal, 17).padding(.vertical, 10)
-                        .background(Aurora.solid, in: Capsule())
+                    Image(systemName: "magnifyingglass")
+                        .font(.system(size: 15, weight: .semibold)).foregroundStyle(Aurora.ink3)
+                // Results appear as you type and Return opens the top one.
+                // It no longer makes a folder out of whatever you typed —
+                // that is the button up with the view controls, and always
+                // a deliberate act.
+                    TextField(dockPlaceholder, text: $query)
+                        .textFieldStyle(.plain)
+                        .font(Aurora.ui(16, .regular))
+                        .foregroundStyle(Aurora.ink)
+                        .focused($searchFocused)
+                        .onSubmit { submit() }
+                    if !query.isEmpty {
+                        Button { query = "" } label: {
+                            Image(systemName: "xmark.circle.fill")
+                                .font(.system(size: 13))
+                                .foregroundStyle(Aurora.ink3)
+                                .contentShape(Circle())
+                        }
+                        .buttonStyle(AuroraTapDown())
+                        .help("Clear")
+                    }
                 }
-                .buttonStyle(.plain)
-            }
-            .padding(.leading, 20).padding(.trailing, 8).padding(.vertical, 8)
+            .padding(.horizontal, 20)
+            .frame(height: 51)
             .background(.regularMaterial, in: Capsule())
             .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
             .shadow(color: .black.opacity(0.13), radius: 24, y: 10)
         }
-        .frame(maxWidth: 660)
+        .frame(maxWidth: 620)
         .animation(.smooth(duration: 0.22), value: query)
+    }
+
+    /// Folders whose name matches what is being typed.
+    private func matchingFolders(_ query: String) -> [AuroraFolderTile] {
+        let needle = query.lowercased()
+        return sortedTiles.filter { !$0.isUnfiled && $0.name.lowercased().contains(needle) }
     }
 
     private var dockPlaceholder: String {
@@ -472,6 +645,35 @@ struct AuroraWorkspaceView: View {
         appState.renameFolder(id, to: trimmed)
     }
 
+    /// Deleting a folder keeps what was in it: the notes move up to the
+    /// parent folder rather than going anywhere near the trash.
+    /// The right-click menu, over a scrim that closes it.
+    private func folderMenuLayer(_ target: AuroraFolderTarget) -> some View {
+        GeometryReader { geo in
+            ZStack {
+                Color.black.opacity(0.06)
+                    .contentShape(Rectangle())
+                    .onTapGesture { folderMenu = nil }
+                AuroraFolderActions(target: target,
+                                    bounds: geo.size,
+                                    onRequestDelete: { folderToDelete = $0 },
+                                    onClose: { folderMenu = nil })
+            }
+        }
+    }
+
+    /// How many notes are in the folder being asked about, so the question can
+    /// say what is actually at stake.
+    private func noteCount(_ target: AuroraFolderTarget) -> Int {
+        appState.canvasNoteSnapshots.filter { $0.folderID == target.id }.count
+    }
+
+    private func delete(_ tile: AuroraFolderTile) {
+        guard let id = tile.folderID else { return }
+        if focusedFolder == tile.id { closeFolder() }
+        appState.deleteFolder(id)
+    }
+
     /// Folders created before the canvas existed have no point; give them one
     /// the first time they are drawn so dragging starts from a real position.
     private func seedFolderPoints() {
@@ -490,19 +692,44 @@ struct AuroraWorkspaceView: View {
         }
     }
 
+    /// Return in the dock opens the top result. It used to make a folder when
+    /// nothing matched, which turned a fruitless search into a surprise folder
+    /// named after the thing you were looking for.
+    private func submit() {
+        let typed = query.trimmingCharacters(in: .whitespaces)
+        guard !typed.isEmpty, let hit = appState.searchNotes(query: typed).first else { return }
+        openNoteMark = typed
+        query = ""
+        open(note: hit.url)
+    }
+
+    /// Files dragged notes into a folder. Anything that isn't a note this app
+    /// knows about is refused, so dropping a stray file does nothing.
+    private func file(notes urls: [URL], into tile: AuroraFolderTile) -> Bool {
+        let known = Set(appState.historyFiles.map { $0.lastPathComponent })
+        let notes = urls.filter { known.contains($0.lastPathComponent) }
+        guard !notes.isEmpty else { return false }
+        for url in notes { appState.moveNote(url, toFolder: tile.folderID) }
+        return true
+    }
+
+    /// Inside a folder, the plus starts a note there.
     private func create() {
         let name = query.trimmingCharacters(in: .whitespaces)
-        if let tile = focusedTile {
-            let dest = appState.createNewNote(inFolder: tile.folderID)
-            if !name.isEmpty { appState.renameNote(dest.url, to: name) }
-            query = ""
-            open(note: dest.url)
-        } else {
-            guard !name.isEmpty else { searchFocused = true; return }
-            let id = appState.createFolder(name: name)
-            appState.setFolderPoint(id, to: Self.slot(appState.workspace.folders.count - 1, of: tileCount))
-            query = ""
-        }
+        guard let tile = focusedTile else { namingFolder = true; return }
+        let dest = appState.createNewNote(inFolder: tile.folderID)
+        if !name.isEmpty { appState.renameNote(dest.url, to: name) }
+        query = ""
+        open(note: dest.url)
+    }
+
+    private func createFolder(named name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespaces)
+        guard !trimmed.isEmpty else { return }
+        let id = appState.createFolder(name: trimmed)
+        appState.setFolderPoint(id, to: Self.slot(appState.workspace.folders.count - 1, of: tileCount))
+        namingFolder = false
+        query = ""
     }
 
     // MARK: trackpad

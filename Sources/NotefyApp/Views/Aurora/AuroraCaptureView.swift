@@ -4,6 +4,9 @@ import NotefyCore
 /// A captured page, selection or transcript, drawn as a plate. Screenshots keep
 /// their own aspect ratio; text captures set in the reading serif.
 struct AuroraCaptureView: View {
+    /// What was searched for, when this note was opened from a result.
+    @Environment(\.auroraSearchMark) private var searchMark
+
     let step: ExplorationStep
     var index: Int
     /// Caps the lines of a text capture; nil lets it run to full length.
@@ -26,6 +29,24 @@ struct AuroraCaptureView: View {
         if let t = step.selectedText, !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return t }
         if let t = step.pageText, !t.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { return t }
         return nil
+    }
+
+    /// The line in this capture's text that the search matched, if any.
+    private var matchedLine: String? {
+        guard let searchMark, !searchMark.trimmingCharacters(in: .whitespaces).isEmpty,
+              let haystack = text else { return nil }
+        let needle = searchMark.lowercased()
+        guard let range = haystack.lowercased().range(of: needle) else { return nil }
+        let start = haystack.index(range.lowerBound, offsetBy: -60, limitedBy: haystack.startIndex)
+            ?? haystack.startIndex
+        let end = haystack.index(range.upperBound, offsetBy: 90, limitedBy: haystack.endIndex)
+            ?? haystack.endIndex
+        var line = String(haystack[start..<end])
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        if start != haystack.startIndex { line = "…" + line }
+        if end != haystack.endIndex { line += "…" }
+        return line
     }
 
     var body: some View {
@@ -70,11 +91,31 @@ struct AuroraCaptureView: View {
                     .scaledToFit()
                     .frame(maxWidth: .infinity)
             }
+
+            // A screenshot shows nothing of the words read off it, so a search
+            // that matched them had nothing to light up. The matching line is
+            // pulled out and shown under the picture.
+            if let found = matchedLine {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Image(systemName: "text.magnifyingglass")
+                        .font(.system(size: 10, weight: .semibold))
+                        .foregroundStyle(Aurora.accent)
+                    Text(Aurora.marked(found, query: searchMark))
+                        .font(Aurora.ui(12))
+                        .foregroundStyle(Aurora.ink2)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Spacer(minLength: 0)
+                }
+                .padding(.horizontal, 14).padding(.vertical, 10)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Aurora.accentSoft.opacity(0.7))
+            }
         } else if let text {
             ZStack {
                 LinearGradient(colors: [Aurora.tint(tint).opacity(0.22), Aurora.tint(tint).opacity(0.06)],
                                startPoint: .topLeading, endPoint: .bottomTrailing)
-                Text(text)
+                Text(Aurora.marked(text, query: searchMark))
                     .font(Aurora.serif(15))
                     .lineSpacing(5)
                     .foregroundStyle(Aurora.ink)

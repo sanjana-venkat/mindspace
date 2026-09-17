@@ -25,6 +25,26 @@ struct MenuBarContentView: View {
             }
             .buttonStyle(.plain)
 
+            // The moon sits on the desktop and files what you catch. It is a
+            // companion, not a window, so it lives behind a toggle rather than
+            // opening on its own.
+            Button {
+                appState.pet.toggle()
+            } label: {
+                HStack {
+                    Image(systemName: "moon.stars.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .frame(width: 23)
+                    Text(appState.pet.isVisible ? "HIDE THE MOON" : "KEEP THE MOON ON SCREEN")
+                        .font(NotefyFont.label).tracking(0.9)
+                    Spacer()
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 9)
+                .background(NotefyTheme.cardPaper, in: Capsule())
+            }
+            .buttonStyle(.plain)
+
             statusRow
 
             VStack(spacing: 8) {

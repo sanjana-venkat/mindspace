@@ -8,6 +8,8 @@ struct AuroraOrganized: View {
     var onJump: (Int) -> Void
 
     @EnvironmentObject private var appState: AppState
+    /// The provider's raw message, folded away until asked for.
+    @State private var showingDetail = false
 
     private var blocks: [AuroraDocBlock] {
         AuroraDocBlock.parse(appState.organizedDraft, hidingSourceSections: true)
@@ -50,11 +52,20 @@ struct AuroraOrganized: View {
 
                 ForEach(OrganizationTemplate.offered) { t in
                     Button {
-                        appState.showOrganized(t)
+                        // Picking a shape only shows it. Writing one is the
+                        // button in the corner, and always a deliberate act.
+                        appState.selectOrganizedTemplate(t)
                     } label: {
                         HStack(spacing: 6) {
                             Image(systemName: t.icon).font(.system(size: 10.5, weight: .semibold))
                             Text(t.rawValue).font(Aurora.ui(11.5))
+                            // A dot for a shape this note has already been
+                            // written as, so you know what's a click away.
+                            if appState.organizedVariants[t.rawValue]?.isEmpty == false {
+                                Circle()
+                                    .fill(appState.organizedTemplate == t ? Aurora.onSolid : Aurora.accent)
+                                    .frame(width: 4, height: 4)
+                            }
                         }
                         .foregroundStyle(appState.organizedTemplate == t ? Aurora.onSolid : Aurora.ink)
                         .padding(.horizontal, 13).padding(.vertical, 7)
@@ -65,12 +76,18 @@ struct AuroraOrganized: View {
                     }
                     .buttonStyle(.plain)
                     .disabled(appState.isOrganizing)
-                    .help("Rewrite this note as \(t.rawValue.lowercased())")
+                    .help(appState.organizedVariants[t.rawValue]?.isEmpty == false
+                          ? "Show this note as \(t.rawValue.lowercased())"
+                          : "Not written as \(t.rawValue.lowercased()) yet")
                 }
             }
 
             if let status = appState.recordingStatus, !status.isEmpty {
                 Text(status).font(Aurora.ui(12, .medium)).foregroundStyle(Aurora.ink3)
+            }
+
+            if let failure = appState.organizeFailure {
+                failureNote(failure)
             }
 
             HStack(spacing: 10) {
@@ -86,6 +103,74 @@ struct AuroraOrganized: View {
             .foregroundStyle(Aurora.ink2)
         }
         .padding(.bottom, 6)
+    }
+
+    /// What went wrong, and the one thing that fixes it. The provider's raw
+    /// message is available but folded away — it is for a bug report, not for
+    /// the person trying to get their note written.
+    @ViewBuilder
+    private func failureNote(_ failure: OrganizeFailure) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                Image(systemName: "exclamationmark.triangle.fill")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(Aurora.warning)
+                Text(failure.summary)
+                    .font(Aurora.ui(12.5))
+                    .foregroundStyle(Aurora.ink)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            HStack(spacing: 10) {
+                Button(fixLabel(failure.fix)) { appState.applyOrganizeFix(failure.fix) }
+                    .buttonStyle(.plain)
+                    .font(Aurora.ui(12, .semibold))
+                    .foregroundStyle(Aurora.onSolid)
+                    .padding(.horizontal, 14).padding(.vertical, 7)
+                    .background(Aurora.solid, in: Capsule())
+                    .contentShape(Capsule())
+
+                Button("Dismiss") { appState.organizeFailure = nil }
+                    .buttonStyle(.plain)
+                    .font(Aurora.ui(12, .medium))
+                    .foregroundStyle(Aurora.ink2)
+                    .padding(.horizontal, 12).padding(.vertical, 7)
+                    .contentShape(Capsule())
+
+                if !failure.detail.isEmpty {
+                    Button(showingDetail ? "Hide details" : "Details") {
+                        withAnimation(.smooth(duration: 0.2)) { showingDetail.toggle() }
+                    }
+                    .buttonStyle(.plain)
+                    .font(Aurora.ui(12, .medium))
+                    .foregroundStyle(Aurora.ink3)
+                    .contentShape(Rectangle())
+                }
+            }
+
+            if showingDetail, !failure.detail.isEmpty {
+                Text(failure.detail)
+                    .font(Aurora.mono(10.5))
+                    .foregroundStyle(Aurora.ink3)
+                    .textSelection(.enabled)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(Aurora.surface2, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 16, style: .continuous)
+                .strokeBorder(Aurora.warning.opacity(0.35), lineWidth: 1)
+        }
+    }
+
+    private func fixLabel(_ fix: OrganizeFailure.Fix) -> String {
+        switch fix {
+        case .switchModel(let model): return "Use \(model)"
+        case .openSettings: return "Add a key"
+        case .retry: return "Try again"
+        }
     }
 
     private var providerLabel: String {
@@ -108,23 +193,11 @@ struct AuroraOrganized: View {
 
     private var empty: some View {
         VStack(alignment: .leading, spacing: 14) {
-            Text("Nothing organized yet.")
+            Text("No \(appState.organizedTemplate.rawValue.lowercased()) yet.")
                 .font(Aurora.serif(24)).foregroundStyle(Aurora.ink)
-            Text("Pick a shape above and the model will read every capture in this note — the screenshots, the text you clipped, and the thoughts you wrote beside them — and write it up.")
+            Text("Hit Organize and the model will read every capture in this note — the screenshots, the text you clipped, and the thoughts you wrote beside them — and write it up as \(appState.organizedTemplate.rawValue.lowercased()).")
                 .font(Aurora.serif(17)).foregroundStyle(Aurora.ink2).lineSpacing(6)
                 .fixedSize(horizontal: false, vertical: true)
-            Button {
-                appState.organizeCurrentSession(as: appState.organizedTemplate)
-            } label: {
-                Text("Organize this note")
-                    .font(Aurora.ui(14, .bold))
-                    .foregroundStyle(Aurora.onSolid)
-                    .padding(.horizontal, 18).padding(.vertical, 11)
-                    .background(Aurora.solid, in: Capsule())
-            }
-            .buttonStyle(.plain)
-            .disabled(steps.isEmpty)
-            .padding(.top, 4)
         }
         .padding(.vertical, 10)
     }

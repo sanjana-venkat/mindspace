@@ -20,6 +20,25 @@ enum AuroraAppearance: String, CaseIterable, Identifiable {
     }
 }
 
+extension AuroraAppearance {
+    /// What the app is set to right now, read straight from defaults — the
+    /// panels the app throws up (capture review, toasts) live outside the
+    /// SwiftUI environment and would otherwise follow the Mac rather than the
+    /// choice made in here.
+    static var current: AuroraAppearance {
+        AuroraAppearance(rawValue: UserDefaults.standard.string(forKey: storageKey) ?? "") ?? .system
+    }
+
+    /// nil means "follow the Mac", which is what `system` asks for.
+    var nsAppearance: NSAppearance? {
+        switch self {
+        case .system: return nil
+        case .light: return NSAppearance(named: .aqua)
+        case .dark: return NSAppearance(named: .darkAqua)
+        }
+    }
+}
+
 enum Aurora {
     private static func dyn(_ light: (Int, Int, Int), _ dark: (Int, Int, Int)) -> Color {
         Color(nsColor: NSColor(name: nil) { appearance in
@@ -58,17 +77,39 @@ enum Aurora {
         // On near-black, a dark tint reads as grime rather than colour — these
         // are pitched to carry at the small sizes they actually appear in, as
         // tabs behind a folder and swatches in the feed.
-        dyn((157, 188, 171), (52, 176, 124)),   // green
-        dyn((205, 187, 209), (146, 112, 224)),  // violet
-        dyn((233, 226, 211), (208, 158, 74)),   // amber
-        dyn((147, 170, 188), (72, 138, 220)),   // blue
-        dyn((180, 213, 189), (56, 176, 186))    // teal
+        // The light side used to be pastel to the point of disappearing on
+        // white — these carry at card size without shouting.
+        dyn((118, 175, 146), (52, 176, 124)),   // green
+        dyn((176, 150, 196), (146, 112, 224)),  // violet
+        dyn((222, 197, 140), (208, 158, 74)),   // amber
+        dyn((114, 152, 186), (72, 138, 220)),   // blue
+        dyn((126, 196, 190), (56, 176, 186))    // teal
     ]
+
+    /// Amber: something is out of date, not wrong.
+    static let warning = dyn((176, 118, 24), (235, 179, 76))
+
+    /// The one red in the system: destructive actions only, so it never reads
+    /// as decoration.
+    static let danger = dyn((176, 48, 52), (226, 84, 84))
 
     /// The deep end of the palette — used where the wash needs to land, not tint.
     static let deep = dyn((37, 51, 64), (18, 26, 32))
 
     static func tint(_ i: Int) -> Color { tints[((i % tints.count) + tints.count) % tints.count] }
+
+    /// Mixes two colours, alpha included. Used where the interface crosses
+    /// from its night palette to its daylight one part-way through a journey.
+    static func blend(_ a: Color, _ b: Color, _ t: Double) -> Color {
+        let t = max(0, min(1, t))
+        guard let from = NSColor(a).usingColorSpace(.sRGB),
+              let to = NSColor(b).usingColorSpace(.sRGB) else { return a }
+        return Color(nsColor: NSColor(
+            srgbRed: from.redComponent + (to.redComponent - from.redComponent) * t,
+            green: from.greenComponent + (to.greenComponent - from.greenComponent) * t,
+            blue: from.blueComponent + (to.blueComponent - from.blueComponent) * t,
+            alpha: from.alphaComponent + (to.alphaComponent - from.alphaComponent) * t))
+    }
 
     /// FNV-1a. `hashValue` is seeded per process, so using it here meant a
     /// folder changed colour on every launch.
@@ -153,20 +194,123 @@ struct AuroraWindowGlass: NSViewRepresentable {
     func updateNSView(_ nsView: NSView, context: Context) {}
 }
 
+/// The painted part of the ground — the colour and the tooth, without the
+/// window blur behind it. Split out so the theme change can render both modes
+/// at once and dissolve between them; `AuroraGround` is this over the blur.
+struct AuroraSurfaceFill: View {
+    let light: Bool
+    /// The ground is normally translucent, so the desktop shows faintly
+    /// through. A transition covers the window instead, and needs the dark
+    /// side solid or the old mode reads through the new one.
+    var opaque: Bool = false
+
+    /// Dark mode over the window blur, written out: this is used from outside
+    /// the themed part of the app, where the dynamic tokens would resolve to
+    /// whichever mode happens to be current.
+    static let night = Color(red: 0.043, green: 0.055, blue: 0.047)
+
+    var body: some View {
+        ZStack {
+            if light {
+                // Light is snow: white, with only enough cool in it to keep
+                // it from reading as flat paper. It carried a green wash at
+                // the top for a while, which tinted the whole interface teal.
+                LinearGradient(stops: [
+                    .init(color: Color(red: 0.961, green: 0.969, blue: 0.976), location: 0),
+                    .init(color: Color(red: 0.976, green: 0.980, blue: 0.984), location: 0.5),
+                    .init(color: Color(red: 0.992, green: 0.992, blue: 0.992), location: 1),
+                ], startPoint: .top, endPoint: .bottom)
+
+                // The drifts, felt rather than seen.
+                LinearGradient(colors: [.clear, .white.opacity(0.5)],
+                               startPoint: .top, endPoint: .bottom)
+                    .blur(radius: 40)
+                    .opacity(0.5)
+
+            } else if opaque {
+                Self.night
+            } else {
+                Color(red: 11/255, green: 14/255, blue: 12/255).opacity(0.26)
+            }
+
+            AuroraGrain.tile
+                .resizable(resizingMode: .tile)
+                .blendMode(light ? .multiply : .screen)
+                // Dark carries the same amount of tooth as light — on a
+                // near-black ground the grain has to be screened back in at
+                // full strength or the surface reads as flat glass.
+                .opacity(0.20)
+        }
+    }
+}
+
 /// One translucent, grained ground for every Aurora screen — no seams between
 /// panels, and the desktop shows faintly through.
 struct AuroraGround: View {
     @Environment(\.colorScheme) private var scheme
+
     var body: some View {
         ZStack {
             AuroraVisualEffect()
-            Aurora.ground.opacity(scheme == .dark ? 0.26 : 0.12)
-            AuroraGrain.tile
-                .resizable(resizingMode: .tile)
-                .blendMode(scheme == .dark ? .screen : .multiply)
-                .opacity(scheme == .dark ? 0.11 : 0.20)
+            AuroraSurfaceFill(light: scheme != .dark)
         }
         .ignoresSafeArea()
+    }
+}
+
+/// A small control that answers the moment it is pressed: the glyph dips and
+/// dims under the cursor rather than waiting for the click to complete, which
+/// is the difference between a button that feels slow and one that doesn't.
+struct AuroraTapDown: ButtonStyle {
+    @State private var hover = false
+
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label
+            .background(hover ? Aurora.ink.opacity(0.07) : .clear, in: Capsule())
+            .scaleEffect(configuration.isPressed ? 0.88 : 1)
+            .opacity(configuration.isPressed ? 0.6 : 1)
+            .animation(.easeOut(duration: 0.08), value: configuration.isPressed)
+            .onHover { hover = $0 }
+            .animation(.easeOut(duration: 0.12), value: hover)
+    }
+}
+
+/// Carries what was searched for into the note that was opened from a result,
+/// so the words that matched can be marked where they actually live.
+private struct AuroraSearchMarkKey: EnvironmentKey {
+    static let defaultValue: String? = nil
+}
+
+extension EnvironmentValues {
+    var auroraSearchMark: String? {
+        get { self[AuroraSearchMarkKey.self] }
+        set { self[AuroraSearchMarkKey.self] = newValue }
+    }
+}
+
+extension Aurora {
+    /// The same text, with every occurrence of `query` lit up. Returns plain
+    /// text when there is nothing to mark, so callers can use it everywhere.
+    static func marked(_ text: String, query: String?) -> AttributedString {
+        var attributed = AttributedString(text)
+        guard let query, !query.trimmingCharacters(in: .whitespaces).isEmpty else { return attributed }
+
+        let needle = query.trimmingCharacters(in: .whitespaces).lowercased()
+        let haystack = text.lowercased()
+        var cursor = haystack.startIndex
+        while let found = haystack.range(of: needle, range: cursor..<haystack.endIndex) {
+            // The attributed string mirrors the original, so the same offsets
+            // hold in both.
+            let start = haystack.distance(from: haystack.startIndex, to: found.lowerBound)
+            let length = haystack.distance(from: found.lowerBound, to: found.upperBound)
+            if let from = attributed.index(attributed.startIndex, offsetByCharacters: start) as AttributedString.Index?,
+               let to = attributed.index(from, offsetByCharacters: length) as AttributedString.Index? {
+                attributed[from..<to].backgroundColor = Aurora.accent.opacity(0.28)
+                attributed[from..<to].foregroundColor = Aurora.ink
+            }
+            cursor = found.upperBound
+        }
+        return attributed
     }
 }
 

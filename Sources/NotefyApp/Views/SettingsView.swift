@@ -31,7 +31,7 @@ struct SettingsView: View {
                     apiURL: $appState.settings.audio.apiURL,
                     apiKey: $appState.settings.audio.apiKey,
                     modelName: $appState.settings.audio.modelName,
-                    localHint: "WhisperKit — downloads the chosen Whisper model once, then transcribes fully on-device.",
+                    localHint: "Parakeet — downloads once, about 215MB, then transcribes fully on-device.",
                     modelNamePlaceholder: "tiny / base / small / medium"
                 ) {
                     audioModelStatus
@@ -213,7 +213,7 @@ struct SettingsView: View {
                 Spacer()
                 if appState.settings.audio.provider == .local {
                     NotefyPillButton(title: "Prepare Model", systemImage: "arrow.down.circle", tint: Stoneink.textPrimary, filled: false) {
-                        Task { await appState.whisperTranscriber.ensureReady(variant: appState.settings.audio.modelName) }
+                        Task { await appState.localTranscriber.ensureReady() }
                     }
                     .fixedSize()
                 }

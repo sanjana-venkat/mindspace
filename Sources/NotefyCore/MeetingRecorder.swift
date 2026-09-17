@@ -85,6 +85,22 @@ public final class MeetingRecorder {
         updateLevels(microphone: -160)
     }
 
+    /// Captures only what the microphone hears — the voice-note half of the
+    /// rail's audio options. ScreenCaptureKit is never started, so nothing
+    /// playing on the Mac ends up in the recording.
+    public func startMicrophoneOnly(saveMicrophoneTo url: URL) async throws {
+        guard !isRecording else { return }
+        guard await Self.requestMicrophoneAccess() else {
+            throw NSError(domain: "Notefy.MeetingRecorder", code: 1, userInfo: [NSLocalizedDescriptionKey: "Microphone access was denied."])
+        }
+        try microphone.start(saveTo: url, preferredInputDeviceUID: preferredInputDeviceUID)
+        microphoneURL = url
+        systemAudioWarning = nil
+        isSystemAudioActive = false
+        isRecording = true
+        updateLevels(system: -160)
+    }
+
     public func stop() async -> MeetingRecordingArtifacts? {
         guard isRecording else { return nil }
         let completedMicrophoneURL = microphoneURL.flatMap { microphone.stop() ?? $0 }

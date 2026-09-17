@@ -6,6 +6,11 @@ import SwiftUI
 @MainActor
 final class CaptureReviewController {
     private var panel: NSPanel?
+    /// Whatever you were working in when the capture happened. The review panel
+    /// has to activate this app to take typing, and activating an app raises
+    /// its other windows — which is how the main Mindspace window kept
+    /// appearing in the middle of a run of screenshots. Focus goes back where
+    /// it came from as soon as the panel closes.
 
     func present(
         step: ExplorationStep,
@@ -41,6 +46,9 @@ final class CaptureReviewController {
         panel.hasShadow = false
         panel.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         panel.hidesOnDeactivate = false
+        // This panel is the app, so it wears what the app is wearing. Without
+        // this it follows the Mac and turns up white while the app is dark.
+        panel.appearance = AuroraAppearance.current.nsAppearance
 
         let close: () -> Void = { [weak self, weak panel] in
             panel?.animator().alphaValue = 0
@@ -48,6 +56,7 @@ final class CaptureReviewController {
                 try? await Task.sleep(for: .milliseconds(160))
                 panel?.close()
                 if self?.panel === panel { self?.panel = nil }
+                FocusKeeper.restore()
             }
         }
         panel.contentView = NSHostingView(rootView: CaptureReviewView(
@@ -66,13 +75,25 @@ final class CaptureReviewController {
                 onDiscard()
                 close()
             }
-        ).environmentObject(appState))
+        ).environmentObject(appState)
+            .preferredColorScheme(AuroraAppearance.current.scheme))
+        // Whoever was interrupted was noted when the capture began — by now
+        // the region overlay has already brought this app forward.
         panel.alphaValue = 0
         panel.orderFrontRegardless()
         panel.makeKey()
         NSApp.activate(ignoringOtherApps: true)
         panel.animator().alphaValue = 1
         self.panel = panel
+    }
+}
+
+private extension CaptureReviewController {
+    /// Hands the screen back to the app that was in front. Without this the
+    /// app stays active after the panel goes, and the next window in line —
+    /// the main window — comes forward over whatever you were reading.
+    func returnFocus() {
+        FocusKeeper.restore()
     }
 }
 
@@ -356,7 +377,10 @@ private struct CaptureReviewView: View {
                 ZStack {
                     Circle().fill(voice.isRecording ? Aurora.accent : Aurora.surface2)
                     Circle().strokeBorder(Aurora.line, lineWidth: 1)
-                    OverlayIcon(kind: .microphone, tint: voice.isRecording ? .white : NotefyTheme.ink)
+                    // NotefyTheme.ink is the old palette's near-black, which
+                    // vanished against the dark surface. Aurora.ink follows
+                    // the mode: white at night, near-black by day.
+                    OverlayIcon(kind: .microphone, tint: voice.isRecording ? .white : Aurora.ink)
                         .frame(width: 17, height: 17)
                 }
                 .frame(width: 34, height: 34)

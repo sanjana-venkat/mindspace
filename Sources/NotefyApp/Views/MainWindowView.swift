@@ -21,15 +21,83 @@ struct MainWindowView: View {
     @AppStorage(AuroraAppearance.storageKey) private var appearanceRaw = AuroraAppearance.system.rawValue
 
     private var appearance: AuroraAppearance { AuroraAppearance(rawValue: appearanceRaw) ?? .system }
+    @State private var launching = true
+    /// Where the camera is on the world: along the panorama, and how far down
+    /// toward the ice.
+    @State private var skyPan: Double = 0
+    @State private var skyTilt: Double = 0.18
+
+    /// The launch sequence and setup are dark regardless of the chosen
+    /// appearance; the choice takes over once you're in the app.
+    private var launchingOrOnboarding: Bool {
+        auroraShell && (launching || appState.isShowingPermissionOnboarding)
+    }
+
+
 
     private var groundMode: GroundMode { GroundMode(rawValue: groundRaw) ?? .ink }
     private var surface: GroundSurface { GroundSurface(rawValue: surfaceRaw) ?? .paper }
 
     var body: some View {
         Group {
-            if appState.isShowingPermissionOnboarding {
+            if auroraShell && (launching || appState.isShowingPermissionOnboarding) {
+                // One sky for both screens. It has to live out here, above the
+                // switch, or it would be torn down and rebuilt between them —
+                // and then the pan would be two different auroras, not one.
+                ZStack {
+                    AuroraWideSky(pan: skyPan, tilt: skyTilt)
+                    if launching {
+                        AuroraLaunch {
+                            withAnimation(.easeOut(duration: 0.4)) { launching = false }
+                        } onLeave: {
+                            // The camera starts down the sky while the launch
+                            // is still fading, so the two overlap. It stops
+                            // where setup begins; setup walks it the rest of
+                            // the way down.
+                            withAnimation(.easeInOut(duration: 1.4)) {
+                                skyPan = 0.08
+                                skyTilt = 0.26
+                            }
+                        }
+                    } else {
+                        // Setup always runs in the dark: it's the app
+                        // introducing itself, and the aurora only reads
+                        // properly against night.
+                        AuroraOnboarding(onFinish: appState.finishPermissionOnboarding) { journey, tilt in
+                            // Each step slides the world sideways to new
+                            // country; the last one tips it up or down between
+                            // night sky and ice. Springs, so they land like
+                            // swipes rather than scroll bars.
+                            withAnimation(.spring(response: 0.95, dampingFraction: 0.82)) {
+                                skyPan = 0.08 + 0.92 * journey
+                            }
+                            if abs(skyTilt - tilt) < 0.08 {
+                                // Already looking that way — "Match my Mac" and
+                                // the mode it matches are the same view. Lean
+                                // and settle so the tap still answers.
+                                withAnimation(.easeOut(duration: 0.2)) {
+                                    skyTilt = tilt + (tilt > 0.5 ? -0.13 : 0.13)
+                                }
+                                DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+                                    withAnimation(.spring(response: 0.75, dampingFraction: 0.7)) {
+                                        skyTilt = tilt
+                                    }
+                                }
+                            } else {
+                                withAnimation(.spring(response: 1.05, dampingFraction: 0.86)) {
+                                    skyTilt = tilt
+                                }
+                            }
+                        }
+                    }
+                }
+                .preferredColorScheme(.dark)
+                .environment(\.colorScheme, .dark)
+            } else if appState.isShowingPermissionOnboarding {
                 if auroraShell {
                     AuroraOnboarding(onFinish: appState.finishPermissionOnboarding)
+                        .preferredColorScheme(.dark)
+                        .environment(\.colorScheme, .dark)
                 } else {
                     PermissionOnboardingView(
                         permissionCenter: appState.permissionCenter,
@@ -70,7 +138,7 @@ struct MainWindowView: View {
         // ground is chosen here, never by the system appearance.
         // The legacy canvas is a light-only design; the Aurora shell follows the
         // user's choice, and `system` inherits the Mac's own schedule.
-        .preferredColorScheme(auroraShell ? appearance.scheme : .light)
+        .preferredColorScheme(launchingOrOnboarding ? .dark : (auroraShell ? appearance.scheme : .light))
         .environment(\.ground, GroundPalette.clay)
     }
 }

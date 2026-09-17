@@ -22,7 +22,7 @@ public class AudioClient {
     }
     
     private func transcribeLocally(audioURL: URL, completion: @escaping (Result<String, Error>) -> Void) {
-        print("🎙️ CoreML: Transcribing audio locally via WhisperKit...")
+        print("🎙️ CoreML: Transcribing audio locally via Parakeet...")
         // Simulating Whisper CoreML response for offline/local flow
         DispatchQueue.global().asyncAfter(deadline: .now() + 1.5) {
             let mockTranscript = "Combining background logs of browser activities alongside dictation transcripts will result in notes with a much higher density of exact terms and source link context than transcription alone."

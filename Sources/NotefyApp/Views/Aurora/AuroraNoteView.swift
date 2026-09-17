@@ -24,6 +24,9 @@ struct AuroraMidYKey: PreferenceKey {
 /// your own notes, structured by the model, or spread out as tiles.
 struct AuroraNoteView: View {
     let noteURL: URL
+    /// What was searched for, when this note was opened from a search result:
+    /// the view jumps to the capture the words are in and lights them up.
+    var searchMark: String? = nil
     var onClose: () -> Void
 
     @EnvironmentObject private var appState: AppState
@@ -33,6 +36,16 @@ struct AuroraNoteView: View {
     /// How much of the note fits on screen at once. Zooming out is how you see
     /// twenty captures in one glance rather than scrolling through them.
     @State private var zoom: Double = 1
+    /// Where the zoom was when the current pinch started.
+    @State private var pinchBase: Double = 1
+    @State private var pinching = false
+    /// Set when a search result asks for a particular capture, cleared once
+    /// the panel list has scrolled to it.
+    @State private var focusRequest: Int?
+    /// Renaming the note from its own header.
+    @State private var renamingTitle = false
+    @State private var titleDraft = ""
+    @FocusState private var titleFocused: Bool
 
     /// Display order matches the rest of the app: `steps` is stored one way and
     /// read the other.
@@ -59,6 +72,7 @@ struct AuroraNoteView: View {
                     switch mode {
                     case .panels:
                         AuroraPanels(steps: steps, active: $active, thought: thought, zoom: zoom,
+                                     focus: $focusRequest,
                                      dimmedFor: menuTarget?.step.id,
                                      onRightClick: { step, point in
                                          menuTarget = AuroraCaptureTarget(step: step, point: point)
@@ -90,6 +104,34 @@ struct AuroraNoteView: View {
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
+                // Pinch to zoom, the same as the canvas: the captures page is
+                // the other place in the app where you want to see everything
+                // at once, and reaching for the minus button is not that.
+                .gesture(
+                    MagnifyGesture()
+                        .onChanged { value in
+                            guard mode == .grid else { return }
+                            // The base is taken once, when the fingers land —
+                            // updating it mid-pinch compounds the scale and
+                            // the page runs away from you.
+                            if !pinching {
+                                pinching = true
+                                pinchBase = zoom
+                            }
+                            zoom = min(2.0, max(0.45, pinchBase * value.magnification))
+                        }
+                        .onEnded { _ in
+                            pinching = false
+                            pinchBase = zoom
+                        }
+                )
+            }
+
+            if mode == .organized {
+                organizeAction
+                    .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+                    .transition(.opacity)
+                    .zIndex(4)
             }
 
             if let target = menuTarget {
@@ -108,6 +150,31 @@ struct AuroraNoteView: View {
         .coordinateSpace(name: "auroraNote")
         .animation(.smooth(duration: 0.22), value: menuTarget)
         .ignoresSafeArea()
+        // The words travel with the note, so every capture can mark them.
+        .environment(\.auroraSearchMark, searchMark)
+        .onAppear {
+            // Opened from a search result: land on the capture the words are
+            // actually in rather than at the top of the note.
+            guard let mark = searchMark?.lowercased(),
+                  !mark.isEmpty,
+                  let index = steps.firstIndex(where: { matches($0, mark) }) else { return }
+            active = index
+            focusRequest = index
+        }
+    }
+
+    /// Does this capture hold the searched-for words anywhere a person can see?
+    private func matches(_ step: ExplorationStep, _ needle: String) -> Bool {
+        let haystacks = [step.selectedText, step.pageText, appState.stepAnnotations[step.id],
+                         step.appName, step.windowTitle, step.url]
+        return haystacks.contains { ($0 ?? "").lowercased().contains(needle) }
+    }
+
+    private func commitTitle() {
+        let trimmed = titleDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        renamingTitle = false
+        guard !trimmed.isEmpty, trimmed != appState.noteTitle else { return }
+        appState.renameNote(noteURL, to: trimmed)
     }
 
     /// Your thought about one capture, written straight back into the note.
@@ -118,14 +185,19 @@ struct AuroraNoteView: View {
         )
     }
 
+    /// A plain button hit-tests the pixels its label actually draws, so a 10pt
+    /// glyph in a 26pt frame left most of the target dead — clicks near the
+    /// edge went nowhere and it felt like it needed a second try. The shape is
+    /// declared explicitly, and the target given room.
     private func zoomButton(_ icon: String, enabled: Bool, _ action: @escaping () -> Void) -> some View {
-        Button { withAnimation(.smooth(duration: 0.2)) { action() } } label: {
+        Button { withAnimation(.smooth(duration: 0.16)) { action() } } label: {
             Image(systemName: icon)
-                .font(.system(size: 10, weight: .bold))
+                .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(enabled ? Aurora.ink : Aurora.ink3)
-                .frame(width: 26, height: 26)
+                .frame(width: 32, height: 28)
+                .contentShape(Rectangle())
         }
-        .buttonStyle(.plain)
+        .buttonStyle(AuroraTapDown())
         .disabled(!enabled)
     }
 
@@ -157,25 +229,57 @@ struct AuroraNoteView: View {
             }
             .buttonStyle(.plain)
 
-            Text(appState.noteTitle)
-                .font(Aurora.display(23))
-                .foregroundStyle(onNight ? .white : Aurora.ink)
-                .lineLimit(1)
-                .frame(maxWidth: onNight ? 300 : .infinity, alignment: .leading)
+            // Double-click the title to rename the note, the same gesture the
+            // folders and the rows in the list use.
+            Group {
+                if renamingTitle {
+                    TextField("", text: $titleDraft)
+                        .textFieldStyle(.plain)
+                        .font(Aurora.display(23))
+                        .foregroundStyle(onNight ? .white : Aurora.ink)
+                        .focused($titleFocused)
+                        .onSubmit { commitTitle() }
+                        .onExitCommand { renamingTitle = false }
+                        .padding(.horizontal, 8).padding(.vertical, 2)
+                        .background(onNight ? AnyShapeStyle(Color.white.opacity(0.14)) : AnyShapeStyle(Aurora.surface2),
+                                    in: RoundedRectangle(cornerRadius: 9, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: 9, style: .continuous)
+                            .strokeBorder(onNight ? .white.opacity(0.4) : Aurora.focusRing, lineWidth: 1.5))
+                } else {
+                    Text(appState.noteTitle)
+                        .font(Aurora.display(23))
+                        .foregroundStyle(onNight ? .white : Aurora.ink)
+                        .lineLimit(1)
+                        .contentShape(Rectangle())
+                        .onTapGesture(count: 2) {
+                            titleDraft = appState.noteTitle
+                            renamingTitle = true
+                            titleFocused = true
+                        }
+                        .help("Double-click to rename")
+                }
+            }
+            .frame(maxWidth: onNight ? 300 : .infinity, alignment: .leading)
 
             Spacer(minLength: 20)
 
             HStack(spacing: 10) {
-                if mode != .organized {
+                // Only the grid scales. Panel view is a fixed column by
+                // design, so a zoom control there is a dead knob.
+                if mode == .grid {
                     HStack(spacing: 2) {
-                        zoomButton("minus", enabled: zoom > 0.55) { zoom = max(0.5, zoom - 0.15) }
+                        zoomButton("minus", enabled: zoom > 0.5) { zoom = max(0.45, zoom - 0.15) }
+                            .help("Smaller")
                         Text("\(Int(zoom * 100))%")
                             .font(Aurora.mono(11)).foregroundStyle(Aurora.ink2)
-                            .frame(width: 44)
+                            .frame(width: 44, height: 28)
+                            .contentShape(Rectangle())
                             .onTapGesture { withAnimation(.smooth(duration: 0.2)) { zoom = 1 } }
-                        zoomButton("plus", enabled: zoom < 1.45) { zoom = min(1.5, zoom + 0.15) }
+                            .help("Back to 100%")
+                        zoomButton("plus", enabled: zoom < 1.95) { zoom = min(2.0, zoom + 0.15) }
+                            .help("Bigger")
                     }
-                    .padding(4)
+                    .padding(3)
                     .background(.regularMaterial, in: Capsule())
                     .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
                 }
@@ -204,27 +308,68 @@ struct AuroraNoteView: View {
         }
         .padding(.horizontal, 26)
         .padding(.top, 46).padding(.bottom, 8)
-        .overlay(alignment: .bottomTrailing) {
-            if mode == .organized, !appState.organizedDraft.isEmpty {
-                Button {
-                    appState.showOrganized(appState.organizedTemplate, force: true)
-                } label: {
-                    HStack(spacing: 7) {
-                        Image(systemName: "arrow.clockwise").font(.system(size: 10.5, weight: .bold))
-                        Text("Re-organize").font(Aurora.ui(12))
-                    }
-                    .foregroundStyle(Aurora.ink)
-                    .padding(.horizontal, 13).padding(.vertical, 7)
-                    .background(.regularMaterial, in: Capsule())
-                    .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
+        .padding(.bottom, 10)
+    }
+
+    /// Writing the note is the biggest thing you can do on this screen, so it
+    /// sits where your hand already is — bottom-right, over the text, above
+    /// everything else.
+    @ViewBuilder
+    private var organizeAction: some View {
+        let fresh = appState.organizedDraft.isEmpty
+        let stale = appState.organizedIsStale
+        VStack(alignment: .trailing, spacing: 8) {
+            if stale, !appState.isOrganizing {
+                HStack(spacing: 7) {
+                    Image(systemName: "exclamationmark.triangle.fill")
+                        .font(.system(size: 10, weight: .bold))
+                        .foregroundStyle(Aurora.warning)
+                    Text("Changed since this was written")
+                        .font(Aurora.ui(11.5, .medium)).foregroundStyle(Aurora.ink2)
                 }
-                .buttonStyle(.plain)
-                .disabled(appState.isOrganizing)
-                .padding(.trailing, 26)
-                .offset(y: 26)
+                .padding(.horizontal, 12).padding(.vertical, 7)
+                .background(.regularMaterial, in: Capsule())
+                .overlay(Capsule().strokeBorder(Aurora.warning.opacity(0.45), lineWidth: 1))
+                .transition(.opacity.combined(with: .move(edge: .trailing)))
             }
+
+            Button {
+                appState.showOrganized(appState.organizedTemplate, force: true)
+            } label: {
+                HStack(spacing: 10) {
+                    if appState.isOrganizing {
+                        ProgressView().controlSize(.small).tint(Aurora.onSolid)
+                    } else if fresh {
+                        OverlayIcon(kind: .spark, tint: Aurora.onSolid).frame(width: 17, height: 17)
+                    } else {
+                        Image(systemName: "arrow.clockwise").font(.system(size: 13, weight: .bold))
+                    }
+                    Text(appState.isOrganizing ? "Organizing…" : (fresh ? "Organize" : "Re-organize"))
+                        .font(Aurora.ui(15, .bold))
+                }
+                .foregroundStyle(Aurora.onSolid)
+                .padding(.horizontal, 22).padding(.vertical, 14)
+                .background(Aurora.solid, in: Capsule())
+                .overlay(alignment: .topTrailing) {
+                    // The same warning as a dot, for when the banner has been
+                    // scrolled past or the window is narrow.
+                    if stale, !appState.isOrganizing {
+                        Circle().fill(Aurora.warning)
+                            .frame(width: 11, height: 11)
+                            .overlay(Circle().strokeBorder(Aurora.ground, lineWidth: 2))
+                            .offset(x: 3, y: -3)
+                    }
+                }
+                .shadow(color: .black.opacity(0.22), radius: 22, y: 10)
+            }
+            .buttonStyle(AuroraPressStyle())
+            .disabled(appState.isOrganizing || steps.isEmpty)
+            .opacity(steps.isEmpty ? 0.5 : 1)
+            .help(fresh ? "Write this note up" : "Write it again from the captures as they are now")
         }
-        .padding(.bottom, mode == .organized ? 30 : 10)
+        .padding(.trailing, 30).padding(.bottom, 30)
+        .animation(.smooth(duration: 0.25), value: stale)
+        .animation(.smooth(duration: 0.25), value: appState.isOrganizing)
     }
 }
 
@@ -239,6 +384,8 @@ struct AuroraPanels: View {
     @Binding var active: Int
     var thought: (UUID) -> Binding<String>
     var zoom: Double = 1
+    /// A capture to scroll to once, when the note is opened from a search.
+    @Binding var focus: Int?
     var dimmedFor: UUID?
     var onRightClick: (ExplorationStep, CGPoint) -> Void
 
@@ -319,28 +466,35 @@ struct AuroraPanels: View {
                     .buttonStyle(.plain).disabled(active >= steps.count - 1)
             }
 
-            // TextEditor insets its text by ~5pt on the leading edge and 8pt on
-            // top; the placeholder has to sit on exactly that, or the caret
-            // appears to start in the wrong place.
-            TextEditor(text: thought(step.id))
-                .font(Aurora.serif(20))
-                .foregroundStyle(.white)
-                .lineSpacing(7)
-                .scrollContentBackground(.hidden)
-                .scrollDisabled(true)
-                .focused($editing)
-                .textEditorStyle(.plain)
-                .padding(.leading, -5)
-                .padding(.top, -8)
-                .frame(minHeight: 120, alignment: .topLeading)
-                .overlay(alignment: .topLeading) {
-                    if thought(step.id).wrappedValue.isEmpty {
-                        Text("What were you thinking when you saved this?")
-                            .font(Aurora.serif(20))
-                            .foregroundStyle(.white.opacity(0.45))
-                            .allowsHitTesting(false)
-                    }
+            // TextEditor insets its text by about 5pt on the leading edge and
+            // 8pt on top. Rather than nudging the editor and leaving the
+            // placeholder where it was — which is what put the caret above and
+            // to the left of the prompt — both sit in the same stack: the
+            // placeholder pads itself by exactly those insets, and the pair is
+            // then shifted back together.
+            ZStack(alignment: .topLeading) {
+                if thought(step.id).wrappedValue.isEmpty {
+                    Text("What were you thinking when you saved this?")
+                        .font(Aurora.serif(20))
+                        .lineSpacing(7)
+                        .foregroundStyle(.white.opacity(0.45))
+                        .padding(.leading, 5)
+                        .padding(.top, 8)
+                        .allowsHitTesting(false)
                 }
+
+                TextEditor(text: thought(step.id))
+                    .font(Aurora.serif(20))
+                    .foregroundStyle(.white)
+                    .lineSpacing(7)
+                    .scrollContentBackground(.hidden)
+                    .scrollDisabled(true)
+                    .focused($editing)
+                    .textEditorStyle(.plain)
+            }
+            .padding(.leading, -5)
+            .padding(.top, -8)
+            .frame(minHeight: 120, alignment: .topLeading)
 
         }
         .frame(maxWidth: .infinity, alignment: .leading)
@@ -353,6 +507,20 @@ struct AuroraPanels: View {
             .frame(width: 26, height: 26)
             .background(.white.opacity(0.14), in: Circle())
             .overlay(Circle().strokeBorder(.white.opacity(0.3), lineWidth: 1))
+    }
+
+    /// Jumps to a capture a search asked for. The list normally follows the
+    /// scroll position, so the sync is held off until the jump has landed.
+    private func scroll(to request: Int?, using proxy: ScrollViewProxy) {
+        guard let request, steps.indices.contains(request) else { return }
+        suppressSync = true
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.05) {
+            withAnimation(.smooth(duration: 0.45)) { proxy.scrollTo(request, anchor: .center) }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.7) {
+            suppressSync = false
+            focus = nil
+        }
     }
 
     private var right: some View {
@@ -400,6 +568,8 @@ struct AuroraPanels: View {
                     guard suppressSync else { return }
                     withAnimation(.smooth(duration: 0.4)) { proxy.scrollTo(newValue, anchor: .center) }
                 }
+                .onChange(of: focus) { _, request in scroll(to: request, using: proxy) }
+                .onAppear { scroll(to: focus, using: proxy) }
             }
         }
     }

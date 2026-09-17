@@ -9,6 +9,10 @@ import NotefyCore
 struct AuroraOnboarding: View {
     @EnvironmentObject private var appState: AppState
     var onFinish: () -> Void
+    /// Where the camera should be: how far along the panorama, and how far
+    /// down toward the ice. The window owns the scene; this only says where to
+    /// point it.
+    var onCamera: (_ pan: Double, _ tilt: Double) -> Void = { _, _ in }
 
     @Environment(\.colorScheme) private var scheme
 
@@ -18,22 +22,75 @@ struct AuroraOnboarding: View {
     @State private var bindingsTick = 0
     @State private var displaced: HotkeyAction?
     @State private var capturesAtStart: Int?
+    /// Setup arrives from below as the launch sequence lifts away, so the two
+    /// read as one move rather than a cut.
+    @State private var entered = false
     @StateObject private var meter = AuroraMicMeter()
     @StateObject private var recorder = HotkeyRecorder()
+    @AppStorage(AuroraAppearance.storageKey) private var appearanceRaw = AuroraAppearance.system.rawValue
 
-    private var dark: Bool { scheme == .dark }
-    private var fg: Color { dark ? .white : Aurora.ink }
-    private var fgSoft: Color { dark ? .white.opacity(0.74) : Aurora.ink2 }
-    private var fgFaint: Color { dark ? .white.opacity(0.5) : Aurora.ink3 }
-    private var panelFill: Color { dark ? .white.opacity(0.07) : Color.white.opacity(0.7) }
-    private var panelStroke: Color { dark ? .white.opacity(0.16) : Aurora.line }
-    private var solidFill: Color { dark ? .white : Aurora.ink }
-    private var solidText: Color { dark ? .black : Aurora.ground }
-    private var good: Color { dark ? Color(red: 0.45, green: 0.90, blue: 0.68) : Aurora.accent }
+    /// How far along the panorama setup has walked: every step slides the
+    /// world sideways, past mountains, through the spruce, out onto the lake.
+    private var journey: Double { Double(step) / Double(max(1, lastStep)) }
+
+    /// And how far the camera is tipped toward the ice. Setup keeps the sky in
+    /// charge; only the last step — the one that asks — tips it, so choosing
+    /// light or dark is done by looking at each.
+    private var cameraTilt: Double {
+        guard step >= lastStep else { return 0.26 }
+        switch appearanceRaw {
+        case AuroraAppearance.light.rawValue: return 0.98
+        case AuroraAppearance.dark.rawValue: return 0.04
+        // Matching the Mac is the view with both in it — the horizon held so
+        // you can see sky and ice at once. Pointing it at whatever the Mac
+        // happens to be set to made this choice look identical to that one.
+        default: return 0.5
+        }
+    }
+
+    private var macIsDark: Bool {
+        UserDefaults.standard.string(forKey: "AppleInterfaceStyle")?.lowercased() == "dark"
+    }
+
+    /// Type follows the camera, not the step: white while you are looking at
+    /// the night, ink once the ice fills the window. Half way between the two
+    /// is grey on grey, so the crossing is steep rather than linear.
+    /// The copy on this screen sits low in the frame, so what matters is what
+    /// is under *there*: any tilt past the horizon puts ice behind it, and ink
+    /// is the legible choice from that point on.
+    private var inkCrossing: Double {
+        let t = max(0, min(1, (cameraTilt - 0.26) / 0.16))
+        return t * t * (3 - 2 * t)
+    }
+
+    /// True while white type is still the legible one.
+    private var dark: Bool { inkCrossing < 0.5 }
+
+    private func crossing(_ night: Color, _ day: Color) -> Color {
+        Aurora.blend(night, day, inkCrossing)
+    }
+
+    // Written out rather than taken from `Aurora.*`: this window is pinned to
+    // the dark appearance, so every dynamic token resolves to its night value.
+    // Asking for `Aurora.ink` here returns white, which is how the light half
+    // of this screen ended up as white type on white ice.
+    private static let dayInk = Color(red: 0.07, green: 0.09, blue: 0.12)
+    private static let dayInk2 = Color(red: 0.24, green: 0.28, blue: 0.33)
+    private static let dayInk3 = Color(red: 0.40, green: 0.45, blue: 0.50)
+    private static let dayGood = Color(red: 0.05, green: 0.48, blue: 0.35)
+
+    private var fg: Color { crossing(.white, Self.dayInk) }
+    private var fgSoft: Color { crossing(.white.opacity(0.76), Self.dayInk2) }
+    private var fgFaint: Color { crossing(.white.opacity(0.52), Self.dayInk3) }
+    private var panelFill: Color { crossing(.white.opacity(0.07), Color.white.opacity(0.80)) }
+    private var panelStroke: Color { crossing(.white.opacity(0.16), Color.black.opacity(0.12)) }
+    private var solidFill: Color { crossing(.white, Self.dayInk) }
+    private var solidText: Color { crossing(.black, .white) }
+    private var good: Color { crossing(Color(red: 0.45, green: 0.90, blue: 0.68), Self.dayGood) }
 
     private var snapshot: NotedPermissionSnapshot { appState.permissionCenter.snapshot }
     private var canLeavePermissions: Bool { snapshot.screenRecording }
-    private var lastStep: Int { 5 }
+    private var lastStep: Int { 6 }
 
     private var capturedSomething: Bool {
         guard let capturesAtStart else { return false }
@@ -44,7 +101,15 @@ struct AuroraOnboarding: View {
         ZStack {
             backdrop
             VStack(alignment: .leading, spacing: 0) {
-                progress
+                // The last page is a choice, not a station on the way: the
+                // dots would be one more thing in a view that is already full.
+                Text("MINDSPACE")
+                    .font(Aurora.mono(10)).tracking(3)
+                    .foregroundStyle(fgFaint)
+                    .frame(maxWidth: .infinity, alignment: .center)
+                    .padding(.bottom, 14)
+
+                if step < lastStep { progress } else { Color.clear.frame(height: 4) }
                 Group {
                     switch step {
                     case 0: welcome
@@ -52,43 +117,118 @@ struct AuroraOnboarding: View {
                     case 2: microphone
                     case 3: model
                     case 4: tryIt
-                    default: shortcuts
+                    case 5: shortcuts
+                    default: appearanceStep
                     }
                 }
-                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+                // Every step is the same height. They were each as tall as
+                // their own content, so the panel resized between them and the
+                // whole page appeared to hop up or down on the way across.
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+                // The appearance page needs enough room for three proper
+                // preview cards. Other pages retain their tighter stage.
+                .frame(height: step == lastStep ? 560 : 452)
+                // The landscape behind is busy by design, and small type laid
+                // straight onto a ridgeline cannot be read. Everything with
+                // controls in it gets a sheet of frosted glass to sit on; the
+                // last step keeps the open sky, since its cards run off the
+                // edges of the window and a panel would fence them in.
+                .padding(step < lastStep ? 26 : 0)
+                .background {
+                    if step < lastStep {
+                        RoundedRectangle(cornerRadius: 30, style: .continuous)
+                            // Frosted glass, the same material the app's own
+                            // ground is made of: the landscape should be
+                            // visible through it, not behind a dark card.
+                            .fill(.ultraThinMaterial)
+                            .environment(\.colorScheme, .dark)
+                            .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                .fill(.white.opacity(0.05)))
+                            .overlay {
+                                AuroraGrain.tile
+                                    .resizable(resizingMode: .tile)
+                                    .blendMode(.overlay)
+                                    .opacity(0.12)
+                                    .clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+                            }
+                            .overlay(RoundedRectangle(cornerRadius: 30, style: .continuous)
+                                .strokeBorder(.white.opacity(0.28), lineWidth: 1))
+                            .shadow(color: .black.opacity(0.20), radius: 36, y: 14)
+                            .opacity(0.88)
+                    }
+                }
+                // Anything that grows past the panel — an open dropdown, a
+                // long list — is cut at its edge rather than spilling over the
+                // landscape. The last step has no panel and its cards bleed on
+                // purpose, so it is left alone.
+                .modifier(PanelClip(active: step < lastStep))
                 .id(step)
+                // Content travels the way the camera does: the world slides
+                // left, so the next step comes in from the right and the one
+                // you just finished leaves to the left. Nothing moves upward.
+                // The panel fades; the landscape behind it does the travelling.
+                // Sliding the panel as well made two competing movements.
                 .transition(.opacity)
                 controls
             }
             .padding(.horizontal, 44)
-            .padding(.top, 40)
-            .padding(.bottom, 56)
+            .padding(.top, step == lastStep ? 24 : 40)
+            .padding(.bottom, step == lastStep ? 24 : 56)
             .frame(maxWidth: 980)
+            .offset(y: entered ? 0 : 34)
+            .opacity(entered ? 1 : 0)
         }
-        .onAppear { appState.permissionCenter.startPolling() }
+        .onAppear {
+            guard !entered else { return }
+            withAnimation(.easeOut(duration: 0.8).delay(0.35)) { entered = true }
+        }
+        // A key typed here is worth nothing if it never reaches disk, and the
+        // vision client is rebuilt from settings on save.
+        .onChange(of: appState.settings) { _, _ in appState.saveSettings() }
+        .onAppear {
+            appState.permissionCenter.startPolling()
+            onCamera(journey, cameraTilt)
+        }
+        .onChange(of: step) { _, _ in onCamera(journey, cameraTilt) }
+        // The last step's cards move the camera: pick light and the world tips
+        // down onto the ice, pick dark and it tips back up into the sky.
+        .onChange(of: appearanceRaw) { _, _ in onCamera(journey, cameraTilt) }
         .onDisappear {
             appState.permissionCenter.stopPolling()
             appState.onboardingCaptureUnlocked = false
         }
     }
 
-    @ViewBuilder
+    /// The sky belongs to the window now — one tall aurora the launch screen
+    /// and this share — so all that is left here is the veil that keeps the
+    /// type legible over it.
+    /// The sky belongs to the window now — one tall aurora the launch screen
+    /// and this share — so all that is left here is the veil that keeps the
+    /// type legible over it. It crosses over too: a dark veil under the night,
+    /// a pale one once the snow is what the type is sitting on.
     private var backdrop: some View {
-        if dark {
-            AuroraNight(seed: 2).opacity(0.92).ignoresSafeArea()
-            LinearGradient(colors: [.black.opacity(0.42), .black.opacity(0.22)],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
-        } else {
-            AuroraGround()
-            AuroraNight(seed: 2, onLight: true)
-                .opacity(0.9)
-                .ignoresSafeArea()
-            // A pale veil so the type still has something quiet to sit on.
-            LinearGradient(colors: [.white.opacity(0.24), .white.opacity(0.06)],
-                           startPoint: .top, endPoint: .bottom)
-                .ignoresSafeArea()
+        ZStack {
+            // While the type is still white, the veil deepens as the scene
+            // brightens — that is what keeps the early steps readable on a sky
+            // that is getting lighter under them.
+            LinearGradient(stops: [
+                .init(color: .black.opacity(0.40), location: 0),
+                .init(color: .black.opacity(0.18), location: 0.45),
+                .init(color: .black.opacity(0.42), location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+                .opacity(1 - inkCrossing)
+
+            // And once it has crossed, the veil is pale and the snow carries
+            // the type instead.
+            LinearGradient(stops: [
+                .init(color: .white.opacity(0.34), location: 0),
+                .init(color: .white.opacity(0.58), location: 0.55),
+                .init(color: .white.opacity(0.40), location: 1),
+            ], startPoint: .top, endPoint: .bottom)
+                .opacity(inkCrossing)
         }
+        .ignoresSafeArea()
+        .animation(.easeInOut(duration: 0.9), value: cameraTilt)
     }
 
     // MARK: chrome
@@ -109,7 +249,7 @@ struct AuroraOnboarding: View {
     private var controls: some View {
         HStack(spacing: 14) {
             if step > 0 {
-                Button("Back") { withAnimation(.smooth(duration: 0.3)) { step -= 1 } }
+                Button("Back") { withAnimation(.easeInOut(duration: 0.45)) { step -= 1 } }
                     .buttonStyle(.plain)
                     .font(Aurora.ui(13))
                     .foregroundStyle(fgSoft)
@@ -119,10 +259,11 @@ struct AuroraOnboarding: View {
                 Text("Screen recording is the one Mindspace can't work without.")
                     .font(Aurora.ui(12, .medium)).foregroundStyle(fgFaint)
             }
+            if step < lastStep {
             Button {
-                if step >= lastStep { finish() } else { withAnimation(.smooth(duration: 0.3)) { step += 1 } }
+                withAnimation(.smooth(duration: 0.3)) { step += 1 }
             } label: {
-                Text(step >= lastStep ? "Open Mindspace" : "Continue")
+                Text("Continue")
                     .font(Aurora.ui(14, .bold))
                     .foregroundStyle(solidText)
                     .padding(.horizontal, 22).padding(.vertical, 12)
@@ -131,6 +272,7 @@ struct AuroraOnboarding: View {
             .buttonStyle(AuroraPressStyle())
             .disabled(step == 1 && !canLeavePermissions)
             .opacity(step == 1 && !canLeavePermissions ? 0.45 : 1)
+            }
         }
         .padding(.top, 30)
     }
@@ -143,62 +285,43 @@ struct AuroraOnboarding: View {
 
     /// Every page is the same shape: centred, sitting a little below the middle,
     /// heading then explanation then the thing you act on.
+    /// Every page is built the same way: a header block of fixed height at the
+    /// top, then the body centred in whatever is left. Letting each page centre
+    /// itself meant a short one and a tall one put their titles at different
+    /// heights, so moving between them looked like the page hopping upward.
     private func page<Content: View>(_ title: String,
                                      _ subtitle: String,
                                      @ViewBuilder content: () -> Content) -> some View {
-        VStack(spacing: 16) {
-            Spacer(minLength: 0)
-            Text(title)
-                .font(Aurora.display(30))
-                .foregroundStyle(fg)
-                .multilineTextAlignment(.center)
-            Text(subtitle)
-                .font(Aurora.ui(13.5, .regular))
-                .foregroundStyle(fgSoft)
-                .lineSpacing(4)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 560)
-                .fixedSize(horizontal: false, vertical: true)
+        VStack(spacing: 0) {
+            VStack(spacing: 14) {
+                Text(title)
+                    .font(Aurora.display(30))
+                    .foregroundStyle(fg)
+                    .multilineTextAlignment(.center)
+                Text(subtitle)
+                    .font(Aurora.ui(13.5, .regular))
+                    .foregroundStyle(fgSoft)
+                    .lineSpacing(4)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 560)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+            .frame(height: 124, alignment: .top)
+
             content()
-                .padding(.top, 10)
-            Spacer(minLength: 0)
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
     }
 
     // MARK: 0 — what this is
 
     private var welcome: some View {
-        VStack(spacing: 20) {
-            Spacer(minLength: 0)
-
-            Text("MINDSPACE")
-                .font(Aurora.mono(10)).tracking(3)
-                .foregroundStyle(fgFaint)
-
-            Text("Everything you want to remember, in one place.")
-                .font(Aurora.display(30))
-                .foregroundStyle(fg)
-                .multilineTextAlignment(.center)
-                .lineLimit(1)
-                .minimumScaleFactor(0.6)
-                .frame(maxWidth: 900)
-
-            Text("Capture your screen, save text, record thoughts and meetings, then come back to any of it later.")
-                .font(Aurora.serif(17))
-                .foregroundStyle(fgSoft)
-                .lineSpacing(5)
-                .multilineTextAlignment(.center)
-                .frame(maxWidth: 520)
-                .fixedSize(horizontal: false, vertical: true)
-
+        page("Everything you want to remember, in one place.",
+             "Capture your screen, save text, record thoughts and meetings, then come back to any of it later.") {
             AuroraDemoLoop(dark: dark)
                 .frame(width: 500, height: 300)
-                .padding(.top, 6)
-
-            Spacer(minLength: 0)
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 
     // MARK: 1 — permissions, one at a time
@@ -314,7 +437,7 @@ struct AuroraOnboarding: View {
 
     private var model: some View {
         page("Help, on your terms",
-             "Your captures and your thoughts stay here. When you want a tidy version, a model reads them and writes it up — and shows you where every line came from. Pick who does that, or keep it all on your Mac.") {
+             "Pick who writes the tidy version — or keep it all on your Mac.") {
             VStack(spacing: 16) {
                 HStack(spacing: 3) {
                     ForEach(ModelProvider.allCases, id: \.self) { option in
@@ -366,6 +489,7 @@ struct AuroraOnboarding: View {
                                 .font(Aurora.ui(12, .regular)).foregroundStyle(fgSoft)
                                 .fixedSize(horizontal: false, vertical: true)
                         }
+                        .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(12)
                         .background(panelFill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
                         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
@@ -413,8 +537,8 @@ struct AuroraOnboarding: View {
 
     private var shortcuts: some View {
         page("The keys you'll press",
-             "Click a shortcut and press the keys you want — taking one that's already in use here moves it across. A few belong to macOS: ⌘⇧5 is Screenshot, and it keeps that until you turn it off in Keyboard Settings.") {
-            VStack(spacing: 8) {
+             "Click one, then type the ⌘ combination you want.") {
+            VStack(spacing: 2) {
                 ForEach(HotkeyAction.allCases) { action in
                     shortcutRow(action)
                 }
@@ -439,6 +563,8 @@ struct AuroraOnboarding: View {
         return HStack(spacing: 12) {
             VStack(alignment: .leading, spacing: 2) {
                 Text(action.title).font(Aurora.ui(13.5, .semibold)).foregroundStyle(fg)
+                // No description line: six of them made this page taller than
+                // the window and pushed the button off the bottom.
                 if clashes {
                     HStack(spacing: 8) {
                         Text("macOS is holding this one.")
@@ -458,8 +584,6 @@ struct AuroraOnboarding: View {
                     Text("Lost its shortcut to another action — press keys to give it a new one.")
                         .font(Aurora.ui(11.5, .regular))
                         .foregroundStyle(Color(red: 0.92, green: 0.74, blue: 0.36))
-                } else {
-                    Text(action.detail).font(Aurora.ui(11.5, .regular)).foregroundStyle(fgFaint)
                 }
             }
             Spacer(minLength: 8)
@@ -480,19 +604,26 @@ struct AuroraOnboarding: View {
                 Text(listening ? "press keys" : HotkeyBindings.label(for: action))
                     .font(Aurora.mono(12))
                     .foregroundStyle(listening ? solidText : fg)
-                    .frame(minWidth: 96)
-                    .padding(.horizontal, 12).padding(.vertical, 8)
+                    .frame(minWidth: 92)
+                    .padding(.horizontal, 12).padding(.vertical, 6)
                     .background(listening ? AnyShapeStyle(solidFill) : AnyShapeStyle(panelFill), in: Capsule())
                     .overlay(Capsule().strokeBorder(listening ? .clear : Aurora.ink.opacity(0.3), lineWidth: 1))
             }
             .buttonStyle(AuroraPressStyle())
         }
-        .padding(.horizontal, 14).padding(.vertical, 11)
-        .background(panelFill.opacity(listening ? 1 : 0.6),
-                    in: RoundedRectangle(cornerRadius: 13, style: .continuous))
-        .overlay(RoundedRectangle(cornerRadius: 13, style: .continuous)
-            .strokeBorder(clashes ? Color(red: 0.92, green: 0.74, blue: 0.36).opacity(0.5)
-                          : panelStroke.opacity(listening ? 1 : 0.6), lineWidth: 1))
+        .padding(.horizontal, 10).padding(.vertical, 7)
+        // No card around each row. Six of them stacked up were mostly border
+        // and inner padding, and the list ran past the bottom of the panel.
+        // Only the one being recorded, or one macOS has taken, gets a shape.
+        .background((listening || clashes) ? panelFill : .clear,
+                    in: RoundedRectangle(cornerRadius: 11, style: .continuous))
+        .overlay(alignment: .bottom) {
+            Rectangle()
+                .fill(panelStroke.opacity(0.5))
+                .frame(height: 1)
+                .padding(.horizontal, 10)
+                .opacity(action == HotkeyAction.allCases.last ? 0 : 1)
+        }
     }
 
     // MARK: 5 — your first one
@@ -542,6 +673,160 @@ struct AuroraOnboarding: View {
             if capturesAtStart == nil { capturesAtStart = appState.steps.count }
         }
         .animation(.smooth(duration: 0.35), value: capturedSomething)
+    }
+
+
+    // MARK: appearance
+
+    /// Setup runs dark whatever the Mac is doing, so this last step is the
+    /// first time the choice is theirs. The swatches are drawn from fixed
+    /// colours rather than the environment — you have to see the other one to
+    /// pick it.
+    private var appearanceStep: some View {
+        HStack(alignment: .center, spacing: 0) {
+            VStack(alignment: .leading, spacing: 16) {
+                Text("Last thing — how should it look?")
+                    .font(Aurora.display(28))
+                    .foregroundStyle(fg)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Text("Try them. Light tips the world down onto the ice; dark takes it back up into the sky. Either way you can flip it any time with the moon in the bottom-right corner.")
+                    .font(Aurora.serif(16))
+                    .foregroundStyle(fgSoft)
+                    .lineSpacing(5)
+                    .fixedSize(horizontal: false, vertical: true)
+
+                Button(action: finish) {
+                    Text("Open Mindspace")
+                        .font(Aurora.ui(14, .bold))
+                        .foregroundStyle(solidText)
+                        .padding(.horizontal, 22).padding(.vertical, 12)
+                        .background(solidFill, in: Capsule())
+                }
+                .buttonStyle(AuroraPressStyle())
+                .padding(.top, 8)
+            }
+            .frame(width: 380, alignment: .leading)
+            // Low in the frame on purpose: below the horizon is ice at every
+            // tilt that matters, which is what keeps this readable.
+            .offset(y: 54)
+
+            Spacer(minLength: 24)
+
+            // Dark on top, the Mac's own setting in the middle, light at the
+            // bottom — the same axis the camera moves on. The ends run off the
+            // window, because they are places you can go rather than a row of
+            // options to compare.
+            // Taller than the window on purpose: dark runs off the top and
+            // light off the bottom, so they read as somewhere to go rather
+            // than three options in a row. Hung in an overlay so the overflow
+            // costs the layout nothing — otherwise it pushes the buttons off
+            // the bottom of the window with it.
+            // All three in view, none of them cut: they are a choice, and a
+            // choice you can only half see is a worse one.
+            VStack(spacing: 14) {
+                appearanceCard(.dark)
+                appearanceCard(.system)
+                appearanceCard(.light)
+            }
+            .frame(width: 330)
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .center)
+    }
+
+    private func appearanceCard(_ option: AuroraAppearance) -> some View {
+        let chosen = appearanceRaw == option.rawValue
+        return Button {
+            withAnimation(.smooth(duration: 0.3)) { appearanceRaw = option.rawValue }
+        } label: {
+            VStack(alignment: .leading, spacing: 12) {
+                appearanceSwatch(option)
+                    .frame(maxWidth: .infinity)
+                    .frame(height: 100)
+                    .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(.white.opacity(0.16), lineWidth: 1))
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(option == .system ? "Match my Mac" : option.label)
+                        .font(Aurora.ui(16, .bold))
+                        .foregroundStyle(fg)
+                    Text(blurb(option))
+                        .font(Aurora.ui(12, .medium))
+                        .foregroundStyle(fgFaint)
+                        .lineLimit(1)
+                }
+                .frame(height: 40, alignment: .top)
+                .padding(.bottom, 4)
+            }
+            .padding(14)
+            .padding(.bottom, 8)
+            // All three the same, with enough breathing room below the blurb.
+            .frame(height: 200)
+            // Selection must not remove the glass underneath the copy. On the
+            // light preview that exposed the mountain artwork directly behind
+            // dark text; keep the translucent sheet and tint it instead.
+            .background(panelFill,
+                        in: RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .overlay {
+                if chosen {
+                    RoundedRectangle(cornerRadius: 20, style: .continuous)
+                        .fill(good.opacity(0.07))
+                }
+            }
+            // No radio: the tile is the control, and its border is the answer.
+            .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous)
+                .strokeBorder(chosen ? good : panelStroke, lineWidth: chosen ? 2.4 : 1))
+            // The words are part of the button, not scenery beside it: a click
+            // anywhere on the tile picks it.
+            .contentShape(RoundedRectangle(cornerRadius: 20, style: .continuous))
+            .shadow(color: .black.opacity(chosen ? 0.22 : 0), radius: 22, y: 10)
+        }
+        .buttonStyle(AuroraPressStyle())
+    }
+
+    private func blurb(_ option: AuroraAppearance) -> String {
+        switch option {
+        case .dark: return "The night sky. Where it was drawn."
+        case .system: return macIsDark ? "Your Mac is dark right now." : "Your Mac is light right now."
+        case .light: return "Ice and snow, for a bright desk."
+        }
+    }
+
+    /// A doll's-house Mindspace: ground, an aurora over a folder, a line of
+    /// type. Enough to tell the two apart at a glance.
+    /// The preview is the world itself at that tilt: dark looks up into the
+    /// sky, light looks down onto the ice, and matching the Mac holds the
+    /// horizon where you can see both.
+    private func appearanceSwatch(_ option: AuroraAppearance) -> some View {
+        Group {
+            if option == .system {
+                GeometryReader { geo in
+                    ZStack {
+                        AuroraSceneThumbnail(tilt: 0.04)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .mask(alignment: .leading) {
+                                Rectangle().frame(width: geo.size.width / 2)
+                            }
+                        AuroraSceneThumbnail(tilt: 0.98)
+                            .frame(width: geo.size.width, height: geo.size.height)
+                            .mask(alignment: .trailing) {
+                                Rectangle().frame(width: geo.size.width / 2)
+                            }
+                    }
+                }
+            } else {
+                AuroraSceneThumbnail(tilt: tiltPreview(option))
+            }
+        }
+    }
+
+    private func tiltPreview(_ option: AuroraAppearance) -> Double {
+        switch option {
+        case .dark: return 0.04
+        case .light: return 0.98
+        case .system: return 0.52
+        }
     }
 
     // MARK: fields
@@ -732,5 +1017,32 @@ final class AuroraMicMeter: ObservableObject {
         engine.stop()
         running = false
         level = 0
+    }
+}
+
+
+/// The sideways slide each step arrives and leaves on.
+struct StepShift: ViewModifier {
+    let x: CGFloat
+    let opacity: Double
+
+    func body(content: Content) -> some View {
+        content.offset(x: x).opacity(opacity)
+    }
+}
+
+
+/// Clips a step's content to its panel — but only for the steps that have one.
+/// Clipping with a zero radius still clips, which cut the corner off the last
+/// step's cards.
+struct PanelClip: ViewModifier {
+    let active: Bool
+
+    func body(content: Content) -> some View {
+        if active {
+            content.clipShape(RoundedRectangle(cornerRadius: 30, style: .continuous))
+        } else {
+            content
+        }
     }
 }

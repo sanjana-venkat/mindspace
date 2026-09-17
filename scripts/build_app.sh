@@ -21,6 +21,12 @@ rm -rf "$APP_BUNDLE"
 mkdir -p "$APP_BUNDLE/Contents/MacOS" "$APP_BUNDLE/Contents/Resources/Fonts"
 
 cp "$BIN_DIR/notefy-app" "$APP_BUNDLE/Contents/MacOS/notefy-app"
+# A release binary still carries its debug symbols — around 10MB of them —
+# and nothing ships that reads them. Stripping happens before signing, or the
+# signature is invalidated.
+if [ "$CONFIG" = "release" ]; then
+    strip -x "$APP_BUNDLE/Contents/MacOS/notefy-app"
+fi
 cp "$ROOT_DIR/AppResources/Info.plist" "$APP_BUNDLE/Contents/Info.plist"
 if [ -n "${MINDSPACE_VERSION:-}" ]; then
     /usr/libexec/PlistBuddy -c "Set :CFBundleShortVersionString $MINDSPACE_VERSION" "$APP_BUNDLE/Contents/Info.plist"

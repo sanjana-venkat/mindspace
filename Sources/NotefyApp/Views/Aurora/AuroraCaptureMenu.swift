@@ -216,18 +216,32 @@ struct AuroraNoteTarget: Identifiable, Equatable {
     let url: URL
     let title: String
     let point: CGPoint
+    /// Set by whoever opened the menu — the list and the canvas offer
+    /// different amounts of it.
+    var style: AuroraNoteMenuStyle = .full
     var id: URL { url }
     static func == (a: AuroraNoteTarget, b: AuroraNoteTarget) -> Bool { a.url == b.url }
+}
+
+/// How much of the menu a view needs. The list has its own gestures for
+/// renaming and deleting, so right-click there is only about filing.
+enum AuroraNoteMenuStyle {
+    case full
+    case moveOnly
 }
 
 struct AuroraNoteActions: View {
     let target: AuroraNoteTarget
     let bounds: CGSize
+    var style: AuroraNoteMenuStyle = .full
     var onClose: () -> Void
 
     @EnvironmentObject private var appState: AppState
     @State private var moving = false
+    @State private var renaming = false
+    @State private var draft = ""
     @State private var confirmingDelete = false
+    @FocusState private var nameFocused: Bool
 
     private let panelWidth: CGFloat = 260
 
@@ -235,14 +249,35 @@ struct AuroraNoteActions: View {
         VStack(alignment: .leading, spacing: 8) {
             if moving {
                 folders
-            } else {
-                pill("MOVE TO", "folder") { moving = true }
-                pill(confirmingDelete ? "DELETE — SURE?" : "DELETE NOTE", "trash") {
-                    if confirmingDelete {
-                        appState.deleteNote(target.url)
+            } else if renaming {
+                TextField("Note name", text: $draft)
+                    .textFieldStyle(.plain)
+                    .font(Aurora.ui(14, .medium))
+                    .foregroundStyle(Aurora.ink)
+                    .focused($nameFocused)
+                    .padding(.horizontal, 14).padding(.vertical, 11)
+                    .frame(width: 210, alignment: .leading)
+                    .background(.regularMaterial, in: Capsule())
+                    .overlay(Capsule().strokeBorder(Aurora.focusRing, lineWidth: 2))
+                    .onSubmit {
+                        appState.renameNote(target.url, to: draft)
                         onClose()
-                    } else {
-                        confirmingDelete = true
+                    }
+                    .onExitCommand { onClose() }
+                    .onAppear { draft = target.title; nameFocused = true }
+            } else {
+                if style == .full {
+                    pill("RENAME", "pencil") { renaming = true }
+                }
+                pill("MOVE TO", "folder") { moving = true }
+                if style == .full {
+                    pill(confirmingDelete ? "DELETE — SURE?" : "DELETE NOTE", "trash") {
+                        if confirmingDelete {
+                            appState.deleteNote(target.url)
+                            onClose()
+                        } else {
+                            confirmingDelete = true
+                        }
                     }
                 }
             }
@@ -325,5 +360,64 @@ struct AuroraNoteActions: View {
     private var clampedY: CGFloat {
         let half: CGFloat = moving ? 160 : 70
         return min(max(target.point.y, half + 30), bounds.height - half - 20)
+    }
+}
+
+// MARK: - folders
+
+/// Right-click on a folder: rename it, or delete it. Deleting a folder never
+/// deletes what is inside — the notes move up to the parent — so the confirm
+/// step says exactly that.
+struct AuroraFolderTarget: Identifiable, Equatable {
+    let id: UUID
+    let name: String
+    let point: CGPoint
+    static func == (a: AuroraFolderTarget, b: AuroraFolderTarget) -> Bool { a.id == b.id }
+}
+
+struct AuroraFolderActions: View {
+    let target: AuroraFolderTarget
+    let bounds: CGSize
+    /// Deleting a folder is asked about properly, in a window of its own —
+    /// a pill that changes its own label to "sure?" is easy to click twice.
+    var onRequestDelete: (AuroraFolderTarget) -> Void
+    var onClose: () -> Void
+
+    private let panelWidth: CGFloat = 260
+
+    var body: some View {
+        // Only delete. Renaming a folder is a double-click on its name, in
+        // both views — putting it here too would be two doors to one room.
+        VStack(alignment: .leading, spacing: 8) {
+            pill("DELETE FOLDER", "trash") {
+                onRequestDelete(target)
+                onClose()
+            }
+        }
+        .frame(width: panelWidth, alignment: .leading)
+        .position(x: clampedX, y: clampedY)
+    }
+
+    private func pill(_ title: String, _ icon: String, _ action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            HStack(spacing: 9) {
+                Image(systemName: icon).font(.system(size: 11, weight: .bold))
+                Text(title).font(Aurora.mono(10.5)).tracking(1.1)
+                Spacer(minLength: 0)
+            }
+            .foregroundStyle(Aurora.onSolid)
+            .padding(.horizontal, 15).padding(.vertical, 10)
+            .frame(width: 178, alignment: .leading)
+            .background(Aurora.solid, in: Capsule())
+            .shadow(color: .black.opacity(0.22), radius: 16, y: 8)
+        }
+        .buttonStyle(AuroraPressStyle())
+    }
+
+    private var clampedX: CGFloat {
+        min(max(target.point.x + panelWidth / 2 + 16, panelWidth / 2 + 20), bounds.width - panelWidth / 2 - 20)
+    }
+    private var clampedY: CGFloat {
+        min(max(target.point.y, 90), bounds.height - 110)
     }
 }

@@ -8,6 +8,24 @@ private enum RecordingPurpose: Equatable {
     case standaloneMeetingNote
 }
 
+/// Why an organize run fell back to the on-device write-up, and what the
+/// person can do about it.
+struct OrganizeFailure: Equatable {
+    enum Fix: Equatable {
+        /// Google named the model that replaces the retired one.
+        case switchModel(String)
+        /// The key is missing or was rejected.
+        case openSettings
+        /// Nothing specific — just try again.
+        case retry
+    }
+
+    let summary: String
+    let fix: Fix
+    /// The provider's own words, behind a disclosure.
+    let detail: String
+}
+
 enum OrganizationTemplate: String, Codable, CaseIterable, Identifiable {
     case bulletList = "Bullet list"
     case essay = "Essay"
@@ -16,9 +34,13 @@ enum OrganizationTemplate: String, Codable, CaseIterable, Identifiable {
 
     var id: String { rawValue }
 
-    /// What the UI offers. The flowchart path isn't reliable yet, so it stays
-    /// out of the picker while the rest ships.
-    static var offered: [OrganizationTemplate] { allCases.filter { $0 != .diagram } }
+    /// What the UI offers. The flowchart path isn't reliable yet, and meeting
+    /// notes belong to the meeting recorder rather than to a pile of captures,
+    /// so both stay out of the picker while the rest ships. The cases remain:
+    /// notes written before this still decode and still display.
+    static var offered: [OrganizationTemplate] {
+        allCases.filter { $0 != .diagram && $0 != .meetingNotes }
+    }
 
     var icon: String {
         switch self {
@@ -225,6 +247,10 @@ private struct StoredNoteDocument: Codable {
     /// Switching between Bullet list / Essay / Meeting notes then costs
     /// nothing — the model only runs for a shape that hasn't been made yet.
     var organizedVariants: [String: String]? = nil
+    /// What the note looked like when each variant was written, keyed the same
+    /// way. Comparing it against the note now is how the reader knows an
+    /// organized version has fallen behind the captures it was made from.
+    var organizedStamps: [String: String]? = nil
     var rawDraft: String? = nil
     /// Same story for the free-standing thoughts block.
     var annotationDraft: String? = nil
@@ -239,12 +265,10 @@ final class AppState: ObservableObject {
     private var workspaceURL: URL { sessionDir.appendingPathComponent("workspace.json") }
 
     @Published var workspace: Workspace = Workspace()
-    /// Settings persist themselves. They used to save only when something
-    /// called `saveSettings()`, so a key typed into Settings and then dismissed
-    /// was lost — and worse, the vision client kept the config it was built
-    /// with at launch, which is why a freshly typed Gemini key still ran the
-    /// on-device model.
-    @Published var settings: NotefySettings { didSet { scheduleSettingsSave() } }
+    /// Saved by whoever edits it — see `saveSettings()`. It is deliberately not
+    /// a `didSet`: that fires while AppState is still being constructed, and
+    /// scheduling work from there stopped SwiftUI from building the window.
+    @Published var settings: NotefySettings
     @Published var steps: [ExplorationStep] = []
     @Published var vlmResults: [UUID: String] = [:]
     @Published var isTracking = false
@@ -254,6 +278,9 @@ final class AppState: ObservableObject {
     @Published var recordingStatus: String?
     @Published var lastSavedSummaryPath: String?
     @Published var historyFiles: [URL] = []
+    /// Flattened note text for search, keyed by file name and stamped with the
+    /// modification date it was built from.
+    private var searchIndex: [String: (stamp: Date, text: String)] = [:]
     @Published var audioModelState: ModelRuntimeState = .notDownloaded
     @Published var visionStatus: String = "Not checked"
     @Published var noteTitle: String = "Untitled capture"
@@ -272,22 +299,42 @@ final class AppState: ObservableObject {
     @Published var organizedGraph: ThoughtGraph? = nil
     @Published var organizedTemplate: OrganizationTemplate = .bulletList
     @Published var organizedVariants: [String: String] = [:]
+    /// Content fingerprint taken at the moment each variant was written.
+    @Published var organizedStamps: [String: String] = [:]
     @Published var isOrganizing = false
     @Published var audioInputDevices: [AudioInputDevice] = []
     @Published var microphonePowerDB: Float = -160
     @Published var systemAudioPowerDB: Float = -160
+    /// Which input the current session recording is listening to.
+    private(set) var sessionAudioSource: SessionAudioSource = .systemAudio
     @Published var microphoneSourceActive = false
     @Published var systemAudioSourceActive = false
+    /// A cloud failure the interface can act on. Google's errors usually carry
+    /// their own fix — a retired model names its replacement, a bad key says
+    /// so — and the note is not the place to print JSON.
+    @Published var organizeFailure: OrganizeFailure?
+    /// Set when something elsewhere in the app needs Settings opened — a
+    /// rejected API key, for instance, whose fix lives there.
+    @Published var isShowingSettings = false
+
     @Published var isShowingPermissionOnboarding: Bool
     /// Setup ends with the user taking their first capture, so the rail has to
     /// be reachable while onboarding is still on screen.
     @Published var onboardingCaptureUnlocked = false
 
-    let whisperTranscriber = LocalWhisperTranscriber()
+    let localTranscriber = LocalSpeechTranscriber()
+    /// Runs beside a recording so you can watch it being heard.
+    lazy var liveTranscript = LiveTranscriptEngine()
 
     private let tracker: ExplorationTracker
     private let meetingRecorder = MeetingRecorder()
     private let meetingDetection = MeetingDetectionController()
+    /// The app's own meeting offer, and the light that plays when something
+    /// is caught.
+    private let toast = AuroraToastController()
+    private let flourish = AuroraFlourishController()
+    /// The moon on the desktop, filing what you catch.
+    let pet = MoonPetController()
     private var audioClient: AudioClient
     private var visionClient: VisionClient
     private var isChangingRecordingState = false
@@ -297,13 +344,6 @@ final class AppState: ObservableObject {
     private let captureReview = CaptureReviewController()
     private let recordingNotepad = RecordingNotepadController()
     private let instructionToast = InstructionToastController()
-    private lazy var capturePet = CapturePetController(
-        captureText: { [weak self] in self?.captureSelectedText() },
-        capturePage: { [weak self] in self?.captureActivePage() },
-        captureRegion: { [weak self] in self?.captureSelectedRegion() },
-        toggleAudio: { [weak self] in self?.toggleSessionVoiceNote() },
-        toggleMeeting: { [weak self] in self?.toggleMeetingNote() }
-    )
     private lazy var hotkeys = GlobalHotkeyController(
         onMeeting: { [weak self] in
             guard let self, !self.isRecording || self.recordingPurposeIsMeetingNote else { return }
@@ -313,7 +353,7 @@ final class AppState: ObservableObject {
         onPage: { [weak self] in self?.captureActivePage() },
         onRegion: { [weak self] in self?.captureSelectedRegion() },
         onSessionAudio: { [weak self] in self?.toggleSessionVoiceNote() },
-        onCaptureRail: { [weak self] in self?.capturePet.toggle() }
+        onCaptureRail: { [weak self] in self?.pet.toggle() }
     )
 
     init() {
@@ -336,13 +376,11 @@ final class AppState: ObservableObject {
         }
         if loaded.audio.provider == .local && !Self.isLocalWhisperVariant(loaded.audio.modelName) {
             loaded.audio.modelName = "base"
-            loaded.save(to: settingsURL)
         }
         // qwen2-vl was the old default before qwen3.5:9b (real vision + text synthesis,
         // confirmed working via Ollama) replaced it; carry existing installs forward.
         if loaded.vision.provider == .local && loaded.vision.modelName == "qwen2-vl" {
             loaded.vision.modelName = "qwen3.5:9b"
-            loaded.save(to: settingsURL)
         }
         self.settings = loaded
         self.audioClient = AudioClient(config: loaded.audio)
@@ -368,6 +406,17 @@ final class AppState: ObservableObject {
             guard let self else { return false }
             return !self.isRecording && !self.isChangingRecordingState
         }
+        meetingDetection.onSuggest = { [weak self] detail in
+            guard let self else { return }
+            self.toast.present(
+                headline: "I can take notes",
+                detail: "\(detail) I'll record and transcribe both sides, and write it up after.",
+                acceptLabel: "Take notes") { [weak self] in
+                    guard let self, !self.isRecording, !self.isChangingRecordingState else { return }
+                    NSApp.activate(ignoringOtherApps: true)
+                    self.toggleMeetingNote()
+                }
+        }
         meetingDetection.onAccept = { [weak self] in
             guard let self, !self.isRecording, !self.isChangingRecordingState else { return }
             NSApp.activate(ignoringOtherApps: true)
@@ -375,9 +424,35 @@ final class AppState: ObservableObject {
         }
         meetingDetection.start()
 
-        whisperTranscriber.$state
+        // Keys live in the Keychain, and reading it blocks for as long as
+        // macOS takes to answer — including asking the user, which it does
+        // whenever the app's signature has changed. Doing that here, inline,
+        // meant the app could sit on a hidden prompt with no window at all.
+        Task.detached(priority: .utility) {
+            let stored = NotefySettings.storedKeys()
+            guard !stored.isEmpty else { return }
+            await MainActor.run { [weak self] in
+                guard let self else { return }
+                if self.settings.attachStoredKeys(stored) {
+                    self.audioClient = AudioClient(config: self.settings.audio)
+                    self.visionClient = VisionClient(config: self.settings.vision)
+                }
+            }
+        }
+
+        localTranscriber.$state
             .receive(on: DispatchQueue.main)
             .sink { [weak self] state in self?.audioModelState = state }
+            .store(in: &cancellables)
+
+        // The moon's resting line is where captures are going: the note that
+        // is open, which is what anything caught right now will be filed into.
+        $noteTitle
+            .receive(on: DispatchQueue.main)
+            .sink { [weak self] title in
+                let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+                self?.pet.state.folderName = trimmed.isEmpty ? "Untitled note" : trimmed
+            }
             .store(in: &cancellables)
 
         refreshHistory()
@@ -385,9 +460,25 @@ final class AppState: ObservableObject {
         refreshAudioInputDevices()
 
         if settings.audio.provider == .local {
-            Task { await whisperTranscriber.ensureReady(variant: settings.audio.modelName) }
+            Task { await localTranscriber.ensureReady() }
         }
         checkVisionStatus()
+
+        // If the moon was out when you quit, it comes back out.
+        // The moon is the capture rail now. Hovering it brings its actions out
+        // around it, so there is one object on the desktop rather than a pet
+        // and a slab of buttons doing the same job.
+        pet.actions = MoonPetActions(
+            captureRegion: { [weak self] in self?.captureSelectedRegion() },
+            capturePage: { [weak self] in self?.captureActivePage() },
+            captureText: { [weak self] in self?.captureSelectedTextFromHotkey() },
+            audio: { [weak self] source in self?.toggleSessionVoiceNote(source: source) },
+            meeting: { [weak self] in self?.toggleMeetingNote() },
+            openApp: {
+                NSApp.activate(ignoringOtherApps: true)
+                NotefyAppDelegate.mainWindows.first?.makeKeyAndOrderFront(nil)
+            })
+        pet.restoreIfWanted()
     }
 
     func installHotkeys() {
@@ -404,16 +495,16 @@ final class AppState: ObservableObject {
 
     func showCapturePet() {
         guard !isShowingPermissionOnboarding || onboardingCaptureUnlocked else { return }
-        capturePet.show()
+        pet.show()
     }
 
     func toggleCaptureRail() {
         guard !isShowingPermissionOnboarding || onboardingCaptureUnlocked else { return }
-        capturePet.toggle()
+        pet.toggle()
     }
 
     func showPermissionOnboarding() {
-        capturePet.hide()
+        pet.hide()
         permissionCenter.refresh()
         isShowingPermissionOnboarding = true
     }
@@ -421,7 +512,7 @@ final class AppState: ObservableObject {
     func finishPermissionOnboarding() {
         permissionCenter.markComplete()
         isShowingPermissionOnboarding = false
-        capturePet.show()
+        pet.show()
     }
 
     func refreshAudioInputDevices() {
@@ -641,16 +732,37 @@ final class AppState: ObservableObject {
         saveWorkspace()
     }
 
+    /// Deleting a folder deletes what is in it: every note filed there, the
+    /// captures those notes hold, and any folder nested inside it, all the way
+    /// down. The confirmation is what stands between this and a mis-click.
     func deleteFolder(_ id: UUID) {
-        let parent = workspace.folders.first(where: { $0.id == id })?.parentID
-        for idx in workspace.folders.indices where workspace.folders[idx].parentID == id {
-            workspace.folders[idx].parentID = parent
+        var doomed: Set<UUID> = [id]
+        var frontier = [id]
+        while let next = frontier.popLast() {
+            for folder in workspace.folders where folder.parentID == next && !doomed.contains(folder.id) {
+                doomed.insert(folder.id)
+                frontier.append(folder.id)
+            }
         }
-        workspace.folders.removeAll { $0.id == id }
-        for key in workspace.noteMeta.keys where workspace.noteMeta[key]?.folderID == id {
-            workspace.noteMeta[key]?.folderID = parent
+
+        for url in notesIn(folders: doomed) { deleteNote(url) }
+
+        workspace.folders.removeAll { doomed.contains($0.id) }
+        for key in workspace.noteMeta.keys {
+            if let folder = workspace.noteMeta[key]?.folderID, doomed.contains(folder) {
+                workspace.noteMeta.removeValue(forKey: key)
+            }
         }
         saveWorkspace()
+        refreshHistory()
+    }
+
+    /// Every note file filed under any of these folders.
+    private func notesIn(folders: Set<UUID>) -> [URL] {
+        historyFiles.filter { url in
+            guard let folder = workspace.noteMeta[url.lastPathComponent]?.folderID else { return false }
+            return folders.contains(folder)
+        }
     }
 
     func moveNote(_ url: URL, toFolder folderID: UUID?) {
@@ -700,14 +812,110 @@ final class AppState: ObservableObject {
     }
 
     /// Search notes by title or folder path, e.g. "matchpoint/overhaul" or just "overhaul".
+    /// Titles and folder paths first, then everything the note is made of —
+    /// the text clipped from each capture, what was read off the screen, the
+    /// thoughts written beside them and the raw note itself. Searching only
+    /// titles meant a phrase you remembered reading was unfindable.
     func searchNotes(query: String) -> [NoteDestination] {
         let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         guard !q.isEmpty else { return allNoteDestinationsByRecency }
-        return allNoteDestinationsByRecency.filter { destination in
+        var byName: [NoteDestination] = []
+        var byContent: [NoteDestination] = []
+        for destination in allNoteDestinationsByRecency {
             let path = folderPath(for: folderID(for: destination.url))
             let full = (path.isEmpty ? destination.title : "\(path)/\(destination.title)").lowercased()
-            return full.contains(q)
+            if full.contains(q) {
+                byName.append(destination)
+            } else if searchableText(for: destination.url).contains(q) {
+                byContent.append(destination)
+            }
         }
+        // A title match is what you meant; a body match is what you'll take.
+        return byName + byContent
+    }
+
+    /// Strips the plumbing out of a note's markdown: image and link targets,
+    /// file paths, heading marks and table pipes. What is left is what a person
+    /// would say was in the note — which is what they will search for, and what
+    /// a result should show them.
+    static func readable(_ markdown: String) -> String {
+        var text = markdown
+
+        for pattern in [
+            "!\\[[^\\]]*\\]\\([^)]*\\)",           // images: drop entirely
+            "\\((?:file://)?/[^)\\s]+\\)",             // any path in brackets
+            "(?:file://)?/[^\\s)]*/[^\\s)]*",            // a bare path anywhere
+            "\\b[A-Za-z0-9_.-]+\\.(?:png|jpg|jpeg|heic|wav|m4a|mp3|json|md)\\b",  // bare file names
+            "<[^>]+>",                                  // stray html/links
+        ] {
+            text = text.replacingOccurrences(of: pattern, with: " ", options: .regularExpression)
+        }
+        // Links keep their words and lose their destination.
+        text = text.replacingOccurrences(of: "\\[([^\\]]*)\\]\\([^)]*\\)", with: "$1",
+                                         options: .regularExpression)
+        text = text.replacingOccurrences(of: "(?m)^[#>\\-*|\\s]{1,6}", with: " ",
+                                         options: .regularExpression)
+        text = text.replacingOccurrences(of: "[*_`]{1,3}", with: "", options: .regularExpression)
+        text = text.replacingOccurrences(of: "\\s{2,}", with: " ", options: .regularExpression)
+        return text
+    }
+
+    /// The line a body match was found on, for showing under the title.
+    func searchSnippet(for url: URL, query: String) -> String? {
+        let q = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !q.isEmpty else { return nil }
+        let text = searchableText(for: url)
+        guard let range = text.range(of: q) else { return nil }
+        let start = text.index(range.lowerBound, offsetBy: -48, limitedBy: text.startIndex) ?? text.startIndex
+        let end = text.index(range.upperBound, offsetBy: 72, limitedBy: text.endIndex) ?? text.endIndex
+        var snippet = Self.readable(String(text[start..<end]))
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        if start != text.startIndex { snippet = "…" + snippet }
+        if end != text.endIndex { snippet += "…" }
+        return snippet
+    }
+
+    /// Everything in a note, lowercased and flattened, cached against the
+    /// file's modification date so typing doesn't re-read the disk each time.
+    private func searchableText(for url: URL) -> String {
+        let key = url.lastPathComponent
+        let stamp = (try? url.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            ?? .distantPast
+        let sidecar = sidecarURL(for: url)
+        let sidecarStamp = (try? sidecar.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate
+            ?? .distantPast
+        let newest = max(stamp, sidecarStamp)
+        if let cached = searchIndex[key], cached.stamp >= newest { return cached.text }
+
+        // Only what is *in* the note: the words on the captures, the words you
+        // wrote beside them, and the write-up. Not the markdown file, whose
+        // plumbing carries image paths and source lines — that is why "abi"
+        // matched a screenshot living under /Users/abishek, and "local" or
+        // "desktop" matched wherever a file happened to sit.
+        var parts: [String] = []
+        if let data = try? Data(contentsOf: sidecar),
+           let document = try? JSONDecoder().decode(StoredNoteDocument.self, from: data) {
+            parts.append(document.title)
+            // Your own thoughts, per capture and free-standing.
+            parts.append(contentsOf: document.annotations.values)
+            parts.append(document.annotationDraft ?? "")
+            // The raw note and every shape it has been written as.
+            parts.append(document.rawDraft ?? "")
+            parts.append(document.organized)
+            parts.append(contentsOf: (document.organizedVariants ?? [:]).values)
+            for step in document.steps {
+                // The text you clipped, and the text read off the screen.
+                parts.append(step.selectedText ?? "")
+                parts.append(step.pageText ?? "")
+            }
+        }
+        let text = parts
+            .map { Self.readable($0) }
+            .joined(separator: "\n")
+            .lowercased()
+        searchIndex[key] = (stamp: newest, text: text)
+        return text
     }
 
     private func movePendingCapture(_ step: ExplorationStep, to destination: NoteDestination) {
@@ -798,6 +1006,7 @@ final class AppState: ObservableObject {
     /// is already highlighted, capture it; otherwise arm and wait for a
     /// selection to appear.
     func captureSelectedText() {
+        FocusKeeper.remember()
         guard ensureCaptureSession() else { return }
         if tracker.peekSelectedText() != nil {
             performSelectedTextCapture()
@@ -811,6 +1020,7 @@ final class AppState: ObservableObject {
     /// which do not expose AXSelectedText, can use the clipboard-preserving copy
     /// fallback. The rail button keeps its useful arm-then-highlight behavior.
     func captureSelectedTextFromHotkey() {
+        FocusKeeper.remember()
         guard ensureCaptureSession() else { return }
         cancelArmedTextCapture()
         performSelectedTextCapture()
@@ -866,6 +1076,7 @@ final class AppState: ObservableObject {
     }
 
     func captureActivePage() {
+        FocusKeeper.remember()
         guard ensureCaptureSession() else { return }
         recordingStatus = "Capturing active page…"
         Task { [weak self] in
@@ -882,6 +1093,7 @@ final class AppState: ObservableObject {
     }
 
     func captureSelectedRegion() {
+        FocusKeeper.remember()
         guard ensureCaptureSession() else { return }
         let source = tracker.currentSourceContext()
         recordingStatus = "Drag over the region to add"
@@ -974,7 +1186,41 @@ final class AppState: ObservableObject {
         organizeCurrentSession(as: template)
     }
 
+    /// Picking a shape is not a request to write one. Switching from bullets to
+    /// an essay shows the essay if this note already has one and an empty page
+    /// if it doesn't — the model runs when you ask it to, not when you browse.
+    func selectOrganizedTemplate(_ template: OrganizationTemplate) {
+        guard !isOrganizing else { return }
+        organizedTemplate = template
+        organizedDraft = organizedVariants[template.rawValue] ?? ""
+        organizeFailure = nil
+        recordingStatus = nil
+        persistCurrentRawNote()
+    }
+
+    /// A fingerprint of everything an organized note is written from: the
+    /// captures, their order, the thoughts beside them, and the raw note.
+    var organizedFingerprint: String {
+        var parts: [String] = [noteTitle, rawDraft, annotationDraft]
+        for step in steps {
+            parts.append(step.id.uuidString)
+            parts.append(stepAnnotations[step.id] ?? "")
+        }
+        let joined = parts.joined(separator: "\u{1}")
+        var hash: UInt64 = 0xcbf2_9ce4_8422_2325
+        for byte in joined.utf8 { hash = (hash ^ UInt64(byte)) &* 0x0000_0100_0000_01b3 }
+        return String(hash, radix: 16)
+    }
+
+    /// True when this note has changed since the shape on screen was written.
+    var organizedIsStale: Bool {
+        guard !organizedDraft.isEmpty,
+              let stamp = organizedStamps[organizedTemplate.rawValue] else { return false }
+        return stamp != organizedFingerprint
+    }
+
     func organizeCurrentSession(as template: OrganizationTemplate = .bulletList) {
+        organizeFailure = nil
         guard !steps.isEmpty || !rawDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
             recordingStatus = "Add something to the raw note first."
             return
@@ -1036,10 +1282,11 @@ final class AppState: ObservableObject {
                     case .success(let note):
                         self.organizedDraft = note
                         self.organizedVariants[template.rawValue] = note
+                        self.organizedStamps[template.rawValue] = self.organizedFingerprint
                         self.recordingStatus = nil
                     case .failure(let error):
                         self.organizedDraft = fallback
-                        self.recordingStatus = "Model unavailable; made this \(template.rawValue.lowercased()) on-device. \(error.localizedDescription)"
+                        self.noteFailure(error, template: template)
                     }
                     self.persistCurrentRawNote()
                     self.isOrganizing = false
@@ -1066,14 +1313,63 @@ final class AppState: ObservableObject {
                 case .success(let note):
                     self.organizedDraft = note
                     self.organizedVariants[template.rawValue] = note
+                    self.organizedStamps[template.rawValue] = self.organizedFingerprint
                     self.recordingStatus = nil
                 case .failure(let error):
                     self.organizedDraft = fallback
-                    self.recordingStatus = "Model unavailable; made this \(template.rawValue.lowercased()) on-device. \(error.localizedDescription)"
+                    self.noteFailure(error, template: template)
                 }
                 self.persistCurrentRawNote()
                 self.isOrganizing = false
             }
+        }
+    }
+
+    /// Translates a provider error into something with a button on it, and
+    /// says plainly that the on-device write-up is what you are looking at.
+    private func noteFailure(_ error: Error, template: OrganizationTemplate) {
+        let shape = template.rawValue.lowercased()
+        if let gemini = error as? GeminiFailure {
+            let fix: OrganizeFailure.Fix
+            switch gemini.kind {
+            case .retiredModel:
+                fix = gemini.suggestedModel.map { .switchModel($0) } ?? .openSettings
+            case .missingKey, .key:
+                fix = .openSettings
+            case .rateLimit, .other:
+                fix = .retry
+            }
+            // Having no key is not a failure, it is a configuration: say what
+            // wrote the note and leave the provider's name out of it.
+            let summary = gemini.kind == .missingKey
+                ? "No API key detected, so this \(shape) was written with the on-device model."
+                : "\(gemini.summary) This \(shape) was written on-device instead."
+            organizeFailure = OrganizeFailure(summary: summary, fix: fix, detail: gemini.detail)
+        } else {
+            organizeFailure = OrganizeFailure(
+                summary: "\(settings.vision.provider.displayName) couldn't be reached, so this \(shape) was written on-device.",
+                fix: .retry,
+                detail: error.localizedDescription)
+        }
+        recordingStatus = nil
+    }
+
+    /// Takes the fix the failure offered. Switching models saves the new name,
+    /// so the next note starts from the one that works.
+    func applyOrganizeFix(_ fix: OrganizeFailure.Fix) {
+        switch fix {
+        case .switchModel(let model):
+            settings.vision.modelName = model
+            saveSettings()
+            checkVisionStatus()
+            organizeFailure = nil
+            organizeCurrentSession(as: organizedTemplate)
+        case .retry:
+            organizeFailure = nil
+            organizeCurrentSession(as: organizedTemplate)
+        case .openSettings:
+            organizeFailure = nil
+            isShowingSettings = true
         }
     }
 
@@ -1212,8 +1508,32 @@ final class AppState: ObservableObject {
         return "[\(host)](\(rawURL))"
     }
 
+    /// The live transcript follows whatever is being recorded; the finished
+    /// transcript is still made from the files when you stop.
+    private func startLiveTranscript(mode: LiveTranscriptEngine.Mode) {
+        pet.state.listening(mode == .meeting ? "Taking meeting notes" : "Listening")
+        meetingRecorder.onMicrophonePCM = { [weak self] samples in
+            Task { @MainActor in self?.liveTranscript.appendMicrophone(samples) }
+        }
+        meetingRecorder.onSystemAudioPCM = { [weak self] samples in
+            Task { @MainActor in self?.liveTranscript.appendSystemAudio(samples) }
+        }
+        // The live pass is always Parakeet, on-device and streaming, whatever
+        // provider makes the finished transcript when the recording stops.
+        liveTranscript.start(mode: mode)
+        recordingNotepad.attach(transcript: liveTranscript)
+    }
+
+    private func stopLiveTranscript() {
+        meetingRecorder.onMicrophonePCM = nil
+        meetingRecorder.onSystemAudioPCM = nil
+        liveTranscript.stop()
+    }
+
     /// Voice note captured *during* an active exploration session — folded into that session's timeline.
-    func toggleSessionVoiceNote() {
+    /// The rail offers two sources: what the Mac is playing, or what you are
+    /// saying. They record and transcribe the same way; only the input differs.
+    func toggleSessionVoiceNote(source: SessionAudioSource = .systemAudio) {
         guard ensureCaptureSession() else { return }
         guard !isChangingRecordingState,
               !isRecording || !recordingPurposeIsMeetingNote else { return }
@@ -1228,35 +1548,53 @@ final class AppState: ObservableObject {
             if self.isRecording {
                 await self.stopSessionAudio()
             } else {
-                await self.startSessionAudio()
+                await self.startSessionAudio(source: source)
             }
             self.isChangingRecordingState = false
         }
     }
 
-    private func startSessionAudio() async {
-        recordingStatus = "Starting computer audio…"
+    private func startSessionAudio(source: SessionAudioSource) async {
+        flourish.play(.listening)
+        sessionAudioSource = source
+        recordingStatus = source == .microphone ? "Starting microphone…" : "Starting computer audio…"
         do {
-            try await meetingRecorder.startComputerAudioOnly()
+            var microphoneURL: URL?
+            if source == .microphone {
+                let url = sessionDir.appendingPathComponent("voice_\(UUID().uuidString).wav")
+                meetingRecorder.preferredInputDeviceUID = settings.audio.inputDeviceUID
+                try await meetingRecorder.startMicrophoneOnly(saveMicrophoneTo: url)
+                microphoneURL = url
+            } else {
+                try await meetingRecorder.startComputerAudioOnly()
+            }
             isRecording = true
             recordingPurposeIsMeetingNote = false
-            microphoneSourceActive = false
+            microphoneSourceActive = source == .microphone
             systemAudioSourceActive = meetingRecorder.isSystemAudioActive
-            recordingStatus = "Recording computer audio"
-            let sourceApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? "Mac audio"
+            recordingStatus = source == .microphone ? "Recording your voice" : "Recording computer audio"
+            _ = microphoneURL
+            let sourceApp = source == .microphone
+                ? "Your microphone"
+                : (NSWorkspace.shared.frontmostApplication?.localizedName ?? "Mac audio")
+            startLiveTranscript(mode: source == .microphone ? .microphone : .systemAudio)
             recordingNotepad.show(
-                kind: .audio,
+                kind: source == .microphone ? .voice : .audio,
                 sourceApp: sourceApp,
                 microphoneDB: { [weak self] in self?.microphonePowerDB ?? -60 },
                 systemDB: { [weak self] in self?.systemAudioPowerDB ?? -60 },
-                onEnd: { [weak self] in self?.endSessionAudioFromNotepad() }
+                onEnd: { [weak self] in self?.endSessionAudioFromNotepad() },
+                onDiscard: { [weak self] in self?.discardRecording() }
             )
         } catch {
             microphoneSourceActive = false
             systemAudioSourceActive = false
-            recordingStatus = "Could not start computer audio: \(error.localizedDescription)"
+            recordingStatus = source == .microphone
+                ? "Could not start the microphone: \(error.localizedDescription)"
+                : "Could not start computer audio: \(error.localizedDescription)"
             permissionCenter.refresh()
-            if !permissionCenter.snapshot.screenRecording {
+            if (source == .microphone && !permissionCenter.snapshot.microphone)
+                || (source == .systemAudio && !permissionCenter.snapshot.screenRecording) {
                 showPermissionOnboarding()
             }
         }
@@ -1264,6 +1602,7 @@ final class AppState: ObservableObject {
 
     private func stopSessionAudio() async {
         recordingStatus = "Finishing session audio…"
+        stopLiveTranscript()
         let notepadNotes = recordingNotepad.takeNotesAndClose()
         guard let artifacts = await meetingRecorder.stop() else {
             isRecording = false
@@ -1277,6 +1616,13 @@ final class AppState: ObservableObject {
         systemAudioSourceActive = false
         var sections: [String] = []
         var failures: [String] = []
+        if let microphoneURL = artifacts.microphoneURL {
+            switch await transcribe(audioURL: microphoneURL) {
+            case .success(let text): sections.append(text)
+            case .failure(let error): failures.append("Microphone: \(error.localizedDescription)")
+            }
+            try? FileManager.default.removeItem(at: microphoneURL)
+        }
         if let systemURL = artifacts.systemAudioURL {
             switch await transcribe(audioURL: systemURL) {
             case .success(let text): sections.append(text)
@@ -1292,8 +1638,31 @@ final class AppState: ObservableObject {
         )
         persistCurrentRawNote()
         recordingStatus = failures.isEmpty
-            ? "Computer audio saved to \(activeNoteTitle)"
+            ? "\(sessionAudioSource == .microphone ? "Voice note" : "Computer audio") saved to \(activeNoteTitle)"
             : "Computer audio saved, but transcription needs attention: \(failures.joined(separator: "; "))"
+    }
+
+    /// Stops the recording and keeps nothing: no transcript, no note, and the
+    /// audio file deleted.
+    private func discardRecording() {
+        guard isRecording, !isChangingRecordingState else { return }
+        isChangingRecordingState = true
+        stopLiveTranscript()
+        Task { [weak self] in
+            guard let self else { return }
+            if let artifacts = await self.meetingRecorder.stop() {
+                for url in [artifacts.microphoneURL, artifacts.systemAudioURL].compactMap({ $0 }) {
+                    try? FileManager.default.removeItem(at: url)
+                }
+            }
+            self.isRecording = false
+            self.recordingPurposeIsMeetingNote = false
+            self.microphoneSourceActive = false
+            self.systemAudioSourceActive = false
+            self.recordingStatus = nil
+            self.isChangingRecordingState = false
+            self.pet.state.listening("Discarded")
+        }
     }
 
     private func endSessionAudioFromNotepad() {
@@ -1323,6 +1692,7 @@ final class AppState: ObservableObject {
     }
 
     private func startMeetingRecording() async {
+        flourish.play(.listening)
         guard !isRecording else { return }
         recordingStatus = "Starting microphone and computer audio…"
         let microphoneURL = sessionDir.appendingPathComponent("meeting_mic_\(UUID().uuidString).wav")
@@ -1335,12 +1705,14 @@ final class AppState: ObservableObject {
             systemAudioSourceActive = meetingRecorder.isSystemAudioActive
             recordingStatus = warning ?? "Recording microphone and computer audio"
             let sourceApp = NSWorkspace.shared.frontmostApplication?.localizedName ?? "Meeting app"
+            startLiveTranscript(mode: .meeting)
             recordingNotepad.show(
                 kind: .meeting,
                 sourceApp: sourceApp,
                 microphoneDB: { [weak self] in self?.microphonePowerDB ?? -60 },
                 systemDB: { [weak self] in self?.systemAudioPowerDB ?? -60 },
-                onEnd: { [weak self] in self?.endMeetingFromNotepad() }
+                onEnd: { [weak self] in self?.endMeetingFromNotepad() },
+                onDiscard: { [weak self] in self?.discardRecording() }
             )
         } catch {
             microphoneSourceActive = false
@@ -1355,6 +1727,7 @@ final class AppState: ObservableObject {
 
     private func stopMeetingRecording() async {
         recordingStatus = "Finishing recording…"
+        stopLiveTranscript()
         let notepadNotes = recordingNotepad.takeNotesAndClose()
         guard let artifacts = await meetingRecorder.stop() else {
             isRecording = false
@@ -1369,6 +1742,7 @@ final class AppState: ObservableObject {
         microphoneSourceActive = false
         systemAudioSourceActive = false
         recordingStatus = "Transcribing locally…"
+        pet.state.listening("Writing it up…")
 
         var sections: [String] = []
         var failures: [String] = []
@@ -1437,7 +1811,7 @@ final class AppState: ObservableObject {
 
     private func transcribe(audioURL: URL) async -> Result<String, Error> {
         if settings.audio.provider == .local {
-            return await whisperTranscriber.transcribe(audioURL: audioURL, variant: settings.audio.modelName)
+            return await localTranscriber.transcribe(audioURL: audioURL)
         }
         return await withCheckedContinuation { continuation in
             audioClient.transcribe(audioURL: audioURL) { result in
@@ -1449,9 +1823,21 @@ final class AppState: ObservableObject {
     private func handleTranscription(_ text: String, purpose: RecordingPurpose, annotation: String = "") {
         guard !text.isEmpty || !annotation.isEmpty else { return }
         _ = ensureCaptureSession()
+        // The capture says which input it came from — a voice note labelled
+        // "Computer audio" is a lie about what was recorded.
+        let name: String
+        let title: String
+        switch purpose {
+        case .standaloneMeetingNote:
+            name = "Meeting"
+            title = "Meeting note"
+        case .sessionVoiceNote:
+            name = sessionAudioSource == .microphone ? "Your audio" : "Computer audio"
+            title = sessionAudioSource == .microphone ? "Voice note" : "Computer audio recording"
+        }
         let step = ExplorationStep(
-            appName: purpose == .sessionVoiceNote ? "Computer audio" : "Meeting",
-            windowTitle: purpose == .sessionVoiceNote ? "Computer audio recording" : "Meeting note",
+            appName: name,
+            windowTitle: title,
             selectedText: text.isEmpty ? nil : text
         )
         tracker.captureCustomStep(step)
@@ -1476,6 +1862,11 @@ final class AppState: ObservableObject {
 
     private func handleCaptured(_ step: ExplorationStep) {
         steps.insert(step, at: 0)
+        // Whatever it was — a region, a sentence, a voice note, a stretch of a
+        // meeting — the light says it landed.
+        flourish.play(.captured)
+        pet.state.caught("Filed to \(activeNoteTitle)",
+                         tint: Aurora.tintIndex(for: activeNoteTitle))
         let isRecordedTranscript = step.appName == "Audio"
             || step.appName == "Computer audio"
             || step.appName == "Meeting"
@@ -1508,6 +1899,8 @@ final class AppState: ObservableObject {
             )
         } else {
             appendCaptureToRaw(step)
+            // Nothing to review — hand the screen straight back.
+            FocusKeeper.restore()
         }
         guard let screenshot = step.screenshotPath else { return }
         let screenshotURL = URL(fileURLWithPath: screenshot)
@@ -1717,6 +2110,7 @@ final class AppState: ObservableObject {
             organizationTemplate: organizedTemplate,
             thoughtGraph: organizedGraph,
             organizedVariants: organizedVariants,
+            organizedStamps: organizedStamps,
             rawDraft: rawDraft,
             annotationDraft: annotationDraft
         )
@@ -1824,6 +2218,7 @@ final class AppState: ObservableObject {
             organizedGraph = document.thoughtGraph
             organizedTemplate = document.organizationTemplate ?? .bulletList
             organizedVariants = document.organizedVariants ?? [:]
+            organizedStamps = document.organizedStamps ?? [:]
             if organizedVariants.isEmpty, !document.organized.isEmpty {
                 organizedVariants[(document.organizationTemplate ?? .bulletList).rawValue] = document.organized
             }
@@ -1839,6 +2234,7 @@ final class AppState: ObservableObject {
             organizedGraph = nil
             organizedTemplate = .bulletList
             organizedVariants = [:]
+            organizedStamps = [:]
             rawDraft = markdown
             annotationDraft = ""
         }
@@ -1893,7 +2289,7 @@ final class AppState: ObservableObject {
         audioClient = AudioClient(config: settings.audio)
         visionClient = VisionClient(config: settings.vision)
         if settings.audio.provider == .local {
-            Task { await whisperTranscriber.ensureReady(variant: settings.audio.modelName) }
+            Task { await localTranscriber.ensureReady() }
         }
     }
 

@@ -15,6 +15,15 @@ private enum BundledFontRegistrar {
     }()
 }
 
+/// One window per launch. The menu-bar label's task is what opens it — a
+/// `WindowGroup` living beside a `MenuBarExtra` does not reliably present one
+/// by itself, and a release build presents none at all — but that task fires
+/// every time the label is rebuilt, and every one of those was opening another
+/// window. Hence the latch.
+private enum MainWindowLatch {
+    static var opened = false
+}
+
 private struct NotefyMenuBarLabel: View {
     @Environment(\.openWindow) private var openWindow
     let isRecording: Bool
@@ -22,6 +31,8 @@ private struct NotefyMenuBarLabel: View {
     var body: some View {
         Image(systemName: isRecording ? "waveform.circle.fill" : "square.and.pencil")
             .task {
+                guard !MainWindowLatch.opened else { return }
+                MainWindowLatch.opened = true
                 openWindow(id: "main")
                 NSApp.activate(ignoringOtherApps: true)
             }
@@ -29,6 +40,22 @@ private struct NotefyMenuBarLabel: View {
 }
 
 final class NotefyAppDelegate: NSObject, NSApplicationDelegate {
+    /// Re-opening the app — from the Dock, from `open`, from anywhere — should
+    /// bring the window it already has forward, not make another one.
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
+        if let existing = Self.mainWindows.first {
+            existing.makeKeyAndOrderFront(nil)
+            NSApp.activate(ignoringOtherApps: true)
+            return false
+        }
+        return true
+    }
+
+    /// Windows belonging to the main scene, newest last.
+    static var mainWindows: [NSWindow] {
+        NSApp.windows.filter { $0.title == "Mindspace" && $0.isVisible }
+    }
+
     func applicationDidFinishLaunching(_ notification: Notification) {
         // Notefy has a menu-bar control, but it is also a regular windowed app.
         // Starting as an accessory can leave the dashboard alive but impossible
@@ -36,9 +63,19 @@ final class NotefyAppDelegate: NSObject, NSApplicationDelegate {
         NSApp.setActivationPolicy(.regular)
         DispatchQueue.main.async {
             NSApp.activate(ignoringOtherApps: true)
-            NSApp.windows.first(where: { $0.title == "Mindspace" })?.makeKeyAndOrderFront(nil)
+            Self.closeDuplicateWindows()
+            Self.mainWindows.first?.makeKeyAndOrderFront(nil)
             Self.nudgeMainWindowLayout()
         }
+    }
+
+    /// macOS restores every window a scene had when it was last quit, so a
+    /// session that ended with several leaves you opening several. One is the
+    /// app; the rest are debris.
+    private static func closeDuplicateWindows() {
+        let windows = mainWindows
+        guard windows.count > 1 else { return }
+        for window in windows.dropFirst() { window.close() }
     }
 
     /// SwiftUI's very first layout pass for the main window sometimes runs before the
@@ -83,7 +120,11 @@ struct NotefyMenuBarApp: App {
         }
         .menuBarExtraStyle(.window)
 
-        Window("Mindspace", id: "main") {
+        // A `Window` scene only appears at launch if macOS restores it, so a
+        // fresh install — or any launch after the window was closed — left the
+        // app running as a menu-bar icon with nothing on screen. A WindowGroup
+        // always presents one.
+        WindowGroup("Mindspace", id: "main") {
             MainWindowView()
                 .environmentObject(appState)
                 .onAppear {

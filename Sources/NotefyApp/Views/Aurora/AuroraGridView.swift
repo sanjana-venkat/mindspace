@@ -19,9 +19,23 @@ struct AuroraGrid: View {
     @State private var dragging: UUID?
     @State private var order: [ExplorationStep] = []
     @FocusState private var keyboard: Bool
-    /// Zooming out means more, smaller tiles rather than a scaled bitmap, so
-    /// the text on them stays readable.
-    private var columns: Int { max(2, min(6, Int((3.0 / zoom).rounded()))) }
+    /// How much room the grid has, measured rather than assumed — the column
+    /// count is derived from it.
+    @State private var available: CGFloat = 1200
+
+    /// A tile at 100%.
+    private static let baseTile: CGFloat = 330
+    private static let gutter: CGFloat = 18
+
+    /// Zooming changes the size of a tile, smoothly; the number of columns is
+    /// then whatever fits. Tiles keep that width instead of stretching to fill
+    /// the window, which is what threw the first and last column out to the
+    /// edges when the count stepped down.
+    private var tileWidth: CGFloat { Self.baseTile * zoom }
+    private var columns: Int {
+        let room = max(Self.baseTile, available)
+        return max(1, min(8, Int(floor((room + Self.gutter) / (tileWidth + Self.gutter)))))
+    }
 
     /// What the grid draws: the live local order while a drag is in flight, the
     /// note's own order otherwise. Rewriting the published array on every hover
@@ -46,7 +60,7 @@ struct AuroraGrid: View {
     var body: some View {
         VStack(spacing: 0) {
             ScrollView {
-                HStack(alignment: .top, spacing: 18) {
+                HStack(alignment: .top, spacing: Self.gutter) {
                     ForEach(0..<columns, id: \.self) { column in
                         VStack(spacing: 18) {
                             ForEach(masonry[column], id: \.step.id) { entry in
@@ -66,12 +80,21 @@ struct AuroraGrid: View {
                                                                      finish: { commit(items) }))
                             }
                         }
-                        .frame(maxWidth: .infinity, alignment: .top)
+                        .frame(width: tileWidth, alignment: .top)
                     }
                 }
+                .frame(maxWidth: .infinity, alignment: .center)
                 .padding(.horizontal, 34).padding(.top, 30).padding(.bottom, 40)
             }
             .scrollIndicators(.never)
+            .background {
+                GeometryReader { geo in
+                    Color.clear
+                        .onAppear { available = geo.size.width - 68 }
+                        .onChange(of: geo.size.width) { _, width in available = width - 68 }
+                }
+            }
+            .animation(.smooth(duration: 0.18), value: zoom)
             .focusable()
             .focused($keyboard)
             .focusEffectDisabled()
