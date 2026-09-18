@@ -1,45 +1,54 @@
 import Foundation
-import Security
 
+/// Where API keys live.
+///
+/// This used to be the Keychain, which is the right answer for a signed app
+/// and the wrong one here: an ad-hoc signature changes with every build, the
+/// Keychain sees a different application each time, and macOS asks for your
+/// login password before it will hand the item over. That prompt arrived at
+/// launch, before anything was on screen, for a key the app itself had written
+/// minutes earlier.
+///
+/// So: a file the app owns, in its own Application Support directory, readable
+/// and writable by this user account and nobody else (0600, in a 0700
+/// directory). It is plain text. Anything running as you could read it — which
+/// is also true of your shell history and your `.env` files, and is the trade
+/// being made for not being asked for a password on every launch.
+///
+/// Worth revisiting the day this app has a Developer ID signature: with a
+/// stable identity the Keychain stops asking, and it is strictly better.
 private enum ModelSecretStore {
-    private static let service = "com.notefy.app.model-keys"
+    private static let fileName = "model-keys.json"
 
-    static func read(_ account: String) -> String? {
-        let query: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account,
-            kSecReturnData as String: true,
-            kSecMatchLimit as String: kSecMatchLimitOne
-        ]
-        var item: CFTypeRef?
-        guard SecItemCopyMatching(query as CFDictionary, &item) == errSecSuccess,
-              let data = item as? Data
-        else { return nil }
-        return String(data: data, encoding: .utf8)
+    private static var directory: URL {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+        return support.appendingPathComponent("Notefy", isDirectory: true)
+    }
+
+    private static var fileURL: URL { directory.appendingPathComponent(fileName) }
+
+    static func readAll() -> [String: String] {
+        guard let data = try? Data(contentsOf: fileURL),
+              let keys = try? JSONDecoder().decode([String: String].self, from: data)
+        else { return [:] }
+        return keys
     }
 
     @discardableResult
-    static func write(_ value: String, account: String) -> Bool {
-        let identity: [String: Any] = [
-            kSecClass as String: kSecClassGenericPassword,
-            kSecAttrService as String: service,
-            kSecAttrAccount as String: account
-        ]
-        guard !value.isEmpty else {
-            let status = SecItemDelete(identity as CFDictionary)
-            return status == errSecSuccess || status == errSecItemNotFound
+    static func writeAll(_ keys: [String: String]) -> Bool {
+        let manager = FileManager.default
+        let kept = keys.filter { !$0.value.isEmpty }
+        do {
+            try manager.createDirectory(at: directory, withIntermediateDirectories: true,
+                                        attributes: [.posixPermissions: 0o700])
+            guard let data = try? JSONEncoder().encode(kept) else { return false }
+            try data.write(to: fileURL, options: [.atomic, .completeFileProtection])
+            // Written before anyone else can look: this user, nobody else.
+            try manager.setAttributes([.posixPermissions: 0o600], ofItemAtPath: fileURL.path)
+            return true
+        } catch {
+            return false
         }
-        let attributes: [String: Any] = [
-            kSecValueData as String: Data(value.utf8),
-            kSecAttrAccessible as String: kSecAttrAccessibleAfterFirstUnlock
-        ]
-        let update = SecItemUpdate(identity as CFDictionary, attributes as CFDictionary)
-        if update == errSecSuccess { return true }
-        guard update == errSecItemNotFound else { return false }
-        var insertion = identity
-        attributes.forEach { insertion[$0.key] = $0.value }
-        return SecItemAdd(insertion as CFDictionary, nil) == errSecSuccess
     }
 }
 
@@ -80,7 +89,7 @@ public enum ModelProvider: String, Codable, CaseIterable {
     public var defaultVisionModel: String {
         switch self {
         case .local: return "qwen2.5vl:7b"
-        case .api: return "gpt-4o"
+        case .api: return "gpt-6-astra"
         case .gemini: return GeminiClient.fallbackModel
         case .anthropic: return "claude-sonnet-4-5"
         }
@@ -94,11 +103,17 @@ public enum ModelProvider: String, Codable, CaseIterable {
     public var visionModels: [String] {
         switch self {
         case .local:
-            return ["qwen2.5vl:7b", "qwen2.5vl:3b", "llama3.2-vision:11b", "llava:13b", "minicpm-v"]
+            // Nothing is offered until Ollama has been asked: what you have
+            // pulled is what you can run, and a suggestion you haven't pulled
+            // is just a name that will fail.
+            return []
         case .api:
-            return ["gpt-4o", "gpt-4o-mini", "gpt-4.1", "gpt-4.1-mini"]
+            // A starting point before a key is entered; once there is one, the
+            // list comes from /v1/models on the account itself.
+            return ["gpt-6-astra", "gpt-5.6-sol", "gpt-5.6-luna", "gpt-5.6-terra"]
         case .gemini:
-            return ["gemini-3.6-flash", "gemini-3-pro", "gemini-2.5-flash", "gemini-2.5-pro"]
+            return ["gemini-3.8-flash", "gemini-3.7-flash", "gemini-3.6-flash",
+                    "gemini-3.5-flash-lite", "gemini-3.1-pro"]
         case .anthropic:
             return ["claude-opus-5", "claude-sonnet-5", "claude-haiku-4-5-20251001"]
         }
@@ -197,10 +212,7 @@ public struct NotefySettings: Codable, Equatable {
         keys["audio." + audio.provider.rawValue] = audio.apiKey
         keys[vision.provider.rawValue] = vision.apiKey
 
-        var storedSecurely = true
-        for (account, value) in keys {
-            if !ModelSecretStore.write(value, account: account) { storedSecurely = false }
-        }
+        let storedSecurely = ModelSecretStore.writeAll(keys)
 
         var settingsToWrite = self
         if storedSecurely {
@@ -215,12 +227,8 @@ public struct NotefySettings: Codable, Equatable {
         }
     }
     
-    /// Reads the settings file only. Deliberately does not touch the Keychain:
-    /// `SecItemCopyMatching` blocks for as long as macOS takes to answer — and
-    /// it asks the user when the app's signature has changed, which every
-    /// unsigned rebuild does. Doing that before the first window exists left
-    /// the app running with nothing on screen at all. Call
-    /// `attachStoredKeys()` off the main thread once the UI is up.
+    /// Reads the settings file. The keys live beside it and are folded in by
+    /// `attachStoredKeys()`, which is cheap now that no Keychain is involved.
     public static func load(from url: URL) -> NotefySettings {
         guard let data = try? Data(contentsOf: url),
               var settings = try? JSONDecoder().decode(NotefySettings.self, from: data) else {
@@ -238,17 +246,9 @@ public struct NotefySettings: Codable, Equatable {
         return settings
     }
 
-    /// Every key the Keychain is holding, read in one pass. Slow and possibly
-    /// interactive — never call it on the main thread.
+    /// Every key the app is holding, read in one pass.
     public static func storedKeys() -> [String: String] {
-        var keys: [String: String] = [:]
-        for provider in ModelProvider.allCases where provider.needsKey {
-            let visionAccount = provider.rawValue
-            let audioAccount = "audio." + provider.rawValue
-            if let stored = ModelSecretStore.read(visionAccount) { keys[visionAccount] = stored }
-            if let stored = ModelSecretStore.read(audioAccount) { keys[audioAccount] = stored }
-        }
-        return keys
+        ModelSecretStore.readAll()
     }
 
     /// Folds those keys in. A key already in memory wins — it is either what

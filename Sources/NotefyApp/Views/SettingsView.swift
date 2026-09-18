@@ -44,7 +44,7 @@ struct SettingsView: View {
                     apiURL: $appState.settings.vision.apiURL,
                     apiKey: $appState.settings.vision.apiKey,
                     modelName: $appState.settings.vision.modelName,
-                    localHint: "Local Ollama endpoint — run `ollama pull \(appState.settings.vision.modelName)` and keep Ollama running.",
+                    localHint: "Runs against Ollama on this Mac. Install Ollama, `ollama pull` a vision model such as `qwen2.5vl:7b`, and leave it running — whatever you have pulled is what you can pick.",
                     modelNamePlaceholder: "qwen2-vl"
                 ) {
                     visionModelStatus

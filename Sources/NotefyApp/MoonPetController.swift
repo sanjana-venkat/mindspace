@@ -16,6 +16,7 @@ final class MoonPetController {
     private var panel: NSPanel?
     /// Where the pointer and the panel were when the current drag began.
     private var dragStart: (pointer: NSPoint, origin: NSPoint)?
+    private var pointerTimer: Timer?
     private static let originKey = "aurora.pet.origin"
 
     /// Whether the moon is out. Saved, so the choice survives a relaunch.
@@ -26,6 +27,7 @@ final class MoonPetController {
         panel.orderFrontRegardless()
         self.panel = panel
         updateRoom(for: panel)
+        watchPointer()
         UserDefaults.standard.set(true, forKey: "aurora.pet.on")
     }
 
@@ -48,10 +50,12 @@ final class MoonPetController {
         panel.orderFrontRegardless()
         self.panel = panel
         updateRoom(for: panel)
+        watchPointer()
         UserDefaults.standard.set(true, forKey: "aurora.pet.on")
     }
 
     func hide() {
+        stopWatchingPointer()
         panel?.orderOut(nil)
         UserDefaults.standard.set(false, forKey: "aurora.pet.on")
     }
@@ -109,8 +113,9 @@ final class MoonPetController {
                     self.dragStart = (pointer: pointer, origin: panel.frame.origin)
                     return
                 }
-                panel.setFrameOrigin(NSPoint(x: start.origin.x + pointer.x - start.pointer.x,
-                                             y: start.origin.y + pointer.y - start.pointer.y))
+                let wanted = NSPoint(x: start.origin.x + pointer.x - start.pointer.x,
+                                     y: start.origin.y + pointer.y - start.pointer.y)
+                panel.setFrameOrigin(self.onScreen(wanted, size: panel.frame.size))
             },
             onExpanded: { open in
                 // Collapsed, only the moon takes the mouse; open, the whole
@@ -123,11 +128,66 @@ final class MoonPetController {
 
         let made = MoonHostingView(rootView: AnyView(view))
         made.interactiveRadius = 40
+        made.onPointerOut = { [weak self] in self?.state.pointerInside = false }
         hosting = made
         made.wantsLayer = true
         made.layer?.backgroundColor = NSColor.clear.cgColor
         panel.contentView = made
         return panel
+    }
+
+    /// Follows the pointer to know when it has left the moon.
+    ///
+    /// Three mechanisms have failed at this, all for the same reason. SwiftUI's
+    /// hover only hears about the pointer while the panel hit-tests it, and the
+    /// panel deliberately only hit-tests within 40pt of the ball — so stepping
+    /// off the moon produces no exit, ever. An `NSTrackingArea` needs an entry
+    /// AppKit hit-tested, so it never fires either. A global `NSEvent` monitor
+    /// for mouse-moved is silently dropped unless the app has Input Monitoring,
+    /// which this app has no business asking for.
+    ///
+    /// So: ask where the pointer is, six times a second, while the moon is on
+    /// screen. No permission, no event routing, nothing to be dropped.
+    private func watchPointer() {
+        stopWatchingPointer()
+        let timer = Timer.scheduledTimer(withTimeInterval: 0.16, repeats: true) { [weak self] _ in
+            Task { @MainActor [weak self] in
+                guard let self, let panel = self.panel, panel.isVisible else { return }
+                let pointer = NSEvent.mouseLocation
+                let middle = NSPoint(x: panel.frame.midX, y: panel.frame.midY)
+                let inside = hypot(pointer.x - middle.x, pointer.y - middle.y) <= 165
+                if self.state.pointerInside != inside {
+                    self.state.pointerInside = inside
+                }
+            }
+        }
+        // Common mode, or it stops counting while a menu or a drag is up.
+        RunLoop.main.add(timer, forMode: .common)
+        pointerTimer = timer
+    }
+
+    private func stopWatchingPointer() {
+        pointerTimer?.invalidate()
+        pointerTimer = nil
+        state.pointerInside = false
+    }
+
+    /// Keeps the moon itself on the usable screen. The panel is far bigger
+    /// than the moon — it has to hold the ring — so what is clamped is where
+    /// the moon sits inside it, not the panel's own edges. `visibleFrame`
+    /// already excludes the Dock and the menu bar, which is exactly the area
+    /// the moon should stay within.
+    private func onScreen(_ origin: NSPoint, size: NSSize) -> NSPoint {
+        let middle = NSPoint(x: origin.x + size.width / 2, y: origin.y + size.height / 2)
+        let screen = NSScreen.screens.first { NSPointInRect(middle, $0.frame) }
+            ?? NSScreen.screens.first { $0.frame.intersects(NSRect(origin: origin, size: size)) }
+            ?? NSScreen.main
+        guard let visible = screen?.visibleFrame else { return origin }
+
+        let margin: CGFloat = 46
+        let x = min(max(middle.x, visible.minX + margin), visible.maxX - margin)
+        let y = min(max(middle.y, visible.minY + margin), visible.maxY - margin)
+        return NSPoint(x: x - size.width / 2, y: y - size.height / 2)
     }
 
     /// Is there screen on either side of the moon for a label to read into?
@@ -157,8 +217,8 @@ final class MoonPetController {
 
         if let stored = UserDefaults.standard.array(forKey: Self.originKey) as? [CGFloat], stored.count == 2 {
             let candidate = NSPoint(x: stored[0], y: stored[1])
-            let onScreen = NSScreen.screens.contains { $0.frame.intersects(NSRect(origin: candidate, size: size)) }
-            if onScreen { return candidate }
+            let anywhere = NSScreen.screens.contains { $0.frame.intersects(NSRect(origin: candidate, size: size)) }
+            if anywhere { return self.onScreen(candidate, size: size) }
         }
         // First run: bottom-right, out of the way of most work.
         return NSPoint(x: visible.maxX - size.width - 24, y: visible.minY + 24)
@@ -189,6 +249,10 @@ private final class MoonPetPanel: NSPanel {
 
 /// Transparent host, so the desktop shows through everywhere the moon isn't.
 final class MoonHostingView: NSHostingView<AnyView> {
+    /// Called when the pointer truly leaves the moon's neighbourhood.
+    var onPointerOut: (() -> Void)?
+    private var watch: NSTrackingArea?
+
     /// How far from the middle the panel is willing to take a click. The rest
     /// of the square is transparent and belongs to whatever is underneath.
     var interactiveRadius: CGFloat = 40
@@ -200,6 +264,26 @@ final class MoonHostingView: NSHostingView<AnyView> {
     /// first press only brought the panel forward, and there is no second
     /// press because the moon never becomes key.
     override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+
+    override func updateTrackingAreas() {
+        super.updateTrackingAreas()
+        if let watch { removeTrackingArea(watch) }
+        // A box around the moon and its ring rather than the whole panel: the
+        // panel is mostly empty air, and leaving the moon should count as
+        // leaving even if the pointer is still inside that air.
+        let side: CGFloat = 340
+        let box = NSRect(x: bounds.midX - side / 2, y: bounds.midY - side / 2, width: side, height: side)
+        let area = NSTrackingArea(rect: box,
+                                  options: [.mouseEnteredAndExited, .activeAlways],
+                                  owner: self)
+        addTrackingArea(area)
+        watch = area
+    }
+
+    override func mouseExited(with event: NSEvent) {
+        super.mouseExited(with: event)
+        onPointerOut?()
+    }
 
     override func hitTest(_ point: NSPoint) -> NSView? {
         // Open, the whole panel is live — the choice pills reach further out

@@ -284,8 +284,22 @@ enum AuroraDocBlock: Hashable {
 struct AuroraDocBlockView: View {
     let block: AuroraDocBlock
 
+    /// What was searched for, when this note was opened from a result. Matches
+    /// in the write-up are lit the same way matches on a capture are.
+    @Environment(\.auroraSearchMark) private var searchMark
+
     private func inline(_ s: String) -> AttributedString {
-        (try? AttributedString(markdown: s)) ?? AttributedString(s)
+        var text = (try? AttributedString(markdown: s)) ?? AttributedString(s)
+        guard let searchMark, !searchMark.trimmingCharacters(in: .whitespaces).isEmpty else { return text }
+
+        // The markdown pass may have changed the characters, so the marking is
+        // done on what is actually about to be drawn.
+        let plain = String(text.characters)
+        var marked = Aurora.marked(plain, query: searchMark)
+        // Keep the markdown's own styling underneath the highlight.
+        marked.mergeAttributes(AttributeContainer(), mergePolicy: .keepCurrent)
+        if String(marked.characters) == plain { text = marked }
+        return text
     }
 
     var body: some View {

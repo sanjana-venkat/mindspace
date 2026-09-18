@@ -41,6 +41,11 @@ let package = Package(
             resources: [.process("Resources")]
         ),
         .testTarget(
+            name: "NotefyAppTests",
+            dependencies: ["NotefyApp"],
+            path: "Tests/NotefyAppTests"
+        ),
+        .testTarget(
             name: "NotefyCoreTests",
             dependencies: ["NotefyCore"],
             path: "Tests/NotefyCoreTests"

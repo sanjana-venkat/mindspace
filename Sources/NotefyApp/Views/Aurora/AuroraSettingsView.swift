@@ -7,11 +7,11 @@ struct AuroraSettingsView: View {
     @EnvironmentObject private var appState: AppState
     @Environment(\.dismiss) private var dismiss
     @State private var saved = false
-    /// What this Gemini key can actually call, asked of Google rather than
-    /// hardcoded — model names get retired.
-    @State private var geminiModels: [String] = []
-    @State private var loadingModels = false
-    @State private var modelListProblem: String?
+    /// What each provider can actually run, asked of the provider itself
+    /// rather than hardcoded — model names get retired.
+    @State private var liveModels: [ModelProvider: [String]] = [:]
+    @State private var loadingProvider: ModelProvider?
+    @State private var modelListProblem: [ModelProvider: String] = [:]
     @AppStorage(AuroraAppearance.storageKey) private var appearanceRaw = AuroraAppearance.system.rawValue
     @Environment(\.colorScheme) private var scheme
 
@@ -31,7 +31,9 @@ struct AuroraSettingsView: View {
                         apiKey: $appState.settings.audio.apiKey,
                         modelName: $appState.settings.audio.modelName,
                         localHint: "Parakeet runs on-device — the same model writes the live transcript and the finished one. It downloads once, about 215MB.",
-                        modelPlaceholder: "parakeet"
+                        modelPlaceholder: "parakeet",
+                        localRunsOllama: false,
+                        hostedNote: "A hosted provider only writes the finished transcript, when you stop. The live transcript you watch while recording is always Parakeet on this Mac — it downloads once, about 215MB, whichever provider is set here."
                     ) { audioFooter }
                     provider(
                         title: "Screen understanding",
@@ -40,8 +42,9 @@ struct AuroraSettingsView: View {
                         apiURL: $appState.settings.vision.apiURL,
                         apiKey: $appState.settings.vision.apiKey,
                         modelName: $appState.settings.vision.modelName,
-                        localHint: "Local Ollama endpoint — run `ollama pull \(appState.settings.vision.modelName)` and keep Ollama running.",
-                        modelPlaceholder: "qwen2-vl"
+                        localHint: "Ollama serves the model over HTTP on this Mac — install it, `ollama pull` a vision model such as `qwen2.5vl:7b`, and leave it running. Endpoint is where Mindspace asks for it; the default is Ollama's own address.",
+                        modelPlaceholder: "qwen2.5vl:7b",
+                        localRunsOllama: true
                     ) { visionFooter }
                     save
                 }
@@ -146,6 +149,11 @@ struct AuroraSettingsView: View {
         modelName: Binding<String>,
         localHint: String,
         modelPlaceholder: String,
+        /// On-device means Ollama for screen understanding and Parakeet for
+        /// speech. Only the first has a model to choose or an address to reach.
+        localRunsOllama: Bool,
+        /// Said when a hosted provider is chosen — what it will and won't do.
+        hostedNote: String? = nil,
         @ViewBuilder footer: () -> Footer
     ) -> some View {
         card {
@@ -174,53 +182,93 @@ struct AuroraSettingsView: View {
                     hint(current.keyHint)
                 }
 
-                // Google retires model names on its own schedule, so for
-                // Gemini the list comes from the key itself rather than from
-                // whatever was true when this app was built.
-                let live = current == .gemini ? geminiModels : []
+                // Providers retire model names on their own schedule, so the
+                // list comes from the provider rather than from whatever was
+                // true when this app was built.
+                let live = liveModels[current] ?? []
                 let offered = live.isEmpty ? current.visionModels : live
 
-                AuroraSelect(
-                    label: "Model",
-                    options: offered.map { AuroraSelect.Option(id: $0, title: $0) },
-                    selection: Binding(
-                        get: { modelName.wrappedValue },
-                        set: { modelName.wrappedValue = $0 ?? current.defaultVisionModel }
-                    ),
-                    dark: scheme == .dark
-                )
+                // Speech on-device is Parakeet and nothing else — no model to
+                // pick, no address to reach.
+                if current != .local || localRunsOllama {
+                    AuroraSelect(
+                        label: "Model",
+                        options: offered.map { AuroraSelect.Option(id: $0, title: $0) },
+                        selection: Binding(
+                            get: { modelName.wrappedValue },
+                            set: { modelName.wrappedValue = $0 ?? current.defaultVisionModel }
+                        ),
+                        dark: scheme == .dark
+                    )
+                    // Switching provider rebuilds the picker, so it cannot be
+                    // left hanging open over a list that no longer applies.
+                    .id(current)
 
-                if current == .gemini {
+                    if offered.isEmpty {
+                        hint(current == .local
+                             ? "Nothing pulled yet — run `ollama pull qwen2.5vl:7b`, then refresh."
+                             : (apiKey.wrappedValue.isEmpty
+                                ? "Add a key to load the models this account can use."
+                                : "Refresh to load the models this key can use."))
+                    }
+                }
+
+                // Refreshing needs something to ask with: a key for the hosted
+                // three, a running Ollama for the local one.
+                let canRefresh = current == .local ? localRunsOllama : !apiKey.wrappedValue.isEmpty
+                if canRefresh {
                     HStack(spacing: 10) {
-                        Button(loadingModels ? "Checking…" : "Refresh model list") {
-                            Task { await loadGeminiModels(apiKey.wrappedValue) }
+                        Button(loadingProvider == current ? "Checking…" : refreshLabel(for: current)) {
+                            Task { await loadModels(for: current, key: apiKey.wrappedValue, endpoint: apiURL.wrappedValue) }
                         }
                         .buttonStyle(.plain)
                         .font(Aurora.ui(12, .medium))
                         .foregroundStyle(Aurora.accent)
                         .contentShape(Rectangle())
-                        .disabled(loadingModels || apiKey.wrappedValue.isEmpty)
+                        .disabled(loadingProvider != nil)
 
-                        if let problem = modelListProblem {
+                        // Each provider keeps its own answer: one failing to
+                        // list its models said nothing about the others.
+                        if let problem = modelListProblem[current] {
                             Text(problem).font(Aurora.ui(11.5)).foregroundStyle(Aurora.warning)
-                        } else if !geminiModels.isEmpty {
-                            Text("\(geminiModels.count) models this key can use")
+                        } else if !live.isEmpty {
+                            Text(current == .local
+                                 ? "\(live.count) pulled locally"
+                                 : "\(live.count) models this key can use")
                                 .font(Aurora.ui(11.5)).foregroundStyle(Aurora.ink3)
                         }
                         Spacer(minLength: 0)
                     }
-                    .task(id: apiKey.wrappedValue) {
-                        guard !apiKey.wrappedValue.isEmpty, geminiModels.isEmpty else { return }
+                    .task(id: "\(current.rawValue)|\(apiKey.wrappedValue)") {
+                        guard liveModels[current] == nil else { return }
+                        guard !current.needsKey || !apiKey.wrappedValue.isEmpty else { return }
                         // A key is typed or pasted a character at a time; wait
-                        // for it to settle before asking Google about it.
+                        // for it to settle before asking the provider about it.
                         try? await Task.sleep(for: .milliseconds(800))
-                        await loadGeminiModels(apiKey.wrappedValue)
+                        await loadModels(for: current, key: apiKey.wrappedValue, endpoint: apiURL.wrappedValue)
                     }
                 }
 
-                if current.showsEndpointField {
+                if current.showsEndpointField && localRunsOllama {
                     field("Endpoint", "http://localhost:11434/api/chat", apiURL)
+                }
+                if current == .local {
                     hint(localHint)
+                } else if let hostedNote {
+                    HStack(alignment: .top, spacing: 9) {
+                        Image(systemName: "waveform.badge.exclamationmark")
+                            .font(.system(size: 11, weight: .semibold))
+                            .foregroundStyle(Aurora.warning)
+                        Text(hostedNote)
+                            .font(Aurora.ui(11.5))
+                            .foregroundStyle(Aurora.ink2)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
+                    .padding(11)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Aurora.surface2.opacity(0.7), in: RoundedRectangle(cornerRadius: 12, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
+                        .strokeBorder(Aurora.warning.opacity(0.3), lineWidth: 1))
                 }
 
                 Rectangle().fill(Aurora.line).frame(height: 1)
@@ -229,31 +277,61 @@ struct AuroraSettingsView: View {
         }
     }
 
-    /// Asks the key what it can actually call. Keeps the picker honest through
-    /// model retirements without shipping a new build.
+    private func refreshLabel(for provider: ModelProvider) -> String {
+        provider == .local ? "Refresh pulled models" : "Refresh model list"
+    }
+
+    /// Asks the provider what it can run, so the picker stays honest through
+    /// model retirements without shipping a new build. Each provider is asked
+    /// with its own key and keeps its own answer.
     @MainActor
-    private func loadGeminiModels(_ key: String) async {
-        guard !key.isEmpty, !loadingModels else { return }
-        loadingModels = true
-        modelListProblem = nil
-        let result: Result<[String], Error> = await withCheckedContinuation { continuation in
-            GeminiClient.availableModels(apiKey: key) { continuation.resume(returning: $0) }
-        }
-        loadingModels = false
-        switch result {
-        case .success(let models):
-            geminiModels = models
-            if !models.isEmpty, !models.contains(appState.settings.vision.modelName),
-               appState.settings.vision.provider == .gemini {
-                // The saved model no longer exists — move to the closest thing
-                // this key has rather than failing on the next note.
-                appState.settings.vision.modelName = models.first(where: { $0.contains("flash") }) ?? models[0]
-                appState.saveSettings()
+    private func loadModels(for provider: ModelProvider, key: String, endpoint: String) async {
+        guard loadingProvider == nil else { return }
+        loadingProvider = provider
+        modelListProblem[provider] = nil
+
+        var found: [String] = []
+        switch provider {
+        case .local:
+            found = await ProviderCatalog.ollamaModels(endpoint: endpoint)
+            if found.isEmpty { modelListProblem[provider] = "Ollama isn't answering on that endpoint." }
+        case .api:
+            found = await ProviderCatalog.openAIModels(apiKey: key)
+            if found.isEmpty { modelListProblem[provider] = "OpenAI didn't return a model list for that key." }
+        case .anthropic:
+            found = await ProviderCatalog.anthropicModels(apiKey: key)
+            if found.isEmpty { modelListProblem[provider] = "Anthropic didn't return a model list for that key." }
+        case .gemini:
+            let result: Result<[String], Error> = await withCheckedContinuation { continuation in
+                GeminiClient.availableModels(apiKey: key) { continuation.resume(returning: $0) }
             }
-        case .failure(let error):
-            geminiModels = []
-            modelListProblem = (error as? GeminiFailure)?.summary ?? error.localizedDescription
+            switch result {
+            case .success(let models): found = models
+            case .failure(let error):
+                modelListProblem[provider] = (error as? GeminiFailure)?.summary ?? error.localizedDescription
+            }
         }
+
+        loadingProvider = nil
+        liveModels[provider] = found
+        guard !found.isEmpty, provider != .local else { return }
+        // The saved model may no longer exist — move to the closest thing this
+        // provider still has rather than failing on the next note.
+        let saved = appState.settings.vision.modelName
+        if appState.settings.vision.provider == provider, saved.isEmpty || !found.contains(saved) {
+            appState.settings.vision.modelName = Self.pick(from: found)
+            appState.saveSettings()
+        }
+    }
+
+    /// A sensible default out of whatever a provider offers: the everyday
+    /// model rather than whatever happens to sort first.
+    static func pick(from models: [String]) -> String {
+        let preferred = ["flash", "gpt", "sonnet", "claude"]
+        for hint in preferred {
+            if let match = models.first(where: { $0.lowercased().contains(hint) }) { return match }
+        }
+        return models[0]
     }
 
     private var audioFooter: some View {

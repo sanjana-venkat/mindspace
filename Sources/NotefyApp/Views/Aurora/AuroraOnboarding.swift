@@ -17,6 +17,9 @@ struct AuroraOnboarding: View {
     @Environment(\.colorScheme) private var scheme
 
     @State private var step = 0
+    /// What each provider says it can run, so onboarding never offers a model
+    /// name that only ever existed in this app's source.
+    @State private var onboardingModels: [ModelProvider: [String]] = [:]
     @State private var highlighted: NotedPermission = .screenRecording
     @State private var listeningFor: HotkeyAction?
     @State private var bindingsTick = 0
@@ -464,18 +467,37 @@ struct AuroraOnboarding: View {
                             .fixedSize(horizontal: false, vertical: true)
                     }
 
+                    // What this account or this Mac can actually run, asked of
+                    // the provider. Empty until there is something to ask with.
+                    let offered = onboardingModels[provider] ?? provider.visionModels
+
                     AuroraSelect(
                         label: "Model",
-                        options: provider.visionModels.map { AuroraSelect.Option(id: $0, title: $0) },
+                        options: offered.map { AuroraSelect.Option(id: $0, title: $0) },
                         selection: Binding(
                             get: { appState.settings.vision.modelName },
                             set: { appState.settings.vision.modelName = $0 ?? provider.defaultVisionModel }
                         ),
                         dark: dark
                     )
+                    .id(provider)
+                    .task(id: "\(provider.rawValue)|\(appState.settings.vision.apiKey)") {
+                        guard onboardingModels[provider] == nil else { return }
+                        guard !provider.needsKey || !appState.settings.vision.apiKey.isEmpty else { return }
+                        try? await Task.sleep(for: .milliseconds(800))
+                        await loadOnboardingModels(for: provider)
+                    }
+
+                    if offered.isEmpty {
+                        Text(provider == .local
+                             ? "Nothing pulled yet — run `ollama pull qwen2.5vl:7b` and it will appear here."
+                             : "Add a key above and the models this account can use will appear here.")
+                            .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
+                            .fixedSize(horizontal: false, vertical: true)
+                    }
 
                     if provider == .local {
-                        Text("Runs against Ollama on this Mac — install it, `ollama pull` the model you picked, and leave it running. Slower than a hosted model, and nothing leaves the machine.")
+                        Text("Ollama serves the model over HTTP on this Mac — install it, `ollama pull` a vision model such as `qwen2.5vl:7b`, and leave it running. Slower than a hosted model, and nothing leaves the machine.")
                             .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
                             .fixedSize(horizontal: false, vertical: true)
                     }
@@ -842,6 +864,32 @@ struct AuroraOnboarding: View {
                 .background(panelFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
                     .strokeBorder(panelStroke, lineWidth: 1))
+        }
+    }
+
+    @MainActor
+    private func loadOnboardingModels(for provider: ModelProvider) async {
+        let key = appState.settings.vision.apiKey
+        var found: [String] = []
+        switch provider {
+        case .local:
+            found = await ProviderCatalog.ollamaModels(endpoint: appState.settings.vision.apiURL)
+        case .api:
+            found = await ProviderCatalog.openAIModels(apiKey: key)
+        case .gemini:
+            found = await withCheckedContinuation { continuation in
+                GeminiClient.availableModels(apiKey: key) { result in
+                    continuation.resume(returning: (try? result.get()) ?? [])
+                }
+            }
+        case .anthropic:
+            found = await ProviderCatalog.anthropicModels(apiKey: key)
+        }
+        onboardingModels[provider] = found
+        if !found.isEmpty,
+           appState.settings.vision.provider == provider,
+           !found.contains(appState.settings.vision.modelName) {
+            appState.settings.vision.modelName = AuroraSettingsView.pick(from: found)
         }
     }
 

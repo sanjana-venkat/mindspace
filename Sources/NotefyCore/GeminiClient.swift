@@ -46,7 +46,7 @@ public class GeminiClient {
     /// Where Gemini is now. Google retires model names on a schedule and
     /// returns a 404 naming the replacement, so this is a starting point
     /// rather than a fixed truth — `availableModels` asks the key itself.
-    public static let fallbackModel = "gemini-3.6-flash"
+    public static let fallbackModel = "gemini-3.8-flash"
 
     private let apiKey: String
     private let model: String
@@ -286,8 +286,9 @@ public class GeminiClient {
                 let methods = (entry["supportedGenerationMethods"] as? [String]) ?? []
                 guard methods.isEmpty || methods.contains("generateContent") else { return nil }
                 let short = name.hasPrefix("models/") ? String(name.dropFirst("models/".count)) : name
-                // The embedding and image models can't write a note.
-                guard !short.contains("embedding"), !short.contains("aqa") else { return nil }
+                // Image, video, music, audio and embedding models can't write
+                // a note — Lyria, the banana image models, Veo and the rest.
+                guard ProviderCatalog.isWorthOffering(short) else { return nil }
                 return short
             }
             completion(.success(usable.sorted().reversed()))

@@ -33,7 +33,7 @@ final class RecordingNotepadController {
         close(clearNotes: true)
         FocusKeeper.remember()
         let model = RecordingNotepadModel(kind: kind, sourceApp: sourceApp)
-        let size = NSSize(width: 420, height: 620)
+        let size = NSSize(width: 452, height: 700)
         let frame = NSScreen.main?.visibleFrame ?? NSRect(x: 0, y: 0, width: 1200, height: 800)
         let origin = NSPoint(x: frame.minX + 26, y: frame.maxY - size.height - 44)
         let panel = CaptureKeyPanel(
@@ -162,20 +162,39 @@ private struct RecordingNotepadView: View {
                 .blendMode(scheme == .dark ? .screen : .multiply)
                 .opacity(0.12)
 
-            VStack(alignment: .leading, spacing: 14) {
+            VStack(alignment: .leading, spacing: 16) {
                 header
                 recordingSignal
                 liveTranscript
                 noteField
                 footer
             }
-            .padding(22)
+            .padding(.horizontal, 22)
+            .padding(.vertical, 28)
         }
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 26, style: .continuous)
             .strokeBorder(Aurora.line, lineWidth: 1))
-        .shadow(color: .black.opacity(scheme == .dark ? 0.34 : 0.20), radius: 34, y: 16)
-        .padding(12)
+        // Asking a question about the recording dims the whole card, not the
+        // part of it the button happens to live in.
+        .overlay {
+            if confirmingDiscard {
+                AuroraConfirm(
+                    title: "Throw this recording away?",
+                    message: "The audio and anything written beside it go. Nothing is saved.",
+                    confirmLabel: "Yes, discard",
+                    onConfirm: {
+                        confirmingDiscard = false
+                        onDiscard()
+                    },
+                    onCancel: { confirmingDiscard = false })
+                    .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
+            }
+        }
+        .shadow(color: .black.opacity(scheme == .dark ? 0.34 : 0.20), radius: 26, y: 12)
+        // A 26pt shadow needs more than 12pt of room, or the panel's edge cuts
+        // it off square down both sides.
+        .padding(26)
         .background(AuroraWindowGlass())
         .preferredColorScheme(appearance.scheme)
     }
@@ -308,21 +327,6 @@ private struct RecordingNotepadView: View {
             }
             .buttonStyle(AuroraPressStyle())
             .accessibilityLabel("Discard this recording")
-        }
-        .overlay {
-            if confirmingDiscard {
-                AuroraConfirm(
-                    title: "Throw this recording away?",
-                    message: "The audio and anything written beside it go. Nothing is saved.",
-                    confirmLabel: "Yes, discard",
-                    onConfirm: {
-                        confirmingDiscard = false
-                        onDiscard()
-                    },
-                    onCancel: { confirmingDiscard = false })
-                    .frame(width: 420, height: 620)
-                    .offset(y: -180)
-            }
         }
     }
 

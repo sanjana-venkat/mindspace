@@ -24,6 +24,7 @@ struct AuroraConfirm: View {
                 .contentShape(Rectangle())
                 .onTapGesture(perform: onCancel)
                 .ignoresSafeArea()
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
 
             VStack(alignment: .leading, spacing: 10) {
                 Text(title)

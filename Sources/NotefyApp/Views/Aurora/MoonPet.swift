@@ -109,6 +109,20 @@ struct MoonPetView: View {
         }
         .frame(width: 640, height: 340)
         .onChange(of: expanded) { _, value in onExpanded(value) }
+        // SwiftUI does not reliably send an exit for a view that disappears
+        // under the pointer — which is every ring icon, every time the ring
+        // folds — so a stale entry could keep the moon believing it was still
+        // being hovered, and the bubble stayed up for good.
+        .onChange(of: state.pointerInside) { _, inside in
+            guard !inside else { return }
+            release?.cancel()
+            hovering.removeAll()
+            withAnimation(.spring(response: 0.34, dampingFraction: 0.78)) {
+                lingering = false
+                open = nil
+                hoveredAction = nil
+            }
+        }
         .animation(.spring(response: 0.34, dampingFraction: 0.78), value: open)
     }
 
@@ -117,6 +131,7 @@ struct MoonPetView: View {
     private func track(_ id: String, _ inside: Bool) {
         release?.cancel()
         if inside {
+            state.pointerInside = true
             withAnimation(.spring(response: 0.34, dampingFraction: 0.78)) {
                 _ = hovering.insert(id)
                 lingering = true
@@ -197,21 +212,10 @@ struct MoonPetView: View {
                         }
                 )
 
-                if state.filed > 0 {
-                    Button(action: actions.openApp) {
-                        Text("\(state.filed)")
-                            .font(Aurora.mono(10.5))
-                            .foregroundStyle(Aurora.onSolid)
-                            .padding(.horizontal, 7).padding(.vertical, 3)
-                            .background(Aurora.solid, in: Capsule())
-                            .overlay(Capsule().strokeBorder(.white.opacity(0.25), lineWidth: 1))
-                            .contentShape(Capsule())
-                    }
-                    .buttonStyle(AuroraTapDown())
-                    .help("\(state.filed) filed this session — open Mindspace")
-                    .offset(x: 10, y: -2)
-                    .transition(.scale.combined(with: .opacity))
-                }
+                // No count badge. It sat outside the moon's hit target, so it
+                // could not be clicked, and a number is a worse answer than a
+                // sentence: what was saved, and where it went, goes in the
+                // bubble underneath.
 
                 // The capture itself, flying in and being tucked away.
                 if state.pose == .catching {
@@ -235,7 +239,7 @@ struct MoonPetView: View {
         // stack: laid out in line, it shunted the moon upward every time it
         // appeared, so the moon hopped as the pointer crossed its own ring.
         .overlay(alignment: .bottom) {
-            if let line = state.label ?? (hover ? state.folderName.map { "Saving to \($0)" } : nil) {
+            if let line = state.label {
                 Text(line)
                     .font(Aurora.ui(11, .medium))
                     .foregroundStyle(Aurora.ink)
@@ -268,6 +272,10 @@ struct MoonPetView: View {
         // against the bottom they keep their usual place overhead.
         if !state.roomAbove { return (192, 348) }
         return (168, 12)
+    }
+
+    func ringPosition(_ index: Int, of count: Int, radius: CGFloat) -> CGPoint {
+        position(index, of: count, radius: radius)
     }
 
     private func position(_ index: Int, of count: Int, radius: CGFloat) -> CGPoint {
@@ -401,8 +409,8 @@ final class MoonPetState: ObservableObject {
     @Published var filed = 0
     /// A passing line — "Filed to Reading", "Listening…".
     @Published var label: String?
-    /// Where things are going right now — the bubble's resting line, shown
-    /// when nothing more interesting has happened yet.
+    /// Where things are going right now. Not a standing caption — the moon
+    /// mentions it when it changes and then goes quiet.
     @Published var folderName: String? = "Mindspace"
     /// The colour of the capture currently flying in.
     @Published var tint = 0
@@ -414,6 +422,8 @@ final class MoonPetState: ObservableObject {
     @Published var roomRight = true
     @Published var roomAbove = true
     @Published var roomBelow = true
+    /// Set false by the panel when the pointer leaves for real.
+    @Published var pointerInside = false
 
     private var settle: Task<Void, Never>?
     private var quiet: Task<Void, Never>?
@@ -441,10 +451,18 @@ final class MoonPetState: ObservableObject {
         settleBack(after: 2.4, to: .holding)
     }
 
+    /// The note captures are going to has changed. Worth one mention.
+    func destinationChanged(to title: String) {
+        let previous = folderName
+        folderName = title
+        guard previous != nil, previous != title else { return }
+        say("Saving to \(title)", forSeconds: 5)
+    }
+
     /// Says something, and stops saying it after a while. Long enough to catch
     /// while you are looking at what you just captured; not so long that the
     /// moon sits there holding a sign about something you did ten minutes ago.
-    private func say(_ text: String, forSeconds seconds: Double = 8) {
+    func say(_ text: String, forSeconds seconds: Double = 8) {
         label = text
         quiet?.cancel()
         quiet = Task { @MainActor [weak self] in

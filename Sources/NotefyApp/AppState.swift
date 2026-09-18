@@ -436,6 +436,9 @@ final class AppState: ObservableObject {
                 if self.settings.attachStoredKeys(stored) {
                     self.audioClient = AudioClient(config: self.settings.audio)
                     self.visionClient = VisionClient(config: self.settings.vision)
+                    // The status was worked out before the Keychain answered,
+                    // so it claimed a key was needed while one sat in storage.
+                    self.checkVisionStatus()
                 }
             }
         }
@@ -448,10 +451,16 @@ final class AppState: ObservableObject {
         // The moon's resting line is where captures are going: the note that
         // is open, which is what anything caught right now will be filed into.
         $noteTitle
+            .map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+            .map { $0.isEmpty ? "Untitled note" : $0 }
+            .removeDuplicates()
+            // Renaming types a character at a time; only the settled name is
+            // worth mentioning, and never the one it started with.
+            .debounce(for: .milliseconds(700), scheduler: DispatchQueue.main)
+            .dropFirst()
             .receive(on: DispatchQueue.main)
             .sink { [weak self] title in
-                let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-                self?.pet.state.folderName = trimmed.isEmpty ? "Untitled note" : trimmed
+                self?.pet.state.destinationChanged(to: title)
             }
             .store(in: &cancellables)
 
@@ -838,7 +847,7 @@ final class AppState: ObservableObject {
     /// file paths, heading marks and table pipes. What is left is what a person
     /// would say was in the note — which is what they will search for, and what
     /// a result should show them.
-    static func readable(_ markdown: String) -> String {
+    nonisolated static func readable(_ markdown: String) -> String {
         var text = markdown
 
         for pattern in [
@@ -858,6 +867,66 @@ final class AppState: ObservableObject {
         text = text.replacingOccurrences(of: "[*_`]{1,3}", with: "", options: .regularExpression)
         text = text.replacingOccurrences(of: "\\s{2,}", with: " ", options: .regularExpression)
         return text
+    }
+
+    /// Where a search matched inside a note, and the words around it.
+    ///
+    /// The preview and the place you land used to be worked out separately —
+    /// the preview from the cleaned index, the jump by re-scanning the raw
+    /// capture fields — so they could disagree, and did: the preview showed a
+    /// sentence from the write-up while the note opened at the top with nothing
+    /// lit. One pass answers both questions now.
+    struct NoteSearchHit {
+        let snippet: String
+        /// The capture the words are in, when they are in one.
+        let stepID: UUID?
+        /// True when the match is in the write-up rather than a capture.
+        let organized: Bool
+    }
+
+    func searchHit(for url: URL, query: String) -> NoteSearchHit? {
+        let needle = query.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
+        guard !needle.isEmpty,
+              let data = try? Data(contentsOf: sidecarURL(for: url)),
+              let document = try? JSONDecoder().decode(StoredNoteDocument.self, from: data)
+        else { return nil }
+
+        // Captures first, in the order they are read on screen.
+        for step in document.steps {
+            let thought = document.annotations[step.id.uuidString] ?? ""
+            for field in [step.selectedText ?? "", step.pageText ?? "", thought] {
+                let clean = Self.readable(field)
+                if let snippet = Self.snippet(of: clean, around: needle) {
+                    return NoteSearchHit(snippet: snippet, stepID: step.id, organized: false)
+                }
+            }
+        }
+
+        // Then the note itself: the write-up, every shape of it, and the raw.
+        var written = [document.organized]
+        written.append(contentsOf: (document.organizedVariants ?? [:]).values)
+        written.append(document.rawDraft ?? "")
+        written.append(document.annotationDraft ?? "")
+        for field in written {
+            let clean = Self.readable(field)
+            if let snippet = Self.snippet(of: clean, around: needle) {
+                return NoteSearchHit(snippet: snippet, stepID: nil, organized: true)
+            }
+        }
+        return nil
+    }
+
+    /// The words either side of a match, tidied for a single line.
+    nonisolated static func snippet(of text: String, around needle: String) -> String? {
+        guard let range = text.lowercased().range(of: needle) else { return nil }
+        let start = text.index(range.lowerBound, offsetBy: -48, limitedBy: text.startIndex) ?? text.startIndex
+        let end = text.index(range.upperBound, offsetBy: 72, limitedBy: text.endIndex) ?? text.endIndex
+        var snippet = String(text[start..<end])
+            .replacingOccurrences(of: "\n", with: " ")
+            .trimmingCharacters(in: .whitespaces)
+        if start != text.startIndex { snippet = "…" + snippet }
+        if end != text.endIndex { snippet += "…" }
+        return snippet
     }
 
     /// The line a body match was found on, for showing under the title.
@@ -891,7 +960,7 @@ final class AppState: ObservableObject {
         // Only what is *in* the note: the words on the captures, the words you
         // wrote beside them, and the write-up. Not the markdown file, whose
         // plumbing carries image paths and source lines — that is why "abi"
-        // matched a screenshot living under /Users/abishek, and "local" or
+        // matched a screenshot living under a home directory, and "local" or
         // "desktop" matched wherever a file happened to sit.
         var parts: [String] = []
         if let data = try? Data(contentsOf: sidecar),
@@ -1865,7 +1934,7 @@ final class AppState: ObservableObject {
         // Whatever it was — a region, a sentence, a voice note, a stretch of a
         // meeting — the light says it landed.
         flourish.play(.captured)
-        pet.state.caught("Filed to \(activeNoteTitle)",
+        pet.state.caught("Saved to \(activeNoteTitle)",
                          tint: Aurora.tintIndex(for: activeNoteTitle))
         let isRecordedTranscript = step.appName == "Audio"
             || step.appName == "Computer audio"

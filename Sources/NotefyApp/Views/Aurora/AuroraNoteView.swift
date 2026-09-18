@@ -27,6 +27,10 @@ struct AuroraNoteView: View {
     /// What was searched for, when this note was opened from a search result:
     /// the view jumps to the capture the words are in and lights them up.
     var searchMark: String? = nil
+    /// The capture the search matched, when it matched one.
+    var searchStep: UUID? = nil
+    /// True when the match was in the write-up rather than in a capture.
+    var searchInWriteUp: Bool = false
     var onClose: () -> Void
 
     @EnvironmentObject private var appState: AppState
@@ -153,21 +157,17 @@ struct AuroraNoteView: View {
         // The words travel with the note, so every capture can mark them.
         .environment(\.auroraSearchMark, searchMark)
         .onAppear {
-            // Opened from a search result: land on the capture the words are
-            // actually in rather than at the top of the note.
-            guard let mark = searchMark?.lowercased(),
-                  !mark.isEmpty,
-                  let index = steps.firstIndex(where: { matches($0, mark) }) else { return }
-            active = index
-            focusRequest = index
+            // Opened from a search result: go where the search actually found
+            // the words. The search worked that out already — this no longer
+            // re-derives it and risks landing somewhere else.
+            guard searchMark?.isEmpty == false else { return }
+            if let searchStep, let index = steps.firstIndex(where: { $0.id == searchStep }) {
+                active = index
+                focusRequest = index
+            } else if searchInWriteUp, !appState.organizedDraft.isEmpty {
+                mode = .organized
+            }
         }
-    }
-
-    /// Does this capture hold the searched-for words anywhere a person can see?
-    private func matches(_ step: ExplorationStep, _ needle: String) -> Bool {
-        let haystacks = [step.selectedText, step.pageText, appState.stepAnnotations[step.id],
-                         step.appName, step.windowTitle, step.url]
-        return haystacks.contains { ($0 ?? "").lowercased().contains(needle) }
     }
 
     private func commitTitle() {

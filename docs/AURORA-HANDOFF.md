@@ -1,6 +1,6 @@
 # Handoff prompt — aurora visual pass (for Codex, if Claude runs out of session)
 
-Paste everything below into Codex, working in `/Users/abishek_programming/Desktop/notefy`
+Paste everything below into Codex, working in the repository root
 on branch **`aurora-noted`** (branched from `feature/noted-canvas`).
 
 ---

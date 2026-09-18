@@ -24,8 +24,11 @@ struct AuroraWorkspaceView: View {
     @State private var folderToDelete: AuroraFolderTarget?
     /// True while the new-folder prompt is up.
     @State private var namingFolder = false
-    /// What was searched for when the open note was chosen from a result.
+    /// What was searched for when the open note was chosen from a result, and
+    /// exactly where in the note the words were found.
     @State private var openNoteMark: String?
+    @State private var openNoteStep: UUID?
+    @State private var openNoteOrganized = false
     @FocusState private var searchFocused: Bool
     @AppStorage("aurora.unfiled.x") private var unfiledX: Double = 0
     @AppStorage("aurora.unfiled.y") private var unfiledY: Double = 0
@@ -180,8 +183,16 @@ struct AuroraWorkspaceView: View {
                 .zIndex(60)
 
             if let url = openNoteURL {
-                AuroraNoteView(noteURL: url, searchMark: openNoteMark,
-                               onClose: { openNoteURL = nil; openNoteMark = nil })
+                AuroraNoteView(noteURL: url,
+                               searchMark: openNoteMark,
+                               searchStep: openNoteStep,
+                               searchInWriteUp: openNoteOrganized,
+                               onClose: {
+                                   openNoteURL = nil
+                                   openNoteMark = nil
+                                   openNoteStep = nil
+                                   openNoteOrganized = false
+                               })
                     .environmentObject(appState)
                     .transition(.opacity)
                     .zIndex(10)
@@ -518,7 +529,14 @@ struct AuroraWorkspaceView: View {
                     }
 
                     ForEach(hits) { hit in
-                        Button { openNoteMark = typed; open(note: hit.url); query = "" } label: {
+                        let found = appState.searchHit(for: hit.url, query: typed)
+                        Button {
+                            openNoteMark = typed
+                            openNoteStep = found?.stepID
+                            openNoteOrganized = found?.organized ?? false
+                            open(note: hit.url)
+                            query = ""
+                        } label: {
                             HStack(spacing: 12) {
                                 RoundedRectangle(cornerRadius: 3, style: .continuous)
                                     .fill(Aurora.tint(Aurora.tintIndex(for: hit.title)))
@@ -527,7 +545,7 @@ struct AuroraWorkspaceView: View {
                                     Text(hit.title).font(Aurora.ui(14.5)).foregroundStyle(Aurora.ink).lineLimit(1)
                                     // Where the words were found, when they
                                     // weren't in the title.
-                                    if let snippet = appState.searchSnippet(for: hit.url, query: typed),
+                                    if let snippet = found?.snippet,
                                        !hit.title.lowercased().contains(typed.lowercased()) {
                                         Text(Aurora.marked(snippet, query: typed))
                                             .font(Aurora.ui(11.5))
@@ -698,7 +716,10 @@ struct AuroraWorkspaceView: View {
     private func submit() {
         let typed = query.trimmingCharacters(in: .whitespaces)
         guard !typed.isEmpty, let hit = appState.searchNotes(query: typed).first else { return }
+        let found = appState.searchHit(for: hit.url, query: typed)
         openNoteMark = typed
+        openNoteStep = found?.stepID
+        openNoteOrganized = found?.organized ?? false
         query = ""
         open(note: hit.url)
     }
