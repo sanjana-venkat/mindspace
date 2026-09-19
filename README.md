@@ -18,9 +18,8 @@ macOS 14+ on Apple silicon. Everything is stored as plain Markdown on your Mac.
 Grab the latest `.dmg` from [Releases](https://github.com/sanjana-venkat/mindspace/releases),
 open it, and drag Mindspace to Applications.
 
-The current alpha is ad-hoc signed. Try opening it once, then go to System Settings →
-Privacy & Security and choose **Open Anyway**. Future releases can use Developer ID signing
-and Apple notarization without changing the build workflow.
+Releases are signed with a Developer ID, notarized by Apple, and stapled, so the app opens
+on the first try — no Privacy & Security detour.
 
 ### Homebrew
 
@@ -30,13 +29,14 @@ brew trust sanjana-venkat/mindspace
 brew install --cask mindspace
 ```
 
-Homebrew won't load a cask from a personal tap until you trust it — that's the middle
-line. This build isn't notarized yet, so after installing, open it once with
-right-click → **Open**, or clear the flag yourself:
+Homebrew 6 won't load a cask from a personal tap until you trust it — that's the middle
+line, and it's asked once per tap. It is Homebrew's check on where the cask came from,
+not macOS's check on the app: nothing about signing or notarizing removes it. The only
+way past it is for the cask to live in the official `homebrew-cask` repository, which
+takes a project more established than this one.
 
-```bash
-xattr -dr com.apple.quarantine /Applications/Mindspace.app
-```
+Nothing else is needed after installing. The app is notarized, so Gatekeeper lets it
+open straight away.
 
 Both steps go away once the app is signed with a Developer ID.
 
