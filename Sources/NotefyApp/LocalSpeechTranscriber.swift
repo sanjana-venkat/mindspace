@@ -38,6 +38,9 @@ final class LocalSpeechTranscriber: ObservableObject {
     /// Kept loaded between recordings: the first load is the expensive one.
     private var transcriber: ParakeetTranscriber?
 
+    /// True when the weights are already on disk, whoever fetched them.
+    var isDownloaded: Bool { ParakeetTranscriber.isDownloaded }
+
     /// Downloads the model on first use and loads it into Core ML.
     func ensureReady() async {
         if transcriber != nil, state == .ready { return }

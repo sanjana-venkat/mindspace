@@ -425,6 +425,8 @@ struct AuroraOnboarding: View {
                 )
                 .frame(width: 320)
 
+                speechModel
+
                 Text("Your voice is transcribed right here on your Mac. Nothing gets uploaded unless you pick a cloud provider in Settings.")
                     .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
                     .multilineTextAlignment(.center)
@@ -434,6 +436,77 @@ struct AuroraOnboarding: View {
         }
         .onAppear { appState.refreshAudioInputDevices(); meter.start() }
         .onDisappear { meter.stop() }
+    }
+
+    /// The speech model, fetched here rather than the first time someone hits
+    /// record. It is 215MB: a wait nobody minds while they are setting things
+    /// up, and a wait that feels broken when they have just started talking.
+    @ViewBuilder
+    private var speechModel: some View {
+        VStack(spacing: 10) {
+            switch appState.audioModelState {
+            case .downloading(let fraction):
+                VStack(spacing: 8) {
+                    HStack(spacing: 8) {
+                        ProgressView().controlSize(.small)
+                        Text("Fetching the speech model — \(Int(fraction * 100))%")
+                            .font(Aurora.ui(12.5, .medium)).foregroundStyle(fgSoft)
+                    }
+                    ProgressView(value: fraction)
+                        .progressViewStyle(.linear)
+                        .frame(width: 280)
+                    Text("Carry on — it finishes in the background.")
+                        .font(Aurora.ui(11.5)).foregroundStyle(fgFaint)
+                }
+            case .loadingModel:
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Loading the speech model…")
+                        .font(Aurora.ui(12.5, .medium)).foregroundStyle(fgSoft)
+                }
+            case .ready:
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                        .font(.system(size: 13, weight: .bold)).foregroundStyle(good)
+                    Text("Speech model ready — transcription works offline.")
+                        .font(Aurora.ui(12.5, .medium)).foregroundStyle(fgSoft)
+                }
+            case .failed(let why):
+                VStack(spacing: 6) {
+                    Text("Couldn't fetch the speech model: \(why)")
+                        .font(Aurora.ui(12)).foregroundStyle(fgSoft)
+                        .multilineTextAlignment(.center)
+                    Button("Try again") { Task { await appState.localTranscriber.ensureReady() } }
+                        .buttonStyle(.plain)
+                        .font(Aurora.ui(12.5, .semibold))
+                        .foregroundStyle(solidText)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(fg.opacity(0.9), in: Capsule())
+                }
+            case .notDownloaded, .transcribing:
+                VStack(spacing: 8) {
+                    Text("Transcription runs on this Mac using a 215MB speech model. It downloads once — better now than the first time you hit record.")
+                        .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
+                        .multilineTextAlignment(.center)
+                        .frame(maxWidth: 480)
+                        .fixedSize(horizontal: false, vertical: true)
+                    Button("Download it now") { Task { await appState.localTranscriber.ensureReady() } }
+                        .buttonStyle(.plain)
+                        .font(Aurora.ui(12.5, .semibold))
+                        .foregroundStyle(solidText)
+                        .padding(.horizontal, 16).padding(.vertical, 8)
+                        .background(fg.opacity(0.9), in: Capsule())
+                }
+            }
+        }
+        .frame(maxWidth: 480)
+        .animation(.smooth(duration: 0.25), value: appState.audioModelState)
+        .task {
+            // Already on this Mac — from an earlier install, or from another
+            // app sharing the same cache. Load it and say so.
+            guard ParakeetTranscriber.isDownloaded, appState.audioModelState == .notDownloaded else { return }
+            await appState.localTranscriber.ensureReady()
+        }
     }
 
     // MARK: 3 — the model

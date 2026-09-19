@@ -28,6 +28,18 @@ actor ParakeetTranscriber {
     /// whole thing each time, so the new part is the tail past this mark.
     private var committed = ""
 
+    /// Whether the weights are already on this Mac. FluidAudio keeps them in a
+    /// shared cache, so another app that uses it may have fetched them
+    /// already — in which case there is nothing to wait for.
+    static var isDownloaded: Bool {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first
+        guard let folder = support?
+            .appendingPathComponent("FluidAudio/Models/parakeet-eou-streaming", isDirectory: true),
+            let contents = try? FileManager.default.contentsOfDirectory(atPath: folder.path)
+        else { return false }
+        return !contents.isEmpty
+    }
+
     init(chunk: StreamingChunkSize = .ms320) {
         manager = StreamingEouAsrManager(chunkSize: chunk)
     }
