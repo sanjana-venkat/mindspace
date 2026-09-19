@@ -24,9 +24,13 @@ on the first try — no Privacy & Security detour.
 ### Homebrew
 
 ```bash
-brew tap sanjana-venkat/mindspace
-brew trust sanjana-venkat/mindspace
-brew install --cask mindspace
+brew tap sanjana-venkat/mindspace && brew trust sanjana-venkat/mindspace && brew install --cask mindspace
+```
+
+Updating later is just:
+
+```bash
+brew update && brew upgrade --cask mindspace
 ```
 
 Homebrew 6 won't load a cask from a personal tap until you trust it — that's the middle
