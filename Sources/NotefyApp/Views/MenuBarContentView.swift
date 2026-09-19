@@ -118,7 +118,7 @@ struct MenuBarContentView: View {
 
             Divider()
 
-            Text("⌘⇧K rail • T text • P page • G region • A audio • M meeting")
+            Text("⌘⇧K moon • T text • P page • G region • A audio • M meeting")
                 .font(NotefyFont.caption)
                 .foregroundStyle(NotefyTheme.textSecondary)
 

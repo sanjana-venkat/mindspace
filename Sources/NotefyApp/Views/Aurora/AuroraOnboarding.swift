@@ -93,7 +93,7 @@ struct AuroraOnboarding: View {
 
     private var snapshot: NotedPermissionSnapshot { appState.permissionCenter.snapshot }
     private var canLeavePermissions: Bool { snapshot.screenRecording }
-    private var lastStep: Int { 6 }
+    private var lastStep: Int { 7 }
 
     private var capturedSomething: Bool {
         guard let capturesAtStart else { return false }
@@ -118,9 +118,10 @@ struct AuroraOnboarding: View {
                     case 0: welcome
                     case 1: permissions
                     case 2: microphone
-                    case 3: model
-                    case 4: tryIt
-                    case 5: shortcuts
+                    case 3: speechModelStep
+                    case 4: model
+                    case 5: tryIt
+                    case 6: shortcuts
                     default: appearanceStep
                     }
                 }
@@ -425,8 +426,6 @@ struct AuroraOnboarding: View {
                 )
                 .frame(width: 320)
 
-                speechModel
-
                 Text("Your voice is transcribed right here on your Mac. Nothing gets uploaded unless you pick a cloud provider in Settings.")
                     .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
                     .multilineTextAlignment(.center)
@@ -438,12 +437,27 @@ struct AuroraOnboarding: View {
         .onDisappear { meter.stop() }
     }
 
-    /// The speech model, fetched here rather than the first time someone hits
-    /// record. It is 215MB: a wait nobody minds while they are setting things
-    /// up, and a wait that feels broken when they have just started talking.
+    // MARK: 3 — the speech model
+
+    /// Fetched here rather than the first time someone hits record. It is
+    /// 215MB: a wait nobody minds while they are setting things up, and a wait
+    /// that feels broken when they have just started talking. It starts on its
+    /// own — nobody came here to press a download button.
+    private var speechModelStep: some View {
+        page("Words, as you say them",
+             "Mindspace transcribes on this Mac, so recordings never leave it. That needs a one-off 215MB model.") {
+            speechModel
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
+                .task {
+                    guard appState.audioModelState == .notDownloaded else { return }
+                    await appState.localTranscriber.ensureReady()
+                }
+        }
+    }
+
     @ViewBuilder
     private var speechModel: some View {
-        VStack(spacing: 10) {
+        VStack(spacing: 14) {
             switch appState.audioModelState {
             case .downloading(let fraction):
                 VStack(spacing: 8) {
@@ -468,7 +482,7 @@ struct AuroraOnboarding: View {
                 HStack(spacing: 8) {
                     Image(systemName: "checkmark.circle.fill")
                         .font(.system(size: 13, weight: .bold)).foregroundStyle(good)
-                    Text("Speech model ready — transcription works offline.")
+                    Text("Speech model is on this Mac — transcription works offline.")
                         .font(Aurora.ui(12.5, .medium)).foregroundStyle(fgSoft)
                 }
             case .failed(let why):
@@ -484,29 +498,23 @@ struct AuroraOnboarding: View {
                         .background(fg.opacity(0.9), in: Capsule())
                 }
             case .notDownloaded, .transcribing:
-                VStack(spacing: 8) {
-                    Text("Transcription runs on this Mac using a 215MB speech model. It downloads once — better now than the first time you hit record.")
-                        .font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
-                        .multilineTextAlignment(.center)
-                        .frame(maxWidth: 480)
-                        .fixedSize(horizontal: false, vertical: true)
-                    Button("Download it now") { Task { await appState.localTranscriber.ensureReady() } }
-                        .buttonStyle(.plain)
-                        .font(Aurora.ui(12.5, .semibold))
-                        .foregroundStyle(solidText)
-                        .padding(.horizontal, 16).padding(.vertical, 8)
-                        .background(fg.opacity(0.9), in: Capsule())
+                HStack(spacing: 8) {
+                    ProgressView().controlSize(.small)
+                    Text("Starting the download…")
+                        .font(Aurora.ui(12.5, .medium)).foregroundStyle(fgSoft)
                 }
+            }
+
+            if appState.audioModelState != .ready {
+                Text("You can carry on setting up — this finishes on its own. Recording before it lands just means waiting a moment then.")
+                    .font(Aurora.ui(11.5)).foregroundStyle(fgFaint)
+                    .multilineTextAlignment(.center)
+                    .frame(maxWidth: 420)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
         .frame(maxWidth: 480)
         .animation(.smooth(duration: 0.25), value: appState.audioModelState)
-        .task {
-            // Already on this Mac — from an earlier install, or from another
-            // app sharing the same cache. Load it and say so.
-            guard ParakeetTranscriber.isDownloaded, appState.audioModelState == .notDownloaded else { return }
-            await appState.localTranscriber.ensureReady()
-        }
     }
 
     // MARK: 3 — the model
@@ -749,7 +757,7 @@ struct AuroraOnboarding: View {
                             .background(solidFill, in: Capsule())
                         Text("or").font(Aurora.ui(12, .regular)).foregroundStyle(fgFaint)
                         Button { appState.showCapturePet() } label: {
-                            Text("Open the rail for me")
+                            Text("Open the moon pet for me")
                                 .font(Aurora.ui(13))
                                 .foregroundStyle(fg)
                                 .padding(.horizontal, 16).padding(.vertical, 11)
@@ -969,10 +977,13 @@ struct AuroraOnboarding: View {
     private func secure(_ title: String, _ placeholder: String, text: Binding<String>) -> some View {
         VStack(alignment: .leading, spacing: 6) {
             Text(title.uppercased()).font(Aurora.mono(9.5)).tracking(1.1).foregroundStyle(fgFaint)
-            SecureField(placeholder, text: text)
-                .textFieldStyle(.plain)
-                .font(Aurora.ui(13, .regular))
-                .foregroundStyle(fg)
+            // AppKit's own field: the SwiftUI one never took the keyboard here,
+            // so this step asked for a key it gave you no way to enter.
+            AuroraKeyField(text: text,
+                           placeholder: placeholder,
+                           textColor: dark ? .white : NSColor(Self.dayInk),
+                           focusOnAppear: true)
+                .frame(height: 20)
                 .padding(.horizontal, 12).padding(.vertical, 10)
                 .background(panelFill, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
                 .overlay(RoundedRectangle(cornerRadius: 10, style: .continuous)
