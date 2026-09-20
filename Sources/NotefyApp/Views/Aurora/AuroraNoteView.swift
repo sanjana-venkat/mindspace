@@ -454,11 +454,17 @@ struct AuroraPanels: View {
             HStack(spacing: 9) {
                 Text(String(format: "%02d", i + 1))
                     .font(Aurora.mono(10)).foregroundStyle(.white.opacity(0.75))
-                Text(step.timestamp.formatted(date: .abbreviated, time: .shortened))
-                    .font(Aurora.mono(9.5)).tracking(0.6)
-                    .foregroundStyle(.white.opacity(0.85))
-                    .padding(.horizontal, 8).padding(.vertical, 3)
-                    .background(.white.opacity(0.16), in: Capsule())
+                // Cited rather than chipped: when the words underneath are
+                // someone's own thought, the time they thought it reads as an
+                // attribution, not as a tag on a piece of metadata.
+                HStack(spacing: 7) {
+                    Rectangle()
+                        .fill(.white.opacity(0.35))
+                        .frame(width: 2, height: 13)
+                    Text(step.timestamp.formatted(date: .abbreviated, time: .shortened))
+                        .font(Aurora.serif(12).italic())
+                        .foregroundStyle(.white.opacity(0.78))
+                }
                 Spacer(minLength: 8)
                 Button { goTo(active - 1) } label: { chevron("chevron.up") }
                     .buttonStyle(.plain).disabled(active == 0)
@@ -466,35 +472,17 @@ struct AuroraPanels: View {
                     .buttonStyle(.plain).disabled(active >= steps.count - 1)
             }
 
-            // TextEditor insets its text by about 5pt on the leading edge and
-            // 8pt on top. Rather than nudging the editor and leaving the
-            // placeholder where it was — which is what put the caret above and
-            // to the left of the prompt — both sit in the same stack: the
-            // placeholder pads itself by exactly those insets, and the pair is
-            // then shifted back together.
-            ZStack(alignment: .topLeading) {
-                if thought(step.id).wrappedValue.isEmpty {
-                    Text("What were you thinking when you saved this?")
-                        .font(Aurora.serif(20))
-                        .lineSpacing(7)
-                        .foregroundStyle(.white.opacity(0.45))
-                        .padding(.leading, 5)
-                        .padding(.top, 8)
-                        .allowsHitTesting(false)
-                }
-
-                TextEditor(text: thought(step.id))
-                    .font(Aurora.serif(20))
-                    .foregroundStyle(.white)
-                    .lineSpacing(7)
-                    .scrollContentBackground(.hidden)
-                    .scrollDisabled(true)
-                    .focused($editing)
-                    .textEditorStyle(.plain)
-            }
-            .padding(.leading, -5)
-            .padding(.top, -8)
-            .frame(minHeight: 120, alignment: .topLeading)
+            // One editor, drawing its own prompt: the placeholder is laid out
+            // by the same text container as the typing, so the caret lands
+            // exactly where the prompt was.
+            AuroraThoughtEditor(
+                text: thought(step.id),
+                placeholder: "What were you thinking when you saved this?",
+                font: .auroraSerif(20),
+                textColor: .white,
+                lineSpacing: 7,
+                inset: CGSize(width: 0, height: 2))
+                .frame(minHeight: 120, alignment: .topLeading)
 
         }
         .frame(maxWidth: .infinity, alignment: .leading)

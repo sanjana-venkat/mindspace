@@ -260,23 +260,13 @@ private struct RecordingNotepadView: View {
     }
 
     private var noteField: some View {
-        ZStack(alignment: .topLeading) {
-            if model.notes.isEmpty {
-                Text("Add a thought, or mark a moment with a timestamp…")
-                    .font(Aurora.serif(16))
-                    .foregroundStyle(Aurora.ink3)
-                    .padding(.horizontal, 15).padding(.vertical, 14)
-                    .allowsHitTesting(false)
-            }
-            TextEditor(text: Binding(
-                get: { model.notes },
-                set: { model.notes = String($0.prefix(5000)) }
-            ))
-            .font(Aurora.serif(16))
-            .foregroundStyle(Aurora.ink)
-            .scrollContentBackground(.hidden)
-            .padding(9)
-        }
+        AuroraThoughtEditor(
+            text: Binding(get: { model.notes }, set: { model.notes = $0 }),
+            placeholder: "Add a thought, or mark a moment with a timestamp…",
+            font: .auroraSerif(16),
+            textColor: NSColor(Aurora.ink),
+            limit: 5000,
+            inset: CGSize(width: 14, height: 13))
         .frame(maxWidth: .infinity, minHeight: 150, maxHeight: .infinity)
         .background(Aurora.surface2.opacity(0.78), in: RoundedRectangle(cornerRadius: 18, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 18, style: .continuous)
