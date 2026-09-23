@@ -2084,8 +2084,7 @@ private enum NotedInkAssets {
     static let mark = load("noted-mark", "svg")
 
     private static func load(_ name: String, _ ext: String) -> NSImage? {
-        let moduleURL = Bundle.module.url(forResource: name, withExtension: ext, subdirectory: "NotedInk")
-            ?? Bundle.module.url(forResource: name, withExtension: ext)
+        let moduleURL = AuroraResources.url(name, extension: ext, subdirectory: "NotedInk")
         guard let moduleURL else { return nil }
         let image = NSImage(contentsOf: moduleURL)
         image?.isTemplate = true

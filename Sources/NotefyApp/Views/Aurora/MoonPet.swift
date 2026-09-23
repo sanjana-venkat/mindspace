@@ -509,8 +509,7 @@ struct MoonPetArt {
     private static func image(_ name: String) -> Image? {
         let tries = [("png", "Pet"), ("png", nil), ("heic", "Pet"), ("heic", nil)]
         for (ext, folder) in tries {
-            let url = folder.map { Bundle.module.url(forResource: name, withExtension: ext, subdirectory: $0) }
-                ?? Bundle.module.url(forResource: name, withExtension: ext)
+            let url = AuroraResources.url(name, extension: ext, subdirectory: folder)
             if let url, let nsImage = NSImage(contentsOf: url), nsImage.size.height > 0 {
                 return Image(nsImage: nsImage)
             }

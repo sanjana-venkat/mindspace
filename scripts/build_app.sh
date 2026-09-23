@@ -36,8 +36,41 @@ cp "$ROOT_DIR/AppResources/AppIcon.icns" "$APP_BUNDLE/Contents/Resources/AppIcon
 cp "$ROOT_DIR/AppResources/NotedLogo.png" "$APP_BUNDLE/Contents/Resources/NotedLogo.png"
 cp "$ROOT_DIR"/AppResources/Fonts/*.ttf "$APP_BUNDLE/Contents/Resources/Fonts/"
 cp "$ROOT_DIR"/AppResources/Fonts/*.otf "$APP_BUNDLE/Contents/Resources/Fonts/" 2>/dev/null || true
+RESOURCE_BUNDLE="$APP_BUNDLE/Contents/Resources/Notefy_NotefyApp.bundle"
 if [ -d "$BIN_DIR/Notefy_NotefyApp.bundle" ]; then
     cp -R "$BIN_DIR/Notefy_NotefyApp.bundle" "$APP_BUNDLE/Contents/Resources/"
+else
+    echo "error: SwiftPM produced no resource bundle — the app would ship without its artwork." >&2
+    exit 1
+fi
+
+# SwiftPM emits a flat directory here with no Info.plist. macOS 26 will open
+# that as a bundle; macOS 15 refuses it, `Bundle(url:)` returns nil, and the
+# app used to die on launch there — every release up to 0.1.5 did. Giving it a
+# real Info.plist makes it a bundle everywhere.
+if [ ! -f "$RESOURCE_BUNDLE/Info.plist" ]; then
+    cat > "$RESOURCE_BUNDLE/Info.plist" <<'PLIST'
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.notefy.app.resources</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Notefy_NotefyApp</string>
+    <key>CFBundlePackageType</key>
+    <string>BNDL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>1.0</string>
+    <key>CFBundleVersion</key>
+    <string>1</string>
+</dict>
+</plist>
+PLIST
 fi
 
 if [ -n "${MINDSPACE_SIGN_IDENTITY:-}" ]; then
@@ -53,5 +86,26 @@ else
 fi
 
 codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+
+# The bundle has to be openable as a bundle, not merely present. This is the
+# check that would have caught the 0.1.5 launch crash before it shipped.
+if ! /usr/bin/plutil -lint "$RESOURCE_BUNDLE/Info.plist" >/dev/null; then
+    echo "error: the resource bundle has no usable Info.plist — it will not load on macOS 15." >&2
+    exit 1
+fi
+
+# And the app has to actually start. A packaging fault that traps in a
+# `dispatch_once` shows up here in two seconds and nowhere else until a tester
+# reports a crash log.
+"$APP_BUNDLE/Contents/MacOS/notefy-app" &
+LAUNCH_PID=$!
+sleep 4
+if kill -0 "$LAUNCH_PID" 2>/dev/null; then
+    kill "$LAUNCH_PID" 2>/dev/null || true
+    wait "$LAUNCH_PID" 2>/dev/null || true
+else
+    echo "error: the app exited within four seconds of launching — it is crashing on start." >&2
+    exit 1
+fi
 
 echo "Built $APP_BUNDLE"

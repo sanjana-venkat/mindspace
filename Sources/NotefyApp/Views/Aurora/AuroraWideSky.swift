@@ -43,8 +43,7 @@ enum World {
     private static func load(_ name: String) -> Image? {
         let tries = [("heic", "Scenery"), ("heic", nil), ("png", "Scenery"), ("png", nil)]
         for (ext, folder) in tries {
-            let url = folder.map { Bundle.module.url(forResource: name, withExtension: ext, subdirectory: $0) }
-                ?? Bundle.module.url(forResource: name, withExtension: ext)
+            let url = AuroraResources.url(name, extension: ext, subdirectory: folder)
             if let url, let image = NSImage(contentsOf: url), image.size.height > 0 {
                 return Image(nsImage: image)
             }
