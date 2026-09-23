@@ -1,27 +1,32 @@
 # Mindspace
 
-An infinite canvas for the things you clip and the thoughts you had while clipping them.
+Keep the things you see and the thoughts you had about them, in one place.
 
-Mindspace captures what's on your screen — a window, a region, text you selected, what you
-said out loud, a meeting — and keeps your own note attached to each capture. When a note has
-enough in it, a model reads the captures *and* your thoughts and writes the thing up, with its
-sources.
+Press a key, grab whatever is on your screen — a window, part of a window, text you have
+selected, something you say out loud, a whole meeting — and write a line about why you kept
+it. When a note has enough in it, Mindspace writes the tidy version for you, and shows you
+what it was written from.
 
-macOS 14+ on Apple silicon. Everything is stored as plain Markdown on your Mac.
+For Macs running macOS 14 (Sonoma) or newer. Works on Apple silicon and Intel.
 
 ---
 
-## Install
+## Install it
 
-### Download
+### The easy way
 
-Grab the latest `.dmg` from [Releases](https://github.com/sanjana-venkat/mindspace/releases),
-open it, and drag Mindspace to Applications.
+1. **[Download Mindspace](https://github.com/sanjana-venkat/mindspace/releases/latest)** — the
+   file ending in `.dmg` on that page.
+2. Open the downloaded file.
+3. Drag the **Mindspace** icon onto the **Applications** folder shown beside it.
+4. Open Mindspace from Applications (or Launchpad).
 
-Releases are signed with a Developer ID, notarized by Apple, and stapled, so the app opens
-on the first try — no Privacy & Security detour.
+That is all. The app is signed and approved by Apple, so it opens straight away — no scary
+warnings, nothing to click through in System Settings.
 
-### Homebrew
+### With Homebrew
+
+If you already use Homebrew, paste these three lines into Terminal instead:
 
 ```bash
 brew tap sanjana-venkat/mindspace
@@ -29,33 +34,108 @@ brew trust sanjana-venkat/mindspace 2>/dev/null || true
 brew install --cask sanjana-venkat/mindspace/mindspace
 ```
 
-Updating later:
+Later, to get the newest version:
 
 ```bash
 brew update && brew upgrade --cask mindspace
 ```
 
-Three notes on those lines, each there for a reason someone hit:
+(If you have not heard of Homebrew, ignore this section — use the easy way above.)
 
-**`brew trust` only exists in Homebrew 6.** That version refuses to load a cask from a
-personal tap until the tap is trusted, and asks once. Older Homebrew has no such command
-and no such requirement — hence `|| true`, so the line is a no-op there instead of an
-error that stops the install.
+---
 
-**The cask is named in full.** `brew install --cask mindspace` only works if the tap
-resolved; when it hasn't, Homebrew looks in the official cask repository, finds nothing,
-and says `Error: Cask 'mindspace' is unavailable` — which reads like the app is missing
-rather than the tap. `sanjana-venkat/mindspace/mindspace` says exactly where to look.
+## The first few minutes
 
-**Nothing else is needed after installing.** The app is signed with a Developer ID and
-notarized, so Gatekeeper opens it on the first try. The trust prompt is Homebrew's check
-on where the cask came from, not macOS's check on the app; no amount of signing removes
-it. Only a cask in the official `homebrew-cask` repository avoids it, and that takes a
-more established project than this one.
+Mindspace walks you through setup the first time you open it. Three things it will ask for,
+and why:
 
-### Build from source
+- **Screen recording** — this is how it captures anything at all. Without it nothing works.
+- **Microphone** — only for voice notes and meetings.
+- **Accessibility** — so it can read the text you have selected when you ask it to.
 
-Requires macOS 14+ and Xcode 16+.
+macOS asks for each one in its own window. Say yes, and setup carries on.
+
+It also downloads a **215MB speech model** during setup, once. That is what turns talking into
+text, on your own Mac, without sending audio anywhere. You can keep setting things up while it
+downloads.
+
+---
+
+## Using it
+
+**The moon.** A small moon floats on your desktop. It is how you capture things without
+leaving whatever you are doing. Hover it and its options fan out around it:
+
+| Icon | What it does |
+|---|---|
+| Camera | Take a picture of a whole window, or drag a box around part of the screen |
+| Text | Save the text you have selected right now |
+| Waveform | Record — your microphone, or the sound your Mac is playing |
+| People | Take meeting notes: you on one side, everyone else on the other |
+
+Drag the moon anywhere you like. It stays put, out of the way, and tells you where things are
+being saved.
+
+**Or use the keyboard**, without touching the moon:
+
+| Shortcut | What it does |
+|---|---|
+| ⌘⇧K | Show the moon's options |
+| ⌘⇧G | Grab part of the screen |
+| ⌘⇧P | Grab the whole window |
+| ⌘⇧T | Save the text you have selected |
+| ⌘⇧A | Start or stop recording audio |
+| ⌘⇧M | Start or stop meeting notes |
+
+**After each capture** Mindspace asks what you were thinking, in a line or two. That line is
+the point — it is what makes the capture worth anything later.
+
+**In a meeting?** If you join a Zoom or Google Meet call, Mindspace offers to take notes. It
+records nothing until you click **Take notes**.
+
+**Your notes** live in a folder on your Desktop called **Mindspace**. They are ordinary text
+files — readable in any app, yours to move or back up, and there whether or not Mindspace is
+running.
+
+---
+
+## Questions people ask
+
+**Does anything leave my Mac?** Not unless you ask it to. Captures, recordings and notes stay
+in that Desktop folder, and speech is transcribed on your own machine. Only if you add a key
+for a cloud model (below) does anything get sent anywhere.
+
+**Do I need to pay for anything?** No. Mindspace works on its own using the model on your Mac.
+Connecting a paid service makes the write-ups better, and is entirely optional.
+
+**Will it record me without asking?** No. Recording begins when you start it, and stops when
+you stop it. In meetings it offers, and waits.
+
+**How do I get a newer version?** If you installed the easy way, download the new file and drag
+it over the old one. With Homebrew, `brew update && brew upgrade --cask mindspace`.
+
+---
+
+## Connecting a smarter model (optional)
+
+Out of the box the write-ups are done by a model running on your Mac — free and private, but
+slower and rougher. In **Settings** you can paste a key from any of these instead:
+
+| Service | Where the key comes from |
+|---|---|
+| OpenAI | platform.openai.com |
+| Gemini | aistudio.google.com |
+| Claude | console.anthropic.com |
+| Ollama | Nothing to paste — install Ollama and pull a model |
+
+Each service keeps its own key, so switching between them does not lose the others. Keys are
+stored on your Mac in a file only your account can read.
+
+---
+
+## For developers
+
+Build it yourself — macOS 14+ and Xcode 16+:
 
 ```bash
 git clone https://github.com/sanjana-venkat/mindspace.git
@@ -64,72 +144,20 @@ cd mindspace
 open Mindspace.app
 ```
 
----
+Swift Package Manager, no Xcode project. `NotefyCore` holds capture, storage and the model
+clients; `NotefyApp` is the SwiftUI app. Speech recognition is Parakeet, via a vendored copy of
+[FluidAudio](https://github.com/FluidInference/FluidAudio) under `ThirdParty/`. `swift test`
+runs the suite. `./scripts/publish.sh <version>` cuts a signed, notarized release and updates
+the Homebrew tap.
 
-## What it does
-
-**Capture** — ⌘⇧K brings up the capture rail anywhere: full window, a region you drag, the
-text you have selected, a voice note, or a meeting (your mic as *You*, system audio as
-*Others*). Every capture lands in a note with room for the thought behind it.
-
-When Mindspace notices an active Google Meet or Zoom meeting, it offers to take notes in a
-notification. Recording starts only after you click the notification.
-
-**Canvas** — folders live on an infinite canvas you arrange yourself. Scroll to pan, pinch to
-zoom, drag folders anywhere. The pile of notes peeking over each folder is how many captures
-are inside. A list view sorts the same library.
-
-**Read** — a note opens in three views:
-
-- **Panels** — captures on the right, and the single thought attached to whichever one you're
-  looking at on the left, under an aurora.
-- **Organized** — the model's write-up: bullet list, essay, or meeting notes. Each shape is
-  cached, so switching between them doesn't re-run the model.
-- **Grid** — every capture-and-thought pair as a tile. Drag to rearrange, ⇧+arrows to move one.
-
-Right-click any capture to forward or copy it into another note, or delete it.
-
----
-
-## Models
-
-Transcription runs on-device with WhisperKit by default. The organized note can come from:
-
-| Provider | What it needs |
-|---|---|
-| On-device | [Ollama](https://ollama.com) running locally — no key, slower |
-| OpenAI | key from platform.openai.com |
-| Gemini | key from aistudio.google.com — also covers transcription |
-| Claude | key from console.anthropic.com |
-
-Keys are kept in macOS Keychain per provider, so switching between them doesn't lose the
-others. Without any key Mindspace still works — it falls back to the on-device model and says so.
-
----
-
-## Permissions
-
-macOS asks once, and setup walks you through each one:
-
-- **Screen & System Audio Recording** — required; it's how anything gets captured.
-- **Microphone** — voice notes and the *You* side of meetings.
-- **Accessibility** — reads only the text you have selected, when you press ⌘⇧T.
-- **Notifications** — offers to start notes when an active Google Meet or Zoom call is detected.
+Notes are Markdown with a JSON sidecar beside them holding the captures, your thoughts and any
+write-ups. Nothing is in a database.
 
 ## Privacy
 
-Mindspace has no analytics or meeting bot. Notes, captures, audio, and settings are stored on
-your Mac. Meeting detection checks the frontmost Zoom window or active Google Meet tab locally;
-it never starts recording without a click. If you explicitly choose a cloud model provider,
-the captures and text being organized are sent to that provider under its own terms.
-
----
-
-## Where your notes live
-
-`~/Desktop/Mindspace` — one Markdown file per note, with a JSON sidecar holding the captures,
-your thoughts, and any organized versions. Settings live beside them. If you used an
-earlier build, its `Notefy_Sessions` folder is moved here the first time you launch.
+No analytics, no accounts, no meeting bot. Meeting detection looks at the frontmost window and
+whether the microphone is in use, entirely on your Mac, and never starts recording on its own.
+Whatever you send to a cloud provider, by choosing one, is handled under that provider's terms.
 
 ## License
 
