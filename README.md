@@ -161,4 +161,9 @@ Whatever you send to a cloud provider, by choosing one, is handled under that pr
 
 ## License
 
-No open-source license has been selected yet.
+MIT — see [LICENSE](LICENSE). Use it, change it, ship it; keep the copyright notice.
+
+One part is not ours: `ThirdParty/FluidAudio` is a vendored copy of
+[FluidAudio](https://github.com/FluidInference/FluidAudio), under the Apache License 2.0,
+with its own licence file kept alongside it. The speech models it downloads come from their
+publishers under their own terms.
