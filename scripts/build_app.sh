@@ -9,8 +9,16 @@ cd "$ROOT_DIR"
 
 CONFIG="${1:-debug}"
 if [ "$CONFIG" = "release" ]; then
-    swift build -c release --product notefy-app
-    BIN_DIR=".build/release"
+    # Both architectures: the app is handed to people whose Macs we do not
+    # know, and an arm64-only build installs cleanly on an Intel Mac and then
+    # refuses to open. SwiftPM puts a multi-arch build somewhere else than a
+    # native one, hence the second path.
+    swift build -c release --arch arm64 --arch x86_64 --product notefy-app
+    if [ -d ".build/apple/Products/Release" ]; then
+        BIN_DIR=".build/apple/Products/Release"
+    else
+        BIN_DIR=".build/release"
+    fi
 else
     swift build --product notefy-app
     BIN_DIR=".build/debug"
@@ -86,6 +94,17 @@ else
 fi
 
 codesign --verify --deep --strict --verbose=2 "$APP_BUNDLE"
+
+if [ "$CONFIG" = "release" ]; then
+    ARCHS="$(lipo -archs "$APP_BUNDLE/Contents/MacOS/notefy-app")"
+    case "$ARCHS" in
+        *arm64*x86_64*|*x86_64*arm64*) ;;
+        *)
+            echo "error: release binary is $ARCHS — an Intel Mac could not run it." >&2
+            exit 1
+            ;;
+    esac
+fi
 
 # The bundle has to be openable as a bundle, not merely present. This is the
 # check that would have caught the 0.1.5 launch crash before it shipped.
