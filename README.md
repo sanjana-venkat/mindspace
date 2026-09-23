@@ -24,25 +24,34 @@ on the first try — no Privacy & Security detour.
 ### Homebrew
 
 ```bash
-brew tap sanjana-venkat/mindspace && brew trust sanjana-venkat/mindspace && brew install --cask mindspace
+brew tap sanjana-venkat/mindspace
+brew trust sanjana-venkat/mindspace 2>/dev/null || true
+brew install --cask sanjana-venkat/mindspace/mindspace
 ```
 
-Updating later is just:
+Updating later:
 
 ```bash
 brew update && brew upgrade --cask mindspace
 ```
 
-Homebrew 6 won't load a cask from a personal tap until you trust it — that's the middle
-line, and it's asked once per tap. It is Homebrew's check on where the cask came from,
-not macOS's check on the app: nothing about signing or notarizing removes it. The only
-way past it is for the cask to live in the official `homebrew-cask` repository, which
-takes a project more established than this one.
+Three notes on those lines, each there for a reason someone hit:
 
-Nothing else is needed after installing. The app is notarized, so Gatekeeper lets it
-open straight away.
+**`brew trust` only exists in Homebrew 6.** That version refuses to load a cask from a
+personal tap until the tap is trusted, and asks once. Older Homebrew has no such command
+and no such requirement — hence `|| true`, so the line is a no-op there instead of an
+error that stops the install.
 
-Both steps go away once the app is signed with a Developer ID.
+**The cask is named in full.** `brew install --cask mindspace` only works if the tap
+resolved; when it hasn't, Homebrew looks in the official cask repository, finds nothing,
+and says `Error: Cask 'mindspace' is unavailable` — which reads like the app is missing
+rather than the tap. `sanjana-venkat/mindspace/mindspace` says exactly where to look.
+
+**Nothing else is needed after installing.** The app is signed with a Developer ID and
+notarized, so Gatekeeper opens it on the first try. The trust prompt is Homebrew's check
+on where the cask came from, not macOS's check on the app; no amount of signing removes
+it. Only a cask in the official `homebrew-cask` repository avoids it, and that takes a
+more established project than this one.
 
 ### Build from source
 
