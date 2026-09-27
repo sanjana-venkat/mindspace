@@ -151,6 +151,16 @@ function ring(parent, o) {
 
 let MOON_HASH = null, GRAIN_HASH = null;
 
+// Figma Slides is a different editor: slides are SlideNodes in a grid, not
+// frames you place on a canvas. Everything inside a slide is identical, so
+// only the container differs.
+const IS_SLIDES = figma.editorType === 'slides';
+const MADE = [];
+
+/// Properties that exist in one editor and not the other. Losing a corner
+/// radius is not worth failing a build over.
+function safe(fn) { try { fn(); } catch (e) { /* not available here */ } }
+
 function moon(parent, o) {
   const r = figma.createRectangle();
   parent.appendChild(r);
@@ -224,12 +234,26 @@ function blank(parent, o) {
 }
 
 function slide(i, name) {
-  const f = figma.createFrame();
-  figma.currentPage.appendChild(f);
-  f.name = name;
-  f.resize(W, H);
-  f.x = i * (W + GAP); f.y = 0;
-  f.clipsContent = true;
+  let f;
+  if (IS_SLIDES) {
+    f = figma.createSlide();
+    safe(function () { f.name = name; });
+    if (Math.round(f.width) !== W || Math.round(f.height) !== H) {
+      throw new Error(
+        'This deck\u2019s slides are ' + Math.round(f.width) + ' by ' + Math.round(f.height) +
+        '. The layout is drawn for 1920 by 1080. Set the deck size to 1920x1080 in ' +
+        'the right hand panel, delete the slides this made, and run it again.'
+      );
+    }
+  } else {
+    f = figma.createFrame();
+    figma.currentPage.appendChild(f);
+    f.name = name;
+    f.resize(W, H);
+    f.x = i * (W + GAP); f.y = 0;
+    safe(function () { f.clipsContent = true; });
+  }
+  MADE[i] = f;
   f.fills = [{
     type: 'GRADIENT_LINEAR',
     gradientTransform: [[0, 1, 0], [-1, 0, 1]],
@@ -242,6 +266,12 @@ function slide(i, name) {
 }
 
 function notes(i, words, str) {
+  if (IS_SLIDES) {
+    // Slides has a real speaker notes field. If this build of Figma does not
+    // expose it, the notes are still in SLIDES.md rather than lost.
+    safe(function () { MADE[i].speakerNotes = str; });
+    return;
+  }
   const head = T(figma.currentPage, {
     x: i * (W + GAP), y: H + 70, str: 'SPEAKER NOTES  ·  ' + words + ' WORDS',
     font: F.mono, size: 16, color: '#7A8494', ls: 12
@@ -256,6 +286,10 @@ function notes(i, words, str) {
 /// Appendix slides are not part of the two minutes, so they are labelled for
 /// what they are: answers held in reserve.
 function asideNotes(i, str) {
+  if (IS_SLIDES) {
+    safe(function () { MADE[i].speakerNotes = 'IF ASKED. ' + str; });
+    return;
+  }
   const head = T(figma.currentPage, {
     x: i * (W + GAP), y: H + 70, str: 'IF ASKED',
     font: F.mono, size: 16, color: '#7A8494', ls: 12
@@ -320,7 +354,7 @@ function slide2() {
   });
   y += head.height + 46;
 
-  const kinds = ['SCREENSHOTS', 'VOICE NOTES', 'DOCUMENTS', 'HALF FORMED THOUGHTS'];
+  const kinds = ['LECTURE SLIDES', 'READINGS', 'VOICE NOTES', 'HALF FORMED THOUGHTS'];
   let cx2 = M;
   for (let i = 0; i < kinds.length; i++) {
     const s = chip(f, {
@@ -426,7 +460,7 @@ function slide4() {
   }
 
   // 01 capture
-  const sources = ['screen and windows', 'meeting and system audio', 'spoken thoughts', 'files and links'];
+  const sources = ['slides and screens', 'lectures and seminars', 'spoken thoughts', 'readings and links'];
   for (let i = 0; i < sources.length; i++) {
     const ry = panelY + 146 + i * 52;
     R(f, { x: xs[0] + 32, y: ry + 8, w: 9, h: 9, r: 5, fill: TINTS[i % TINTS.length], name: 'dot' });
@@ -434,7 +468,7 @@ function slide4() {
   }
 
   // 02 organize
-  const folders = [['Product design', '18'], ['Interviews', '11'], ['Reading', '24'], ['Half ideas', '7']];
+  const folders = [['Cognitive Psych', '24'], ['Research Methods', '18'], ['Readings', '31'], ['Half ideas', '7']];
   for (let i = 0; i < folders.length; i++) {
     const ry = panelY + 140 + i * 56;
     R(f, { x: xs[1] + 32, y: ry, w: pw - 64, h: 44, r: 12, fill: C.panel2, stroke: C.line, name: 'folder row' });
@@ -516,11 +550,11 @@ function slide5() {
   R(f, { x: x, y: sy, w: pw, h: ph - (sy - py), corners: [28, 28, 42, 42], fill: C.panel, name: 'bottom sheet' });
   R(f, { x: bcx - 22, y: sy + 14, w: 44, h: 4, r: 2, fill: C.ink3, fillOpacity: 0.6, name: 'handle' });
   R(f, { x: x + 28, y: sy + 46, w: 11, h: 11, r: 6, fill: C.lav, name: 'tint' });
-  T(f, { x: x + 48, y: sy + 38, str: 'Product design', font: F.h, size: 23, color: C.pearl });
+  T(f, { x: x + 48, y: sy + 38, str: 'Cognitive Psych', font: F.h, size: 23, color: C.pearl });
   T(f, { x: x + 28, y: sy + 76, str: '18 SAVED  ·  6 TOPICS', font: F.mono, size: 11, color: C.ink3, ls: 12 });
   hairline(f, x + 28, sy + 108, pw - 56, C.line, 1);
 
-  const topics = [['Voice capture that feels natural', '4'], ['Onboarding without a tour', '3'], ['Colour and contrast notes', '5'], ['Pricing page teardown', '2'], ['Motion that explains', '4']];
+  const topics = [['Correlation is not causation', '4'], ['Memory and encoding', '6'], ['Research methods', '5'], ['Seminar 9, the bits I missed', '2'], ['Exam 2, likely themes', '3']];
   for (let i = 0; i < topics.length; i++) {
     const ty = sy + 126 + i * 56;
     if (i === 0) R(f, { x: x + 16, y: ty - 8, w: pw - 32, h: 46, r: 12, fill: C.lav, fillOpacity: 0.12, name: 'selected' });
@@ -531,13 +565,13 @@ function slide5() {
   /* --- C: topic summary -------------------------------------------- */
   x = xs[2];
   phoneShell(f, x, py, pw, ph);
-  T(f, { x: x + 28, y: py + 42, str: 'Product design', font: F.mono, size: 12, color: C.ink3, ls: 10 });
-  T(f, { x: x + 28, y: py + 76, w: pw - 56, str: 'Voice capture that feels natural', font: F.serif, size: 25, lh: 33, color: C.pearl });
+  T(f, { x: x + 28, y: py + 42, str: 'Cognitive Psych', font: F.mono, size: 12, color: C.ink3, ls: 10 });
+  T(f, { x: x + 28, y: py + 76, w: pw - 56, str: 'Correlation is not causation', font: F.serif, size: 25, lh: 33, color: C.pearl });
   T(f, { x: x + 28, y: py + 156, str: 'AI SUMMARY', font: F.mono, size: 11, color: C.tealSoft, ls: 14 });
-  T(f, { x: x + 28, y: py + 182, w: pw - 56, str: 'Across four saves you keep circling one idea: the recorder should disappear and the words should appear.', font: F.serif, size: 16, lh: 26, color: C.ink2 });
+  T(f, { x: x + 28, y: py + 182, w: pw - 56, str: 'You saved this four times: twice from slides, twice in your own words. The second time you got it right.', font: F.serif, size: 16, lh: 26, color: C.ink2 });
 
   T(f, { x: x + 28, y: py + 292, str: 'FROM', font: F.mono, size: 10, color: C.ink3, ls: 14 });
-  const srcs = ['screenshot 14 Sep', 'voice note', 'meeting 9 Sep'];
+  const srcs = ['lecture 9 slides', 'your voice note', 'seminar 14 Sep'];
   let sx = x + 28, srow = 0;
   for (let i = 0; i < srcs.length; i++) {
     const s = chip(f, { x: sx, y: py + 316 + srow * 34, str: srcs[i], font: F.mono, size: 11, ls: 2, color: C.tealSoft, stroke: C.teal, strokeOpacity: 0.4, fill: C.teal, fillOpacity: 0.1, padX: 10, padY: 6 });
@@ -547,9 +581,9 @@ function slide5() {
 
   hairline(f, x + 28, py + 400, pw - 56, C.line, 1);
   T(f, { x: x + 28, y: py + 422, str: 'YOUR NOTES', font: F.mono, size: 11, color: C.lavSoft, ls: 14 });
-  T(f, { x: x + 28, y: py + 448, w: pw - 56, str: '"Recording feels like a performance. What if it just listened?"', font: F.serifIt, size: 16, lh: 26, color: C.pearl });
+  T(f, { x: x + 28, y: py + 448, w: pw - 56, str: '"So a correlation can be strong and still tell you nothing about cause."', font: F.serifIt, size: 16, lh: 26, color: C.pearl });
 
-  const follow = ['what changed since?', 'argue against this'];
+  const follow = ['quiz me on this', 'where am I still shaky?'];
   let fy = py + 520;
   for (let i = 0; i < follow.length; i++) {
     chip(f, { x: x + 28, y: fy, str: follow[i], font: F.ui, size: 14, ls: 0, color: C.ink2, stroke: C.line, strokeOpacity: 1, fill: C.panel2, padX: 14, padY: 9 });
@@ -580,7 +614,7 @@ function slide6() {
   const colW = 1180;
 
   // 1 · the ask
-  const u1 = T(f, { x: M + colW - 620 + 24, y: y + 22, w: 572, str: 'What was that idea I saved about making recordings feel more natural?', font: F.ui, size: 21, lh: 31, color: C.pearl });
+  const u1 = T(f, { x: M + colW - 620 + 24, y: y + 22, w: 572, str: 'What did I save about correlation and causation?', font: F.ui, size: 21, lh: 31, color: C.pearl });
   const u1h = u1.height + 44;
   const u1r = R(f, { x: M + colW - 620, y: y, w: 620, h: u1h, r: 22, fill: C.panel2, stroke: C.line, name: 'you' });
   f.insertChild(f.children.indexOf(u1), u1r);
@@ -588,30 +622,30 @@ function slide6() {
   y += u1h + 34;
 
   // 2 · what came back, with its source attached
-  const rBody = T(f, { x: M + 30, y: y + 52, w: 820, str: '"Recording feels like a performance. What if it just listened, and showed the words as they came?"', font: F.serifIt, size: 24, lh: 36, color: C.pearl });
+  const rBody = T(f, { x: M + 30, y: y + 52, w: 820, str: '"Correlational studies measure how two variables relate, without controlling either one. That is not the same as cause."', font: F.serifIt, size: 24, lh: 36, color: C.pearl });
   const rh = rBody.height + 86;
   const rCard = R(f, { x: M, y: y, w: 880, h: rh, r: 20, fill: C.teal, fillOpacity: 0.07, stroke: C.teal, strokeOpacity: 0.35, name: 'retrieved' });
   f.insertChild(f.children.indexOf(rBody), rCard);
   const rRule = R(f, { x: M, y: y, w: 3, h: rh, r: 2, fill: C.teal, name: 'source rule' });
   f.insertChild(f.children.indexOf(rBody), rRule);
-  T(f, { x: M + 30, y: y + 22, str: 'RETRIEVED FROM YOUR NOTES  ·  14 SEP', font: F.mono, size: 11, color: C.tealSoft, ls: 14 });
+  T(f, { x: M + 30, y: y + 22, str: 'RETRIEVED FROM YOUR NOTES  ·  SEMINAR, 14 SEP', font: F.mono, size: 11, color: C.tealSoft, ls: 14 });
   y += rh + 30;
 
   // 3 · the interpretation
   T(f, { x: M + 30, y: y, str: 'MINDSPACE', font: F.mono, size: 11, color: C.lavSoft, ls: 14 });
-  const a1 = T(f, { x: M + 30, y: y + 26, w: 860, str: 'You wanted the ceremony gone. No start button, a live transcript, the recorder out of the way.', font: F.serif, size: 23, lh: 34, color: C.ink2 });
+  const a1 = T(f, { x: M + 30, y: y + 26, w: 860, str: 'You wrote this after the seminar, in your own words. The lecture slide you saved an hour earlier says it less clearly.', font: F.serif, size: 23, lh: 34, color: C.ink2 });
   R(f, { x: M, y: y, w: 3, h: a1.height + 30, r: 2, fill: C.lav, fillOpacity: 0.7, name: 'ai rule' });
   y += a1.height + 60;
 
   // 4 · the turn
-  const u2 = T(f, { x: M + colW - 620 + 24, y: y + 22, w: 572, str: 'Challenge that. What am I missing?', font: F.ui, size: 21, lh: 31, color: C.pearl });
+  const u2 = T(f, { x: M + colW - 620 + 24, y: y + 22, w: 572, str: 'Quiz me on it.', font: F.ui, size: 21, lh: 31, color: C.pearl });
   const u2h = u2.height + 44;
   const u2r = R(f, { x: M + colW - 620, y: y, w: 620, h: u2h, r: 22, fill: C.panel2, stroke: C.line, name: 'you' });
   f.insertChild(f.children.indexOf(u2), u2r);
   y += u2h + 30;
 
   T(f, { x: M + 30, y: y, str: 'MINDSPACE', font: F.mono, size: 11, color: C.lavSoft, ls: 14 });
-  const a2 = T(f, { x: M + 30, y: y + 26, w: 860, str: 'Always listening raises a trust question, and a live transcript invites editing while you speak. Your note assumed both were free.', font: F.serif, size: 23, lh: 34, color: C.ink2 });
+  const a2 = T(f, { x: M + 30, y: y + 26, w: 860, str: 'Find me an example from your own readings where a correlation was reported as a cause. I will wait.', font: F.serif, size: 23, lh: 34, color: C.ink2 });
   R(f, { x: M, y: y, w: 3, h: a2.height + 30, r: 2, fill: C.lav, fillOpacity: 0.7, name: 'ai rule' });
 
   // legend
@@ -694,13 +728,27 @@ function slideA1() {
     y += 36 + d.height + 34;
   }
 
+  // privacy, stated only as far as the product actually goes today
+  T(f, { x: M, y: 566, str: 'PRIVACY, AS BUILT', font: F.mono, size: 12, color: C.lavSoft, ls: 14 });
+  const priv = [
+    ['Speech never leaves the laptop.', 'Parakeet runs on-device. No API call at all.'],
+    ['Summaries can stay local too.', 'Through a local model, today. Going further is what we want to fund.']
+  ];
+  let py2 = 602;
+  for (let i = 0; i < priv.length; i++) {
+    R(f, { x: M, y: py2 + 6, w: 3, h: 24, r: 2, fill: C.lav, fillOpacity: 0.7, name: 'rule' });
+    T(f, { x: M + 24, y: py2, w: 700, str: priv[i][0], font: F.uiMed, size: 20, lh: 28, color: C.pearl });
+    const d = T(f, { x: M + 24, y: py2 + 32, w: 700, str: priv[i][1], font: F.ui, size: 16, lh: 24, color: C.ink3 });
+    py2 += 32 + d.height + 26;
+  }
+
   // sizing, bottom up, with the numbers left out on purpose
   const sx = 1010;
   T(f, { x: sx, y: 350, str: 'SIZING, BOTTOM UP', font: F.mono, size: 12, color: C.amber, ls: 14 });
   const rows = [
-    ['Researchers and designers we can reach', 'HEADCOUNT'],
-    ['Plausible price a month', 'PRICE'],
-    ['Serviceable market', 'PRODUCT OF THE TWO']
+    ['Students enrolled at one university', 'HEADCOUNT'],
+    ['What a student will actually pay', 'PRICE A MONTH'],
+    ['One campus, serviceable', 'PRODUCT OF THE TWO']
   ];
   for (let i = 0; i < rows.length; i++) {
     const ry = 390 + i * 74;
@@ -709,7 +757,7 @@ function slideA1() {
   }
   T(f, {
     x: sx, y: 626, w: 770,
-    str: 'Fill these from LinkedIn Talent Insights or the BLS occupational data before you pitch. Do not say a number out loud that you have not checked yourself.',
+    str: 'Enrolment is public. Take it from the university\u2019s own factbook, or IPEDS, or HESA. Do not say a number out loud that you have not checked yourself.',
     font: F.mono, size: 12.5, lh: 21, color: C.ink3
   });
 
@@ -717,18 +765,25 @@ function slideA1() {
   hairline(f, M, 760, W - M * 2, C.line, 1);
   T(f, { x: M, y: 786, str: 'THE MODEL', font: F.mono, size: 12, color: C.lavSoft, ls: 14 });
   const model = [
-    ['Free, and local, forever', 'Capture and organize. Nothing leaves the machine.'],
-    ['Paid for the twin', 'Asking your corpus questions is where inference costs money.'],
-    ['Bring your own key stays', 'For the people who would rather pay Google directly.']
+    ['Free to start', 'Capture and organize on the machine. This is how it reaches a cohort.'],
+    ['Tiers by memory', 'You pay as your mindspace grows. More to hold, further back to recall.'],
+    ['A private tier', 'Everything through a local model, for material that cannot leave the laptop.'],
+    ['Opt in, and later', 'Consented simulation for research and evaluation, with a share paid back.']
   ];
   for (let i = 0; i < model.length; i++) {
-    const mx = M + i * 550;
-    T(f, { x: mx, y: 822, str: model[i][0], font: F.uiMed, size: 21, color: C.pearl });
-    T(f, { x: mx, y: 854, w: 480, str: model[i][1], font: F.ui, size: 16, lh: 24, color: C.ink3 });
+    const mx = M + i * 412;
+    const accent = i === 3 ? C.ink3 : C.pearl;
+    T(f, { x: mx, y: 822, str: model[i][0], font: F.uiMed, size: 20, color: accent });
+    T(f, { x: mx, y: 852, w: 370, str: model[i][1], font: F.ui, size: 15.5, lh: 23, color: C.ink3 });
   }
+  T(f, {
+    x: M, y: 956, w: 1640,
+    str: 'Students do not pay and institutions are slow, so adoption comes first and revenue second. The fourth column is an option we are exploring, not a plan: nothing about a person is sold, simulated or otherwise, unless they opted in and were paid for it.',
+    font: F.mono, size: 12, lh: 20, color: C.ink3
+  });
 
   grain(f);
-  asideNotes(7, 'Why now is the part you can defend from the codebase: speech runs on the machine, and long context made reading a whole folder cheap. Neither was true two years ago. The sizing is arithmetic you did, not a number you found on a slide.');
+  asideNotes(7, 'Lead with tiers by memory. Privacy is not a promise here, it is already built: speech runs on-device and summaries can too. If anyone asks about the fourth column, say it is opt in, paid, and not how the company works today, then go back to subscriptions. Do not let it become the headline.');
 }
 
 function slideA2() {
@@ -738,19 +793,19 @@ function slideA2() {
   eyebrow(f, M, 180, 'APPENDIX  ·  A2', C.ink3);
   T(f, { x: M, y: 226, str: 'Where we sit', font: F.h, size: 54, color: C.pearl, ls: -1.5 });
 
-  T(f, { x: M, y: 380, str: 'THE ANSWER TO "HOW IS THIS DIFFERENT"', font: F.mono, size: 12, color: C.teal, ls: 14 });
+  T(f, { x: M, y: 372, str: 'THE ANSWER TO "ISN\u2019T THIS NOTEBOOKLM"', font: F.mono, size: 12, color: C.teal, ls: 14 });
   T(f, {
-    x: M, y: 416, w: 700,
-    str: '"Those record everything passively. We capture deliberately, and we keep what you thought at the moment you saved it."',
-    font: F.serifIt, size: 27, lh: 40, color: C.pearl
+    x: M, y: 408, w: 700,
+    str: '"That answers from documents you were handed. This answers from what you saved and what you thought, and then asks the question back."',
+    font: F.serifIt, size: 26, lh: 39, color: C.pearl
   });
   T(f, {
-    x: M, y: 610, w: 660,
-    str: 'A recording of your screen does not know why the thing mattered. The note does, because you told it at the time.',
+    x: M, y: 628, w: 680,
+    str: 'A tool that does the thinking produces a student who cannot. The retrieval is the point, not the summary. Every other tool here either hands you an answer or hands you back a file.',
     font: F.ui, size: 18, lh: 28, color: C.ink2
   });
   T(f, {
-    x: M, y: 880, w: 660,
+    x: M, y: 880, w: 680,
     str: 'Categories, not a claim about where any particular product is heading.',
     font: F.mono, size: 12, lh: 20, color: C.ink3
   });
@@ -760,16 +815,17 @@ function slideA2() {
   hairline(f, cx - half, cy, half * 2, C.line, 1);
   R(f, { x: cx, y: cy - half, w: 1, h: half * 2, fill: C.line, name: 'rule' });
 
-  T(f, { x: cx - half, y: cy - half - 46, w: half * 2, align: 'CENTER', str: 'GIVES YOUR THINKING BACK', font: F.mono, size: 11, color: C.ink3, ls: 12 });
-  T(f, { x: cx - half, y: cy + half + 26, w: half * 2, align: 'CENTER', str: 'GIVES THE FILE BACK', font: F.mono, size: 11, color: C.ink3, ls: 12 });
-  T(f, { x: cx - half - 250, y: cy - 10, w: 230, align: 'RIGHT', str: 'RECORDS IT FOR YOU', font: F.mono, size: 11, color: C.ink3, ls: 12 });
-  T(f, { x: cx + half + 18, y: cy - 10, w: 250, str: 'YOU CHOOSE WHAT MATTERS', font: F.mono, size: 11, color: C.ink3, ls: 12 });
+  T(f, { x: cx - half, y: cy - half - 46, w: half * 2, align: 'CENTER', str: 'YOUR OWN WORDS', font: F.mono, size: 11, color: C.ink3, ls: 12 });
+  T(f, { x: cx - half, y: cy + half + 26, w: half * 2, align: 'CENTER', str: 'MATERIAL YOU WERE GIVEN', font: F.mono, size: 11, color: C.ink3, ls: 12 });
+  T(f, { x: cx - half - 250, y: cy - 10, w: 230, align: 'RIGHT', str: 'THINKS FOR YOU', font: F.mono, size: 11, color: C.ink3, ls: 12 });
+  T(f, { x: cx + half + 18, y: cy - 10, w: 250, str: 'MAKES YOU THINK', font: F.mono, size: 11, color: C.ink3, ls: 12 });
 
   const plots = [
-    [-200, 150, 'always-on recorders', 'Rewind, Limitless', false],
-    [-90, 60, 'meeting notetakers', 'Otter, Granola', false],
-    [190, 110, 'note apps', 'Notion, Obsidian', false],
-    [165, -175, 'Mindspace', 'capture with intent', true]
+    [-235, 195, 'general AI chat', 'ChatGPT, Gemini', false],
+    [-170, 75, 'source chat', 'NotebookLM', false],
+    [-235, -150, 'note apps', 'Notion, Obsidian', false],
+    [150, 165, 'drill tools', 'Quizlet, Anki', false],
+    [165, -180, 'Mindspace', 'your material, your recall', true]
   ];
   for (let i = 0; i < plots.length; i++) {
     const px = cx + plots[i][0], py = cy + plots[i][1], me = plots[i][4];
@@ -780,7 +836,7 @@ function slideA2() {
   }
 
   grain(f);
-  asideNotes(8, 'Say the quote and stop talking. The difference is a product decision rather than a feature gap, which is why it holds up. If they push, the matrix is the long version.');
+  asideNotes(8, 'Say the quote and stop talking. If they push on learning science, retrieval practice and the testing effect are the ground you are standing on. Check the Roediger and Karpicke paper yourself before you cite it by name.');
 }
 
 function slideA3() {
@@ -789,14 +845,14 @@ function slideA3() {
 
   eyebrow(f, M, 180, 'APPENDIX  ·  A3', C.ink3);
   T(f, { x: M, y: 226, str: 'The next twelve months', font: F.h, size: 54, color: C.pearl, ls: -1.5 });
-  T(f, { x: M, y: 306, w: 1100, str: 'Each phase is there to prove one thing. If it does not, we have learned something cheaply.', font: F.ui, size: 20, color: C.ink2 });
+  T(f, { x: M, y: 306, w: 1100, str: 'Students adopt it, departments pay for it. Each phase proves one thing, and if it does not, we have learned that cheaply.', font: F.ui, size: 20, color: C.ink2 });
 
   const py = 400, pw = 490, ph = 380;
   const xs = [M, M + pw + 85, M + (pw + 85) * 2];
   const phases = [
-    ['NOW', 'Ship and watch', 'macOS capture, folders, summaries. In researchers\u2019 hands weekly.', 'That the capture loop survives real work.', 'WEEKLY USERS'],
-    ['NEXT', 'The twin', 'Ask your own corpus and get answers with the source attached.', 'That the corpus is worth talking to.', 'QUESTIONS ASKED'],
-    ['THEN', 'Connections', 'Things you did not ask for. "This contradicts what you saved in March."', 'That it is a thinking partner, not a search box.', 'RETURN RATE']
+    ['NOW', 'One course', 'Get it into a single cohort for a whole semester, free.', 'That it survives a real term, not a demo.', 'STUDENTS IN THE PILOT'],
+    ['NEXT', 'Revision week', 'The twin, at the moment it matters most. Ask, and be asked back.', 'That they come back when the exam is close.', 'RETURN RATE, REVISION WEEK'],
+    ['THEN', 'The department', 'Teachers keep their own, and students choose what to hand in.', 'That someone with a budget wants it too.', 'DEPARTMENTS IN TALKS']
   ];
 
   for (let i = 0; i < 3; i++) {
@@ -817,7 +873,7 @@ function slideA3() {
   T(f, { x: M + 1030, y: 918, w: 610, str: 'Decide this before you walk on. An ask left vague is the one thing judges remember.', font: F.mono, size: 12, lh: 20, color: C.ink3 });
 
   grain(f);
-  asideNotes(9, 'Three phases, each proving one thing. The blanks are deliberate: fill them once, in your own hand, rather than inventing a number on stage.');
+  asideNotes(9, 'One cohort, then revision week, then a department with a budget. The blanks are deliberate: fill them once, in your own hand, rather than inventing a number on stage.');
 }
 
 /* -------------------------------------------------------------------- main */
@@ -862,9 +918,15 @@ async function main() {
     }
 
     step = 'framing the view';
-    const frames = figma.currentPage.children.filter(function (n) { return n.type === 'FRAME'; });
-    figma.viewport.scrollAndZoomIntoView(frames);
-    figma.closePlugin('Mindspace deck built. 7 slides, speaker notes under each.');
+    if (!IS_SLIDES) {
+      const frames = figma.currentPage.children.filter(function (n) { return n.type === 'FRAME'; });
+      safe(function () { figma.viewport.scrollAndZoomIntoView(frames); });
+    }
+    figma.closePlugin(
+      IS_SLIDES
+        ? 'Mindspace deck built. 10 slides, speaker notes on each.'
+        : 'Mindspace deck built. 10 frames, speaker notes under each.'
+    );
   } catch (e) {
     report(step, e);
   }
