@@ -1,0 +1,152 @@
+1
+00:00:00,500 --> 00:00:02,600
+This is Mindspace.
+
+2
+00:00:02,600 --> 00:00:06,000
+Everything I save during the day lands here:
+
+3
+00:00:06,000 --> 00:00:10,000
+screenshots, things I read,
+thoughts I say out loud.
+
+4
+00:00:10,500 --> 00:00:13,000
+One note, four captures.
+
+5
+00:00:13,000 --> 00:00:17,500
+A voice memo, a paragraph I clipped
+from a search, a screenshot.
+
+6
+00:00:17,500 --> 00:00:22,000
+Each one keeps where it came from
+and what I was thinking.
+
+7
+00:00:22,500 --> 00:00:26,000
+Then Gemini reads the whole note
+and writes it up.
+
+8
+00:00:26,000 --> 00:00:28,800
+Four captures, two sources, five threads.
+
+9
+00:00:28,800 --> 00:00:32,500
+My own notes stay next to it,
+never replaced.
+
+10
+00:00:33,000 --> 00:00:34,800
+Here is the thing.
+
+11
+00:00:34,800 --> 00:00:38,500
+I am building the pitch
+for this hackathon in Figma,
+
+12
+00:00:38,500 --> 00:00:42,500
+and that work is also something
+I will want back later.
+
+13
+00:00:42,500 --> 00:00:46,000
+So I capture it.
+
+14
+00:00:46,500 --> 00:00:51,000
+The moon catches it without taking me
+out of what I am doing.
+
+15
+00:00:51,000 --> 00:00:53,500
+It knows the app, the time,
+
+16
+00:00:53,500 --> 00:00:57,500
+and it lets me leave a note for future me.
+
+17
+00:00:58,000 --> 00:01:00,500
+This is where it is going.
+
+18
+00:01:00,500 --> 00:01:02,500
+Mind, the mobile twin.
+
+19
+00:01:02,500 --> 00:01:05,500
+Your folders become arcs around the moon,
+
+20
+00:01:05,500 --> 00:01:10,000
+sized by how much of your thinking
+lives in each one.
+
+21
+00:01:10,500 --> 00:01:14,000
+And I am capturing that too,
+while I build it.
+
+22
+00:01:14,000 --> 00:01:17,000
+The prompt, the interface, the decision.
+
+23
+00:01:17,000 --> 00:01:22,000
+Mindspace is how this project
+remembers itself.
+
+24
+00:01:22,500 --> 00:01:24,500
+Speech is on device.
+
+25
+00:01:24,500 --> 00:01:27,000
+It transcribes while I talk,
+
+26
+00:01:27,000 --> 00:01:30,000
+so a thought I had walking between rooms
+
+27
+00:01:30,000 --> 00:01:34,000
+ends up in the same place
+as everything else.
+
+28
+00:01:34,500 --> 00:01:36,500
+Saved to the note.
+
+29
+00:01:36,500 --> 00:01:39,500
+No window opened, nothing interrupted,
+
+30
+00:01:39,500 --> 00:01:42,500
+and it is already part
+of what I can ask about.
+
+31
+00:01:43,000 --> 00:01:45,000
+Which is the whole point.
+
+32
+00:01:45,000 --> 00:01:48,000
+Everything I saved, everything I thought,
+
+33
+00:01:48,000 --> 00:01:51,000
+in one place I can talk to.
+
+34
+00:01:51,000 --> 00:01:54,000
+What did I save about pricing?
+
+35
+00:01:54,800 --> 00:01:58,200
+Imagine you could Cmd + F your brain.
