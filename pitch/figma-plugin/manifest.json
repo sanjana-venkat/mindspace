@@ -1,0 +1,7 @@
+{
+  "name": "Mindspace Pitch Deck",
+  "id": "open-human-mindspace-pitch",
+  "api": "1.0.0",
+  "main": "code.js",
+  "editorType": ["figma"]
+}
