@@ -42,6 +42,9 @@ else
     echo "WARNING: creating an ad-hoc alpha; users must approve it in Privacy & Security." >&2
 fi
 
+# Say what changed. The generic line is a fallback, not the usual case.
+RELEASE_NOTES="${MINDSPACE_RELEASE_NOTES:-$RELEASE_NOTES}"
+
 SHA="$(shasum -a 256 "$DMG" | awk '{print $1}')"
 echo "sha256 $SHA"
 
