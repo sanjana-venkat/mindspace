@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import CoreText
+import NotefyCore
 
 private enum BundledFontRegistrar {
     static let register: Void = {
@@ -104,19 +105,33 @@ struct NotefyMenuBarApp: App {
 
     init() {
         _ = BundledFontRegistrar.register
+        // Before anything reads or writes the notes folder, make sure this is the
+        // only copy that will. `AppState` is built lazily by `StateObject`, so a
+        // blocked launch never constructs one and never touches a file.
+        StoreLock.shared.acquire(directory: MindspaceStorage.defaultDirectory())
         _appState = StateObject(wrappedValue: AppState())
     }
 
+    private var blocked: StoreLock.Holder? { StoreLock.shared.blockedBy }
+
     var body: some Scene {
         MenuBarExtra {
-            MenuBarContentView()
-                .environmentObject(appState)
-                .onAppear {
-                    appState.installHotkeys()
-                    appState.showCapturePet()
-                }
+            if blocked != nil {
+                Button("Quit Mindspace") { NSApp.terminate(nil) }
+            } else {
+                MenuBarContentView()
+                    .environmentObject(appState)
+                    .onAppear {
+                        appState.installHotkeys()
+                        appState.showCapturePet()
+                    }
+            }
         } label: {
-            NotefyMenuBarLabel(isRecording: appState.isRecording)
+            if blocked != nil {
+                Image(systemName: "exclamationmark.triangle")
+            } else {
+                NotefyMenuBarLabel(isRecording: appState.isRecording)
+            }
         }
         .menuBarExtraStyle(.window)
 
@@ -125,13 +140,18 @@ struct NotefyMenuBarApp: App {
         // app running as a menu-bar icon with nothing on screen. A WindowGroup
         // always presents one.
         WindowGroup("Mindspace", id: "main") {
-            MainWindowView()
-                .environmentObject(appState)
-                .onAppear {
-                    NSApp.setActivationPolicy(.regular)
-                    appState.installHotkeys()
-                    appState.showCapturePet()
-                }
+            if let holder = blocked {
+                AuroraAlreadyRunning(holder: holder, directory: StoreLock.shared.directory)
+                    .preferredColorScheme(.dark)
+            } else {
+                MainWindowView()
+                    .environmentObject(appState)
+                    .onAppear {
+                        NSApp.setActivationPolicy(.regular)
+                        appState.installHotkeys()
+                        appState.showCapturePet()
+                    }
+            }
         }
         .defaultSize(width: 1180, height: 780)
         .windowResizability(.contentMinSize)
