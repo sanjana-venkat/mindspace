@@ -43,6 +43,18 @@ Nothing breaks if one is unavailable, the type just shifts to the next in line.
 | `5 · The experience` | Mobile prototype concept. Three phone screens. |
 | `6 · One use case` | Illustrative exchange. Retrieved vs interpretation. |
 | `7 · Team and close` | Team, closing line, demo QR placeholder. |
+| `A1 · Market and model` | Why now, bottom up sizing, how it makes money. |
+| `A2 · Where we sit` | The answer to "how is this different", as a matrix. |
+| `A3 · Next twelve months` | Three phases, each proving one thing. |
+
+The three appendix slides are **not part of the two minutes**. They exist so that
+when a judge asks about market, competitors or the plan, you flip to a prepared
+answer instead of improvising. Their notes are labelled "if asked" rather than
+"speaker notes".
+
+Every number on them is a **dashed blank**. That is deliberate. Fill them in from
+LinkedIn Talent Insights or BLS occupational data, in your own hand, before you
+pitch. A number invented on stage is the one a judge will chase.
 
 Slide copy and speaker notes also live in `SLIDES.md` if you want to rewrite them
 outside Figma.

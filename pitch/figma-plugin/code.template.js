@@ -210,6 +210,19 @@ function hairline(parent, x, y, w, color, opacity) {
   });
 }
 
+/// A number we do not have yet, drawn so it cannot be mistaken for one we do.
+function blank(parent, o) {
+  R(parent, {
+    x: o.x, y: o.y, w: o.w, h: o.h, r: 10,
+    fill: C.panel, fillOpacity: 0.6, stroke: C.ink3, strokeOpacity: 0.8,
+    strokeW: 1.5, dash: [8, 7], name: 'BLANK ' + (o.hint || '')
+  });
+  T(parent, {
+    x: o.x, y: o.y + o.h / 2 - 9, w: o.w, align: 'CENTER',
+    str: o.hint, font: F.mono, size: 12, color: C.ink3, ls: 8
+  });
+}
+
 function slide(i, name) {
   const f = figma.createFrame();
   figma.currentPage.appendChild(f);
@@ -238,6 +251,20 @@ function notes(i, words, str) {
     font: F.ui, size: 26, lh: 38, color: '#2A3342'
   });
   head.name = 'notes label'; body.name = 'speaker notes';
+}
+
+/// Appendix slides are not part of the two minutes, so they are labelled for
+/// what they are: answers held in reserve.
+function asideNotes(i, str) {
+  const head = T(figma.currentPage, {
+    x: i * (W + GAP), y: H + 70, str: 'IF ASKED',
+    font: F.mono, size: 16, color: '#7A8494', ls: 12
+  });
+  const body = T(figma.currentPage, {
+    x: i * (W + GAP), y: H + 108, w: 1400, str: str,
+    font: F.ui, size: 26, lh: 38, color: '#2A3342'
+  });
+  head.name = 'notes label'; body.name = 'if asked';
 }
 
 /* ------------------------------------------------------------------ slides */
@@ -643,6 +670,156 @@ function slide7() {
   notes(6, 29, 'Sanjana designs growth at Jefit, previously JPMorgan Chase, with a psychology background. Abishek is a machine learning engineer at DeepMind. Your knowledge, your perspective, a mindspace to grow both.');
 }
 
+/* ---------------------------------------------------------------- appendix */
+
+function slideA1() {
+  const f = slide(7, 'A1 · Market and model');
+  glow(f, { cx: 1700, cy: 880, rx: 420, hex: C.teal, opacity: 0.10, blur: 100 });
+  ring(f, { cx: 1990, cy: 120, radius: 290, thickness: 10, segOpacity: 0.4, opacity: 0.4 });
+
+  eyebrow(f, M, 180, 'APPENDIX  ·  A1', C.ink3);
+  T(f, { x: M, y: 226, str: 'Market and model', font: F.h, size: 54, color: C.pearl, ls: -1.5 });
+
+  // why now
+  T(f, { x: M, y: 350, str: 'WHY NOW', font: F.mono, size: 12, color: C.teal, ls: 14 });
+  const now = [
+    ['On-device speech became free and private.', 'Parakeet runs locally. No API call, no upload, no per-minute cost.'],
+    ['Long context made a whole folder readable at once.', 'Asking "what was I circling here" stopped being expensive.']
+  ];
+  let y = 386;
+  for (let i = 0; i < now.length; i++) {
+    R(f, { x: M, y: y + 6, w: 3, h: 26, r: 2, fill: C.teal, fillOpacity: 0.7, name: 'rule' });
+    T(f, { x: M + 24, y: y, w: 700, str: now[i][0], font: F.uiMed, size: 22, lh: 30, color: C.pearl });
+    const d = T(f, { x: M + 24, y: y + 36, w: 700, str: now[i][1], font: F.ui, size: 17, lh: 26, color: C.ink3 });
+    y += 36 + d.height + 34;
+  }
+
+  // sizing, bottom up, with the numbers left out on purpose
+  const sx = 1010;
+  T(f, { x: sx, y: 350, str: 'SIZING, BOTTOM UP', font: F.mono, size: 12, color: C.amber, ls: 14 });
+  const rows = [
+    ['Researchers and designers we can reach', 'HEADCOUNT'],
+    ['Plausible price a month', 'PRICE'],
+    ['Serviceable market', 'PRODUCT OF THE TWO']
+  ];
+  for (let i = 0; i < rows.length; i++) {
+    const ry = 390 + i * 74;
+    T(f, { x: sx, y: ry + 16, w: 460, str: rows[i][0], font: F.ui, size: 19, color: C.ink2 });
+    blank(f, { x: sx + 480, y: ry, w: 290, h: 52, hint: rows[i][1] });
+  }
+  T(f, {
+    x: sx, y: 626, w: 770,
+    str: 'Fill these from LinkedIn Talent Insights or the BLS occupational data before you pitch. Do not say a number out loud that you have not checked yourself.',
+    font: F.mono, size: 12.5, lh: 21, color: C.ink3
+  });
+
+  // the model
+  hairline(f, M, 760, W - M * 2, C.line, 1);
+  T(f, { x: M, y: 786, str: 'THE MODEL', font: F.mono, size: 12, color: C.lavSoft, ls: 14 });
+  const model = [
+    ['Free, and local, forever', 'Capture and organize. Nothing leaves the machine.'],
+    ['Paid for the twin', 'Asking your corpus questions is where inference costs money.'],
+    ['Bring your own key stays', 'For the people who would rather pay Google directly.']
+  ];
+  for (let i = 0; i < model.length; i++) {
+    const mx = M + i * 550;
+    T(f, { x: mx, y: 822, str: model[i][0], font: F.uiMed, size: 21, color: C.pearl });
+    T(f, { x: mx, y: 854, w: 480, str: model[i][1], font: F.ui, size: 16, lh: 24, color: C.ink3 });
+  }
+
+  grain(f);
+  asideNotes(7, 'Why now is the part you can defend from the codebase: speech runs on the machine, and long context made reading a whole folder cheap. Neither was true two years ago. The sizing is arithmetic you did, not a number you found on a slide.');
+}
+
+function slideA2() {
+  const f = slide(8, 'A2 · Where we sit');
+  glow(f, { cx: 1560, cy: 420, rx: 380, hex: C.lav, opacity: 0.13, blur: 100 });
+
+  eyebrow(f, M, 180, 'APPENDIX  ·  A2', C.ink3);
+  T(f, { x: M, y: 226, str: 'Where we sit', font: F.h, size: 54, color: C.pearl, ls: -1.5 });
+
+  T(f, { x: M, y: 380, str: 'THE ANSWER TO "HOW IS THIS DIFFERENT"', font: F.mono, size: 12, color: C.teal, ls: 14 });
+  T(f, {
+    x: M, y: 416, w: 700,
+    str: '"Those record everything passively. We capture deliberately, and we keep what you thought at the moment you saved it."',
+    font: F.serifIt, size: 27, lh: 40, color: C.pearl
+  });
+  T(f, {
+    x: M, y: 610, w: 660,
+    str: 'A recording of your screen does not know why the thing mattered. The note does, because you told it at the time.',
+    font: F.ui, size: 18, lh: 28, color: C.ink2
+  });
+  T(f, {
+    x: M, y: 880, w: 660,
+    str: 'Categories, not a claim about where any particular product is heading.',
+    font: F.mono, size: 12, lh: 20, color: C.ink3
+  });
+
+  // the matrix
+  const cx = 1320, cy = 600, half = 300;
+  hairline(f, cx - half, cy, half * 2, C.line, 1);
+  R(f, { x: cx, y: cy - half, w: 1, h: half * 2, fill: C.line, name: 'rule' });
+
+  T(f, { x: cx - half, y: cy - half - 46, w: half * 2, align: 'CENTER', str: 'GIVES YOUR THINKING BACK', font: F.mono, size: 11, color: C.ink3, ls: 12 });
+  T(f, { x: cx - half, y: cy + half + 26, w: half * 2, align: 'CENTER', str: 'GIVES THE FILE BACK', font: F.mono, size: 11, color: C.ink3, ls: 12 });
+  T(f, { x: cx - half - 250, y: cy - 10, w: 230, align: 'RIGHT', str: 'RECORDS IT FOR YOU', font: F.mono, size: 11, color: C.ink3, ls: 12 });
+  T(f, { x: cx + half + 18, y: cy - 10, w: 250, str: 'YOU CHOOSE WHAT MATTERS', font: F.mono, size: 11, color: C.ink3, ls: 12 });
+
+  const plots = [
+    [-200, 150, 'always-on recorders', 'Rewind, Limitless', false],
+    [-90, 60, 'meeting notetakers', 'Otter, Granola', false],
+    [190, 110, 'note apps', 'Notion, Obsidian', false],
+    [165, -175, 'Mindspace', 'capture with intent', true]
+  ];
+  for (let i = 0; i < plots.length; i++) {
+    const px = cx + plots[i][0], py = cy + plots[i][1], me = plots[i][4];
+    if (me) glow(f, { cx: px, cy: py, rx: 92, hex: C.teal, opacity: 0.4, blur: 60 });
+    R(f, { x: px - (me ? 8 : 5), y: py - (me ? 8 : 5), w: me ? 16 : 10, h: me ? 16 : 10, r: 8, fill: me ? C.teal : C.ink3, name: 'point' });
+    T(f, { x: px + 18, y: py - 19, str: plots[i][2], font: me ? F.h : F.uiMed, size: me ? 21 : 17, color: me ? C.pearl : C.ink2 });
+    T(f, { x: px + 18, y: py + (me ? 8 : 4), str: plots[i][3], font: F.mono, size: 11.5, color: C.ink3, ls: 4 });
+  }
+
+  grain(f);
+  asideNotes(8, 'Say the quote and stop talking. The difference is a product decision rather than a feature gap, which is why it holds up. If they push, the matrix is the long version.');
+}
+
+function slideA3() {
+  const f = slide(9, 'A3 · Next twelve months');
+  glow(f, { cx: 960, cy: 1000, rx: 700, ry: 260, hex: C.lav, opacity: 0.11, blur: 100 });
+
+  eyebrow(f, M, 180, 'APPENDIX  ·  A3', C.ink3);
+  T(f, { x: M, y: 226, str: 'The next twelve months', font: F.h, size: 54, color: C.pearl, ls: -1.5 });
+  T(f, { x: M, y: 306, w: 1100, str: 'Each phase is there to prove one thing. If it does not, we have learned something cheaply.', font: F.ui, size: 20, color: C.ink2 });
+
+  const py = 400, pw = 490, ph = 380;
+  const xs = [M, M + pw + 85, M + (pw + 85) * 2];
+  const phases = [
+    ['NOW', 'Ship and watch', 'macOS capture, folders, summaries. In researchers\u2019 hands weekly.', 'That the capture loop survives real work.', 'WEEKLY USERS'],
+    ['NEXT', 'The twin', 'Ask your own corpus and get answers with the source attached.', 'That the corpus is worth talking to.', 'QUESTIONS ASKED'],
+    ['THEN', 'Connections', 'Things you did not ask for. "This contradicts what you saved in March."', 'That it is a thinking partner, not a search box.', 'RETURN RATE']
+  ];
+
+  for (let i = 0; i < 3; i++) {
+    const p = R(f, { x: xs[i], y: py, w: pw, h: ph, r: 24, fill: C.panel, fillOpacity: 0.85, stroke: C.line, name: 'phase ' + phases[i][1] });
+    p.effects = [{ type: 'DROP_SHADOW', color: { r: 0, g: 0, b: 0, a: 0.3 }, offset: { x: 0, y: 12 }, radius: 30, spread: 0, visible: true, blendMode: 'NORMAL' }];
+    T(f, { x: xs[i] + 32, y: py + 28, str: phases[i][0], font: F.mono, size: 12, color: [C.green, C.teal, C.lavSoft][i], ls: 14 });
+    T(f, { x: xs[i] + 32, y: py + 56, str: phases[i][1], font: F.h, size: 28, color: C.pearl });
+    hairline(f, xs[i] + 32, py + 106, pw - 64, C.line, 1);
+    T(f, { x: xs[i] + 32, y: py + 128, w: pw - 64, str: phases[i][2], font: F.ui, size: 17, lh: 26, color: C.ink2 });
+    T(f, { x: xs[i] + 32, y: py + 216, str: 'IT PROVES', font: F.mono, size: 10.5, color: C.ink3, ls: 14 });
+    T(f, { x: xs[i] + 32, y: py + 238, w: pw - 64, str: phases[i][3], font: F.serif, size: 17, lh: 25, color: C.pearl });
+    blank(f, { x: xs[i] + 32, y: py + 306, w: pw - 64, h: 46, hint: phases[i][4] });
+  }
+
+  hairline(f, M, 850, W - M * 2, C.line, 1);
+  T(f, { x: M, y: 878, str: 'WHAT WE ARE LOOKING FOR', font: F.mono, size: 12, color: C.amber, ls: 14 });
+  blank(f, { x: M, y: 908, w: 1000, h: 56, hint: 'THE ASK. USERS, ADVICE, MONEY. SAY WHICH' });
+  T(f, { x: M + 1030, y: 918, w: 610, str: 'Decide this before you walk on. An ask left vague is the one thing judges remember.', font: F.mono, size: 12, lh: 20, color: C.ink3 });
+
+  grain(f);
+  asideNotes(9, 'Three phases, each proving one thing. The blanks are deliberate: fill them once, in your own hand, rather than inventing a number on stage.');
+}
+
 /* -------------------------------------------------------------------- main */
 
 // Errors go into a window that stays open, because a toast disappears before
@@ -677,7 +854,8 @@ async function main() {
     MOON_HASH = figma.createImage(b64(ASSETS.moon)).hash;
     GRAIN_HASH = figma.createImage(b64(ASSETS.grain)).hash;
 
-    const builders = [slide1, slide2, slide3, slide4, slide5, slide6, slide7];
+    const builders = [slide1, slide2, slide3, slide4, slide5, slide6, slide7,
+                      slideA1, slideA2, slideA3];
     for (let i = 0; i < builders.length; i++) {
       step = 'building slide ' + (i + 1);
       builders[i]();

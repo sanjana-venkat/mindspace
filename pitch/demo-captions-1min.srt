@@ -1,0 +1,89 @@
+1
+00:00:00,400 --> 00:00:02,200
+This is Mindspace.
+
+2
+00:00:02,200 --> 00:00:06,000
+Everything I save in a day
+lands in one place.
+
+3
+00:00:06,300 --> 00:00:08,600
+One note, four captures.
+
+4
+00:00:08,600 --> 00:00:11,600
+A voice memo, a paragraph I clipped,
+a screenshot,
+
+5
+00:00:11,600 --> 00:00:14,000
+and what I thought about each.
+
+6
+00:00:14,300 --> 00:00:17,600
+Gemini reads the whole note
+and writes it up.
+
+7
+00:00:17,600 --> 00:00:21,000
+My own notes stay beside it.
+
+8
+00:00:21,300 --> 00:00:24,300
+I am building this pitch right now,
+
+9
+00:00:24,300 --> 00:00:27,000
+and that is worth keeping too.
+
+10
+00:00:27,300 --> 00:00:30,300
+So the moon catches it,
+
+11
+00:00:30,300 --> 00:00:33,000
+without pulling me out of the work.
+
+12
+00:00:33,300 --> 00:00:35,300
+This is where it goes.
+
+13
+00:00:35,300 --> 00:00:37,300
+Mind, the twin.
+
+14
+00:00:37,300 --> 00:00:41,000
+Folders become arcs, sized by
+how much lives in each.
+
+15
+00:00:41,300 --> 00:00:43,300
+Speech is on device.
+
+16
+00:00:43,300 --> 00:00:45,500
+It transcribes while I talk,
+
+17
+00:00:45,500 --> 00:00:48,000
+so spoken thoughts land
+in the same place.
+
+18
+00:00:48,300 --> 00:00:50,300
+Which is the point.
+
+19
+00:00:50,300 --> 00:00:53,300
+Everything I saved
+and everything I thought,
+
+20
+00:00:53,300 --> 00:00:56,000
+in one place I can talk to.
+
+21
+00:00:56,600 --> 00:00:59,800
+Imagine you could Cmd + F your brain.
