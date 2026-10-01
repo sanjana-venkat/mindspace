@@ -347,8 +347,8 @@ extension Aurora {
     static let fieldFill = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             // Dark grey, a step below the ground. Near black read as a hole.
-            ? NSColor(srgbRed: 34/255, green: 35/255, blue: 37/255, alpha: 0.94)
-            : NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.96)
+            ? NSColor(srgbRed: 34/255, green: 35/255, blue: 37/255, alpha: 1)
+            : NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 1)
     })
 }
 
