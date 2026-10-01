@@ -9,6 +9,21 @@ what it was written from.
 
 For Macs running macOS 14 (Sonoma) or newer. Works on Apple silicon and Intel.
 
+<p align="center">
+  <img src="docs/screenshots/mobile-home.jpg" alt="Mindspace home: the moon, ringed by one arc per folder" width="300">
+</p>
+
+<p align="center"><em>Tap the moon and talk. Each arc is a folder, sized by how much of your mind lives in it.</em></p>
+
+<p align="center">
+  <img src="Sources/NotefyApp/Resources/Pet/moon-idle.png" alt="The moon, idle" width="110">
+  <img src="Sources/NotefyApp/Resources/Pet/moon-catching.png" alt="The moon, catching a capture" width="110">
+  <img src="Sources/NotefyApp/Resources/Pet/moon-holding.png" alt="The moon, holding a capture" width="110">
+  <img src="Sources/NotefyApp/Resources/Pet/moon-pleased.png" alt="The moon, pleased" width="110">
+</p>
+
+<p align="center"><a href="https://mindspace-site.vercel.app">See the demo</a></p>
+
 ---
 
 ## Install it
