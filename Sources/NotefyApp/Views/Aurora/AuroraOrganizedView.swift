@@ -47,17 +47,14 @@ struct AuroraOrganized: View {
             // the end of the write-up, where you had to scroll to find it.
             .safeAreaInset(edge: .bottom, spacing: 0) {
                 if showsChat {
+                    // Floats on its own lift. The dark band that used to sit
+                    // behind it blacked out the last lines of the write-up.
                     AuroraNoteAskBar(steps: steps, title: appState.activeNoteTitle)
+                        .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
                         .frame(maxWidth: 720)
                         .padding(.horizontal, 40)
-                        .padding(.top, 22).padding(.bottom, 24)
+                        .padding(.top, 10).padding(.bottom, 24)
                         .frame(maxWidth: .infinity)
-                        .background {
-                            LinearGradient(stops: [.init(color: Aurora.ground.opacity(0), location: 0),
-                                                   .init(color: Aurora.ground.opacity(0.94), location: 0.5)],
-                                           startPoint: .top, endPoint: .bottom)
-                                .allowsHitTesting(false)
-                        }
                 }
             }
             // A new question, and again when its answer lands, scrolls the

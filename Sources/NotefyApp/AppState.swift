@@ -753,7 +753,7 @@ final class AppState: ObservableObject {
 
     @discardableResult
     /// An empty ring is a bad first impression: a moon and nothing around it.
-    /// So the first launch gets five folders, each its own colour, covering the
+    /// So the first launch gets two topics, each its own colour, plus Ungrouped,
     /// things people actually save.
     ///
     /// Runs once, ever. It is skipped if folders already exist, and a flag
@@ -765,12 +765,9 @@ final class AppState: ObservableObject {
         UserDefaults.standard.set(true, forKey: key)
         guard workspace.folders.isEmpty else { return }
 
-        // Colours chosen so neighbours on the ring differ: blue, amber, green,
-        // violet, teal.
-        let starters: [(String, Int)] = [
-            ("Work", 3), ("Hobbies", 2), ("Learning", 0),
-            ("Reading", 1), ("Research", 4)
-        ]
+        // Two topics and Ungrouped, which is always there. A first ring with
+        // six empty arcs read as a form to fill in rather than a mind.
+        let starters: [(String, Int)] = [("Learning", 0), ("Reading", 1)]
         for (name, tint) in starters {
             workspace.folders.append(NoteFolder(name: name, tint: tint))
         }

@@ -205,8 +205,8 @@ struct AskField: View {
             .opacity(empty ? 0.4 : 1)
         }
         .padding(.horizontal, 16).padding(.vertical, 11)
-        .background(Aurora.surface2.opacity(0.55), in: Capsule())
-        .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
+        // At 55% the pinned bar let the write-up read straight through it.
+        .auroraRaisedField(lift: false)
     }
 }
 

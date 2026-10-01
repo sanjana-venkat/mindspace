@@ -35,11 +35,26 @@ enum OrbitSnapshot {
         render(five, hover: "Half ideas", to: dir.appendingPathComponent("3-hover-small.png"))
         render(many, hover: nil, to: dir.appendingPathComponent("4-forty-folders.png"))
         render(hundred, hover: AuroraOrbitView.overflowID, to: dir.appendingPathComponent("7-hundred-overflow.png"))
-        let starters = [("Work", 3), ("Hobbies", 2), ("Learning", 0),
-                        ("Reading", 1), ("Research", 4)]
+        let starters = [("Learning", 0), ("Reading", 1)]
             .map { tile($0.0, counts: [], tint: $0.1, chosen: true) }
         renderFaces(to: dir.appendingPathComponent("faces.png"))
         renderGridAndViewer(into: dir)
+        let field = VStack(spacing: 26) {
+            HStack(spacing: 12) {
+                Image(systemName: "magnifyingglass").foregroundStyle(Aurora.ink3)
+                Text("Ask anything").font(Aurora.ui(16, .regular)).foregroundStyle(Aurora.ink3)
+                Spacer()
+                Circle().fill(Aurora.accent).frame(width: 30, height: 30)
+            }
+            .padding(.horizontal, 20).frame(width: 620, height: 51)
+            .auroraRaisedField()
+            AskField(placeholder: "Ask anything about this note", text: .constant(""), onSend: {})
+                .frame(width: 620)
+        }
+        .padding(60)
+        .background(Aurora.ground)
+        .environment(\.colorScheme, .dark)
+        save(field, scale: 2, to: dir.appendingPathComponent("field.png"))
         probeHover(starters + [tile("Unfiled", unfiled: true, counts: [8], tint: 2)], into: dir)
         render(starters, hover: "Learning", to: dir.appendingPathComponent("8-new-user.png"))
         render(starters + [tile("Unfiled", unfiled: true, counts: [8], tint: 2)],

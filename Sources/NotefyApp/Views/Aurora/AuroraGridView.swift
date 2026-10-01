@@ -46,61 +46,62 @@ struct AuroraGrid: View {
 
     struct Entry { let index: Int; let step: ExplorationStep }
 
-    /// A run of ordinary tiles laid out in columns, or one wide screenshot that
-    /// takes a whole row to itself.
-    private enum Block { case run([Entry]), wide(Entry) }
+    /// One tile in a row: one column wide, or two for a wide screenshot.
+    private struct Slot: Identifiable {
+        let entry: Entry
+        let span: Int
+        var id: UUID { entry.step.id }
+    }
 
-    /// Wider than this and a screenshot shrinks to a strip in a single column,
-    /// so it gets the full row. A tile's picture box is about 330 by 170.
+    /// Wider than this and a screenshot would be a thin strip in one column, so
+    /// it takes two. Never more: a tile that crosses the whole grid stops it
+    /// reading as a grid.
     private static let wideAspect: CGFloat = 1.9
+
+    /// Every picture box is this shape, so every tile in a row is the same
+    /// height and the rows line up. A screenshot fills it from the top and is
+    /// cropped past it, since the top of a page is the part that says what it
+    /// is.
+    private var boxHeight: CGFloat { (tileWidth * 0.625).rounded() }
+
+    /// The caption under the picture, fixed, for the same reason.
+    private static let captionHeight: CGFloat = 96
 
     private var rowWidth: CGFloat {
         CGFloat(columns) * tileWidth + CGFloat(max(0, columns - 1)) * Self.gutter
     }
 
-    private func aspect(_ step: ExplorationStep) -> CGFloat? {
-        step.screenshotPath.flatMap { ScreenshotStore.aspect($0) }
+    private func width(span: Int) -> CGFloat {
+        CGFloat(span) * tileWidth + CGFloat(span - 1) * Self.gutter
     }
 
     private func isWide(_ step: ExplorationStep) -> Bool {
-        guard columns > 1, let a = aspect(step) else { return false }
+        guard columns >= 2, let path = step.screenshotPath,
+              let a = ScreenshotStore.aspect(path) else { return false }
         return a >= Self.wideAspect
     }
 
-    /// Order is kept exactly: a wide screenshot ends the run before it, takes
-    /// its row, and the next run starts after it. Within a run, tiles go
-    /// across before they go down, so the numbering matches what you read.
-    private var blocks: [Block] {
-        var out: [Block] = []
-        var run: [Entry] = []
+    /// Rows, filled left to right in the note's own order. A wide screenshot
+    /// that will not fit in what is left of a row starts the next one.
+    private var rows: [[Slot]] {
+        var out: [[Slot]] = []
+        var row: [Slot] = []
+        var used = 0
         for (i, step) in items.enumerated() {
-            let entry = Entry(index: i, step: step)
-            if isWide(step) {
-                if !run.isEmpty { out.append(.run(run)); run = [] }
-                out.append(.wide(entry))
-            } else {
-                run.append(entry)
+            let span = isWide(step) ? 2 : 1
+            if used + span > columns, !row.isEmpty {
+                out.append(row); row = []; used = 0
             }
+            row.append(Slot(entry: Entry(index: i, step: step), span: span))
+            used += span
         }
-        if !run.isEmpty { out.append(.run(run)) }
+        if !row.isEmpty { out.append(row) }
         return out
     }
 
-    /// The picture at its own shape, between a floor and a ceiling. Taller
-    /// than the ceiling, it is cropped from the bottom: the top of a page is
-    /// the part that says what it is.
-    private func imageHeight(for step: ExplorationStep, width: CGFloat, wide: Bool) -> CGFloat? {
-        guard step.screenshotPath != nil else { return nil }
-        let natural = aspect(step).map { width / $0 } ?? 170 * zoom
-        let floor = (wide ? 160 : 110) * zoom
-        let ceiling = (wide ? 420 : 250) * zoom
-        return min(max(natural, floor), ceiling)
-    }
-
     @ViewBuilder
-    private func placed(_ entry: Entry, width: CGFloat, wide: Bool) -> some View {
-        tile(entry.index, entry.step,
-             imageHeight: imageHeight(for: entry.step, width: width, wide: wide))
+    private func placed(_ entry: Entry, width: CGFloat) -> some View {
+        tile(entry.index, entry.step)
             .frame(width: width)
             // A tile keeps its capture identity while moving, but its ordinal
             // is positional. Include the position in the view identity so
@@ -123,29 +124,18 @@ struct AuroraGrid: View {
     static var drawsUnscrolled = false
 
     private var tiles: some View {
-            VStack(alignment: .leading, spacing: 18) {
-                ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                    switch block {
-                    case .wide(let entry):
-                        placed(entry, width: rowWidth, wide: true)
-                    case .run(let entries):
-                        HStack(alignment: .top, spacing: Self.gutter) {
-                            ForEach(0..<columns, id: \.self) { column in
-                                VStack(spacing: 18) {
-                                    ForEach(entries.enumerated().filter { $0.offset % columns == column }
-                                                .map(\.element), id: \.step.id) { entry in
-                                        placed(entry, width: tileWidth, wide: false)
-                                    }
-                                }
-                                .frame(width: tileWidth, alignment: .top)
-                            }
-                        }
+        VStack(alignment: .leading, spacing: Self.gutter) {
+            ForEach(Array(rows.enumerated()), id: \.offset) { _, row in
+                HStack(alignment: .top, spacing: Self.gutter) {
+                    ForEach(row) { slot in
+                        placed(slot.entry, width: width(span: slot.span))
                     }
                 }
             }
-            .frame(width: rowWidth, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .center)
-            .padding(.horizontal, 34).padding(.top, 30).padding(.bottom, 40)
+        }
+        .frame(width: rowWidth, alignment: .leading)
+        .frame(maxWidth: .infinity, alignment: .center)
+        .padding(.horizontal, 34).padding(.top, 30).padding(.bottom, 40)
     }
 
     var body: some View {
@@ -174,7 +164,7 @@ struct AuroraGrid: View {
         }
     }
 
-    private func tile(_ i: Int, _ step: ExplorationStep, imageHeight: CGFloat?) -> some View {
+    private func tile(_ i: Int, _ step: ExplorationStep) -> some View {
         let isActive = i == active
         let note = thought(step.id).wrappedValue
         let picked = selection.contains(step.id)
@@ -198,8 +188,11 @@ struct AuroraGrid: View {
             }
         } label: {
             VStack(alignment: .leading, spacing: 0) {
-                AuroraCaptureView(step: step, index: i, textLimit: Int(14 * zoom),
-                                  imageHeight: imageHeight)
+                // Text captures get the same box and only as many lines as fit
+                // it: unbounded, their wash grew to whatever height was around.
+                AuroraCaptureView(step: step, index: i,
+                                  textLimit: max(2, Int((boxHeight - 32) / 23)),
+                                  imageHeight: boxHeight)
                 VStack(alignment: .leading, spacing: 8) {
                     if note.isEmpty {
                         Text("No thought yet")
@@ -210,13 +203,14 @@ struct AuroraGrid: View {
                             .foregroundStyle(Aurora.ink)
                             .lineSpacing(4)
                             .multilineTextAlignment(.leading)
-                            .fixedSize(horizontal: false, vertical: true)
+                            .lineLimit(2)
                     }
                     Text(URL(string: step.url ?? "")?.host ?? step.appName)
                         .font(Aurora.mono(9.5)).foregroundStyle(Aurora.ink3).lineLimit(1)
                 }
                 .padding(14)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .topLeading)
+                .frame(height: Self.captionHeight, alignment: .top)
             }
             .frame(maxWidth: .infinity, alignment: .top)
             .background(Aurora.surface.opacity(0.72))

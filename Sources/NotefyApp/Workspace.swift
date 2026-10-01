@@ -60,7 +60,7 @@ struct Workspace: Codable {
 /// has no record to rename; this is the name people chose for it instead.
 enum UnfiledName {
     static let key = "aurora.unfiled.name"
-    static let fallback = "Unfiled"
+    static let fallback = "Ungrouped"
 
     static var current: String {
         let saved = UserDefaults.standard.string(forKey: key)?

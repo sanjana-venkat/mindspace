@@ -60,7 +60,9 @@ struct AuroraWorkspaceView: View {
         }
 
         let unfiled = snapshots.filter { $0.folderID == nil }
-        if !unfiled.isEmpty || appState.workspace.folders.isEmpty {
+        // Always shown: it is where every capture lands first, so a new user
+        // should see it in the ring before there is anything in it.
+        do {
             result.append(AuroraFolderTile(
                 id: "unfiled",
                 folderID: nil,
@@ -236,7 +238,7 @@ struct AuroraWorkspaceView: View {
 
             if namingFolder {
                 AuroraPrompt(
-                    title: "New folder",
+                    title: "New topic",
                     placeholder: "Name it",
                     onConfirm: { createFolder(named: $0) },
                     onCancel: { namingFolder = false })
@@ -494,7 +496,7 @@ struct AuroraWorkspaceView: View {
                 HStack(spacing: 6) {
                     Image(systemName: "plus")
                         .font(.system(size: 10.5, weight: .bold))
-                    Text(focusedTile == nil ? "New folder" : "New note")
+                    Text(focusedTile == nil ? "New topic" : "New note")
                         .font(Aurora.ui(13.5))
                 }
                 .foregroundStyle(Aurora.onSolid)
@@ -503,7 +505,7 @@ struct AuroraWorkspaceView: View {
                 .contentShape(Capsule())
             }
             .buttonStyle(AuroraTapDown())
-            .help(focusedTile == nil ? "Make a folder" : "Start a note in this folder")
+            .help(focusedTile == nil ? "Make a topic" : "Start a note here")
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             .padding(.trailing, 28).padding(.bottom, 30)
             .modifier(StepsBack(when: panelOpen))
@@ -726,11 +728,7 @@ struct AuroraWorkspaceView: View {
                 }
             .padding(.horizontal, 20)
             .frame(height: 51)
-            .background(.regularMaterial, in: Capsule())
-            // The hairline everything else uses all but vanished on the dark
-            // ground, so the one place you type had no visible edge.
-            .overlay(Capsule().strokeBorder(Aurora.ink.opacity(0.2), lineWidth: 1.2))
-            .shadow(color: .black.opacity(0.13), radius: 24, y: 10)
+            .auroraRaisedField()
         }
         .frame(maxWidth: 620)
         .animation(.smooth(duration: 0.22), value: query)

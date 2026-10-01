@@ -337,3 +337,40 @@ struct AuroraHoverRow: ButtonStyle {
             .onHover { hover = $0 }
     }
 }
+
+
+/// How a field you type into sits on the page: frosted and nearly opaque, so
+/// nothing reads through it, lifted on a soft shadow, with an edge that is lit
+/// at the top and fades out below. A full outline was too hard a line on the
+/// dark ground; no edge at all and the field disappeared into it.
+extension Aurora {
+    static let fieldFill = Color(nsColor: NSColor(name: nil) { appearance in
+        appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(srgbRed: 8/255, green: 9/255, blue: 10/255, alpha: 0.96)
+            : NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.96)
+    })
+}
+
+struct AuroraRaisedField: ViewModifier {
+    var lift: Bool = true
+
+    func body(content: Content) -> some View {
+        content
+            .background {
+                // Near black at night, so the field reads as a slot cut into
+                // the page rather than a grey lozenge on it. White by day.
+                Capsule().fill(Aurora.fieldFill)
+            }
+            .overlay {
+                Capsule().strokeBorder(
+                    LinearGradient(colors: [Aurora.ink.opacity(0.16), Aurora.ink.opacity(0.02)],
+                                   startPoint: .top, endPoint: .bottom),
+                    lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(lift ? 0.28 : 0.12), radius: lift ? 20 : 8, y: lift ? 8 : 3)
+    }
+}
+
+extension View {
+    func auroraRaisedField(lift: Bool = true) -> some View { modifier(AuroraRaisedField(lift: lift)) }
+}
