@@ -22,8 +22,6 @@ For Macs running macOS 14 (Sonoma) or newer. Works on Apple silicon and Intel.
   <img src="Sources/NotefyApp/Resources/Pet/moon-pleased.png" alt="The moon, pleased" width="110">
 </p>
 
-<p align="center"><a href="https://mindspace-site.vercel.app">See the demo</a></p>
-
 ---
 
 ## Install it
