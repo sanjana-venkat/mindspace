@@ -121,6 +121,13 @@ LAUNCH_PID=$!
 sleep 4
 if kill -0 "$LAUNCH_PID" 2>/dev/null; then
     kill "$LAUNCH_PID" 2>/dev/null || true
+    # The smoke test holds the store lock while it runs. Launching the app the
+    # moment a build finishes would otherwise meet its own corpse still holding
+    # the file, and be told the app is already open.
+    for _ in $(seq 1 40); do
+        kill -0 "$LAUNCH_PID" 2>/dev/null || break
+        sleep 0.1
+    done
     wait "$LAUNCH_PID" 2>/dev/null || true
 else
     echo "error: the app exited within four seconds of launching — it is crashing on start." >&2
