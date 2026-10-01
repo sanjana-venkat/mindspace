@@ -56,8 +56,14 @@ final class MoonMood: ObservableObject {
         blinkTimer = nil
     }
 
+    /// A listener blinks more often than someone idle, and it reads as
+    /// following along. Idle keeps the slow, uneven rhythm.
+    private var blinkInterval: Double {
+        face == .attentive ? Double.random(in: 1.1...2.1) : Double.random(in: 2.8...5.2)
+    }
+
     private func scheduleBlink() {
-        let timer = Timer(timeInterval: Double.random(in: 2.8...5.2), repeats: false) { [weak self] _ in
+        let timer = Timer(timeInterval: blinkInterval, repeats: false) { [weak self] _ in
             Task { @MainActor in
                 guard let self else { return }
                 if self.face != .surprised {
@@ -131,8 +137,9 @@ struct MoonFace: View {
                 }
             }
 
-            // brows, only when it is concentrating or caught off guard
-            if face != .idle {
+            // Brows only when caught off guard. A flat pair while listening
+            // read as a frown, so the listener has none.
+            if face == .surprised {
                 let lift: CGFloat = face == .surprised ? 34 : 26
                 let bend: CGFloat = face == .surprised ? 4 : 0
                 for (eye, dir) in [(Self.leftEye, -1.0), (Self.rightEye, 1.0)] {
@@ -154,10 +161,11 @@ struct MoonFace: View {
                 smile.addQuadCurve(to: p(197.0, 182.0), control: p(179.8, 197.5))
                 ctx.stroke(smile, with: ink, style: StrokeStyle(lineWidth: 5.6 * s, lineCap: .round))
             case .attentive:
-                var line = Path()
-                line.move(to: p(172.5, 189.0))
-                line.addLine(to: to(p(187.5, 189.0)))
-                ctx.stroke(line, with: ink, style: StrokeStyle(lineWidth: 5.2 * s, lineCap: .round))
+                // A smaller, softer smile than idle: listening, and pleased to.
+                var smile = Path()
+                smile.move(to: p(167.5, 184.0))
+                smile.addQuadCurve(to: p(192.0, 184.0), control: p(179.8, 194.5))
+                ctx.stroke(smile, with: ink, style: StrokeStyle(lineWidth: 5.2 * s, lineCap: .round))
             case .surprised:
                 ctx.fill(Path(ellipseIn: CGRect(x: ox + 173.5 * s, y: oy + 183 * s,
                                                 width: 13 * s, height: 16 * s)), with: ink)

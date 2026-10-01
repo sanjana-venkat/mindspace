@@ -10,16 +10,12 @@ struct AuroraAskView: View {
     let turns: [AskTurn]
     var onOpenSource: (AskSource) -> Void
     var onClose: () -> Void
-    var onClear: () -> Void
     var onAsk: (String) -> Void
 
     @State private var follow = ""
 
     var body: some View {
         VStack(spacing: 0) {
-            header
-            Divider().overlay(Aurora.line)
-
             ScrollViewReader { proxy in
                 ScrollView {
                     VStack(alignment: .leading, spacing: 30) {
@@ -28,7 +24,9 @@ struct AuroraAskView: View {
                         }
                         Color.clear.frame(height: 1).id("end")
                     }
-                    .padding(28)
+                    .padding(.horizontal, 28)
+                    // Room at the top for the close button, which floats.
+                    .padding(.top, 56).padding(.bottom, 28)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 }
                 .scrollIndicators(.never)
@@ -42,8 +40,10 @@ struct AuroraAskView: View {
 
             AskField(placeholder: "Ask a follow up", text: $follow, autofocus: true, onSend: send)
                 .padding(.horizontal, 20).padding(.vertical, 16)
-                .overlay(alignment: .top) { Divider().overlay(Aurora.line) }
         }
+        // No title bar, no label, no rule: the conversation is the content,
+        // and the only control it needs is a way out.
+        .overlay(alignment: .topTrailing) { closeButton.padding(16) }
         // A fixed size. Fitting the panel to its content made it grow and
         // re-centre every time an answer arrived, so the whole thing jumped.
         .frame(width: 720, height: 580)
@@ -63,31 +63,16 @@ struct AuroraAskView: View {
         .clipShape(RoundedRectangle(cornerRadius: 26, style: .continuous))
     }
 
-    private var header: some View {
-        HStack(spacing: 10) {
-            Circle().fill(Aurora.accent).frame(width: 7, height: 7)
-            Text("ASK YOUR MINDSPACE")
-                .font(Aurora.mono(10.5)).tracking(1.6)
-                .foregroundStyle(Aurora.ink)
-            Spacer()
-            Button(action: onClear) {
-                Text("CLEAR")
-                    .font(Aurora.mono(10)).tracking(1)
-                    .foregroundStyle(Aurora.ink3)
-            }
-            .buttonStyle(AuroraTapDown())
-            .padding(.trailing, 6)
-            Button(action: onClose) {
-                Image(systemName: "xmark")
-                    .font(.system(size: 11, weight: .semibold))
-                    .foregroundStyle(Aurora.ink2)
-                    .frame(width: 26, height: 26)
-                    .background(Aurora.surface2, in: Circle())
-            }
-            .buttonStyle(AuroraTapDown())
-            .help("Close (Esc)")
+    private var closeButton: some View {
+        Button(action: onClose) {
+            Image(systemName: "xmark")
+                .font(.system(size: 11, weight: .semibold))
+                .foregroundStyle(Aurora.ink2)
+                .frame(width: 28, height: 28)
+                .background(Aurora.surface2, in: Circle())
         }
-        .padding(.horizontal, 22).padding(.vertical, 14)
+        .buttonStyle(AuroraTapDown())
+        .help("Close (Esc)")
     }
 
     private func send() {

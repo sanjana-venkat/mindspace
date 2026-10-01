@@ -100,6 +100,9 @@ struct AuroraNoteView: View {
                                        active = i
                                        withAnimation(.smooth(duration: 0.3)) { mode = .panels }
                                    },
+                                   preview: { i in
+                                       withAnimation(.smooth(duration: 0.22)) { appState.capturePreview = i }
+                                   },
                                    zoom: zoom,
                                    selection: Binding(
                                        get: { appState.selectedStepIDs },
@@ -149,6 +152,15 @@ struct AuroraNoteView: View {
                 }
                 .transition(.opacity)
                 .zIndex(5)
+            }
+        
+            if appState.capturePreview != nil {
+                AuroraCaptureViewer(steps: steps,
+                                    index: Binding(get: { appState.capturePreview },
+                                                   set: { appState.capturePreview = $0 }),
+                                    thought: { thought($0).wrappedValue })
+                    .transition(.opacity)
+                    .zIndex(30)
             }
         }
         .coordinateSpace(name: "auroraNote")

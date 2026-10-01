@@ -331,6 +331,9 @@ final class AppState: ObservableObject {
     @Published var askOpen = false
     /// Conversation inside the note that is open. Cleared when another opens.
     @Published var noteAskTurns: [AskTurn] = []
+    /// The capture open in the full-size viewer, by its place in the grid.
+    /// Held here so the window's Esc can close it before it closes the note.
+    @Published var capturePreview: Int?
     private var moonListeningScratch: URL?
 
     private let tracker: ExplorationTracker
@@ -1923,6 +1926,14 @@ final class AppState: ObservableObject {
         }
     }
 
+    /// A question from the search bar, a suggestion or the moon starts a new
+    /// conversation; the box inside the panel asks follow-ups. That is the
+    /// difference a Clear button used to have to explain.
+    func askNew(_ question: String) {
+        askTurns.removeAll()
+        ask(question)
+    }
+
     func clearAsk() {
         askTurns.removeAll()
         askOpen = false
@@ -2651,6 +2662,7 @@ final class AppState: ObservableObject {
 
     private func loadNote(_ url: URL) {
         noteAskTurns.removeAll()
+        capturePreview = nil
         activeNoteURL = url
         touchLastOpened(url)
         _ = tracker.stop()

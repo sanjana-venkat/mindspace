@@ -13,6 +13,8 @@ struct AuroraGrid: View {
     /// Called once, when the drag ends — not on every hover.
     var commit: ([ExplorationStep]) -> Void
     var open: (Int) -> Void
+    /// Double-click: the capture full size, over a dark room.
+    var preview: (Int) -> Void = { _ in }
     var zoom: Double = 1
     @Binding var selection: Set<UUID>
 
@@ -44,47 +46,112 @@ struct AuroraGrid: View {
 
     struct Entry { let index: Int; let step: ExplorationStep }
 
-    /// Columns are fixed; heights are not. Tiles go across before they go
-    /// down — 01 02 03 on the top row, 04 05 06 under it — so the numbering
-    /// always matches what you're looking at. Packing by shortest column
-    /// balanced the layout better but scrambled the order, and the order is
-    /// the thing people are actually reading.
-    private var masonry: [[Entry]] {
-        var cols: [[Entry]] = Array(repeating: [], count: columns)
+    /// A run of ordinary tiles laid out in columns, or one wide screenshot that
+    /// takes a whole row to itself.
+    private enum Block { case run([Entry]), wide(Entry) }
+
+    /// Wider than this and a screenshot shrinks to a strip in a single column,
+    /// so it gets the full row. A tile's picture box is about 330 by 170.
+    private static let wideAspect: CGFloat = 1.9
+
+    private var rowWidth: CGFloat {
+        CGFloat(columns) * tileWidth + CGFloat(max(0, columns - 1)) * Self.gutter
+    }
+
+    private func aspect(_ step: ExplorationStep) -> CGFloat? {
+        step.screenshotPath.flatMap { ScreenshotStore.aspect($0) }
+    }
+
+    private func isWide(_ step: ExplorationStep) -> Bool {
+        guard columns > 1, let a = aspect(step) else { return false }
+        return a >= Self.wideAspect
+    }
+
+    /// Order is kept exactly: a wide screenshot ends the run before it, takes
+    /// its row, and the next run starts after it. Within a run, tiles go
+    /// across before they go down, so the numbering matches what you read.
+    private var blocks: [Block] {
+        var out: [Block] = []
+        var run: [Entry] = []
         for (i, step) in items.enumerated() {
-            cols[i % columns].append(Entry(index: i, step: step))
+            let entry = Entry(index: i, step: step)
+            if isWide(step) {
+                if !run.isEmpty { out.append(.run(run)); run = [] }
+                out.append(.wide(entry))
+            } else {
+                run.append(entry)
+            }
         }
-        return cols
+        if !run.isEmpty { out.append(.run(run)) }
+        return out
+    }
+
+    /// The picture at its own shape, between a floor and a ceiling. Taller
+    /// than the ceiling, it is cropped from the bottom: the top of a page is
+    /// the part that says what it is.
+    private func imageHeight(for step: ExplorationStep, width: CGFloat, wide: Bool) -> CGFloat? {
+        guard step.screenshotPath != nil else { return nil }
+        let natural = aspect(step).map { width / $0 } ?? 170 * zoom
+        let floor = (wide ? 160 : 110) * zoom
+        let ceiling = (wide ? 420 : 250) * zoom
+        return min(max(natural, floor), ceiling)
+    }
+
+    @ViewBuilder
+    private func placed(_ entry: Entry, width: CGFloat, wide: Bool) -> some View {
+        tile(entry.index, entry.step,
+             imageHeight: imageHeight(for: entry.step, width: width, wide: wide))
+            .frame(width: width)
+            // A tile keeps its capture identity while moving, but its ordinal
+            // is positional. Include the position in the view identity so
+            // SwiftUI cannot retain the old badge label.
+            .id("\(entry.step.id.uuidString)-\(entry.index)")
+            .onDrag {
+                dragging = entry.step.id
+                return NSItemProvider(object: entry.step.id.uuidString as NSString)
+            }
+            .onDrop(of: [UTType.text],
+                    delegate: AuroraTileDrop(target: entry.step.id,
+                                             dragging: $dragging,
+                                             reorder: reorder,
+                                             finish: { commit(items) }))
+    }
+
+
+    /// The offscreen renderer cannot draw inside a ScrollView, so while it
+    /// runs the tiles are laid out flat. Always false in a real window.
+    static var drawsUnscrolled = false
+
+    private var tiles: some View {
+            VStack(alignment: .leading, spacing: 18) {
+                ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                    switch block {
+                    case .wide(let entry):
+                        placed(entry, width: rowWidth, wide: true)
+                    case .run(let entries):
+                        HStack(alignment: .top, spacing: Self.gutter) {
+                            ForEach(0..<columns, id: \.self) { column in
+                                VStack(spacing: 18) {
+                                    ForEach(entries.enumerated().filter { $0.offset % columns == column }
+                                                .map(\.element), id: \.step.id) { entry in
+                                        placed(entry, width: tileWidth, wide: false)
+                                    }
+                                }
+                                .frame(width: tileWidth, alignment: .top)
+                            }
+                        }
+                    }
+                }
+            }
+            .frame(width: rowWidth, alignment: .leading)
+            .frame(maxWidth: .infinity, alignment: .center)
+            .padding(.horizontal, 34).padding(.top, 30).padding(.bottom, 40)
     }
 
     var body: some View {
         VStack(spacing: 0) {
-            ScrollView {
-                HStack(alignment: .top, spacing: Self.gutter) {
-                    ForEach(0..<columns, id: \.self) { column in
-                        VStack(spacing: 18) {
-                            ForEach(masonry[column], id: \.step.id) { entry in
-                                tile(entry.index, entry.step)
-                                    // A tile keeps its capture identity while moving, but its
-                                    // ordinal is positional. Include the position in the view
-                                    // identity so SwiftUI cannot retain the old badge label.
-                                    .id("\(entry.step.id.uuidString)-\(entry.index)")
-                                    .onDrag {
-                                        dragging = entry.step.id
-                                        return NSItemProvider(object: entry.step.id.uuidString as NSString)
-                                    }
-                                    .onDrop(of: [UTType.text],
-                                            delegate: AuroraTileDrop(target: entry.step.id,
-                                                                     dragging: $dragging,
-                                                                     reorder: reorder,
-                                                                     finish: { commit(items) }))
-                            }
-                        }
-                        .frame(width: tileWidth, alignment: .top)
-                    }
-                }
-                .frame(maxWidth: .infinity, alignment: .center)
-                .padding(.horizontal, 34).padding(.top, 30).padding(.bottom, 40)
+            Group {
+                if Self.drawsUnscrolled { tiles } else { ScrollView { tiles } }
             }
             .scrollIndicators(.never)
             .background {
@@ -107,11 +174,18 @@ struct AuroraGrid: View {
         }
     }
 
-    private func tile(_ i: Int, _ step: ExplorationStep) -> some View {
+    private func tile(_ i: Int, _ step: ExplorationStep, imageHeight: CGFloat?) -> some View {
         let isActive = i == active
         let note = thought(step.id).wrappedValue
         let picked = selection.contains(step.id)
         return Button {
+            // The second click of a double-click opens the viewer. The first
+            // has already selected the tile, which is what a double-click on
+            // a Mac does anyway.
+            if NSApp.currentEvent?.clickCount == 2, selection.isEmpty {
+                preview(i)
+                return
+            }
             // While a selection is running, a click adds to it rather than
             // opening — otherwise you'd have to right-click every capture.
             if !selection.isEmpty {
@@ -125,7 +199,7 @@ struct AuroraGrid: View {
         } label: {
             VStack(alignment: .leading, spacing: 0) {
                 AuroraCaptureView(step: step, index: i, textLimit: Int(14 * zoom),
-                                  imageHeight: step.screenshotPath != nil ? 170 * zoom : nil)
+                                  imageHeight: imageHeight)
                 VStack(alignment: .leading, spacing: 8) {
                     if note.isEmpty {
                         Text("No thought yet")
@@ -175,6 +249,7 @@ struct AuroraGrid: View {
             key("⇧ + ← →", "move this tile")
             key("← → ↑ ↓", "select")
             key("↩", "open in Panels")
+            key("double-click", "view full size")
             Spacer()
         }
         .padding(.horizontal, 34).padding(.vertical, 14)

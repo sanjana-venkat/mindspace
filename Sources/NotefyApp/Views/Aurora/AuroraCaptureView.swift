@@ -77,13 +77,20 @@ struct AuroraCaptureView: View {
 
     @ViewBuilder
     private var content: some View {
-        if let path = step.screenshotPath, let image = NSImage(contentsOfFile: path) {
+        if let path = step.screenshotPath, let image = ScreenshotStore.image(path) {
             if let imageHeight {
-                Image(nsImage: image)
-                    .resizable()
-                    .aspectRatio(contentMode: .fill)
+                // The box sets the size and the picture fills it from the top.
+                // Filling the picture directly let a wide screenshot report
+                // itself wider than the tile, and the clip followed it, so the
+                // capture spilled over its neighbours in the grid.
+                Color.clear
                     .frame(maxWidth: .infinity)
                     .frame(height: imageHeight)
+                    .overlay(alignment: .top) {
+                        Image(nsImage: image)
+                            .resizable()
+                            .scaledToFill()
+                    }
                     .clipped()
             } else {
                 Image(nsImage: image)

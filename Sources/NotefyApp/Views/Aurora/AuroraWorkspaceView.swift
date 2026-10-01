@@ -167,7 +167,7 @@ struct AuroraWorkspaceView: View {
                                     onCancel: { appState.endMoonListening() },
                                     onSend: { text in
                                         appState.endMoonListening()
-                                        appState.ask(text)
+                                        appState.askNew(text)
                                     })
                         .padding(40)
                 }
@@ -193,7 +193,6 @@ struct AuroraWorkspaceView: View {
                             open(note: source.noteURL)
                         },
                         onClose: { appState.askOpen = false },
-                        onClear: { appState.clearAsk() },
                         onAsk: { appState.ask($0) })
                 }
                 .transition(.opacity)
@@ -315,7 +314,7 @@ struct AuroraWorkspaceView: View {
                     onListen: { appState.beginMoonListening() },
                     onStopListening: { appState.endMoonListening() },
                     listening: appState.isMoonListening,
-                    onAsk: { question in appState.ask(question) },
+                    onAsk: { question in appState.askNew(question) },
                     onShowAll: { withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { mode = .map } },
                     focusedID: focusedFolder,
                     shiftedFraction: focusedFolder == nil ? nil : AuroraFolderPanel.widthFraction)
@@ -728,7 +727,9 @@ struct AuroraWorkspaceView: View {
             .padding(.horizontal, 20)
             .frame(height: 51)
             .background(.regularMaterial, in: Capsule())
-            .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
+            // The hairline everything else uses all but vanished on the dark
+            // ground, so the one place you type had no visible edge.
+            .overlay(Capsule().strokeBorder(Aurora.ink.opacity(0.2), lineWidth: 1.2))
             .shadow(color: .black.opacity(0.13), radius: 24, y: 10)
         }
         .frame(maxWidth: 620)
@@ -753,7 +754,7 @@ struct AuroraWorkspaceView: View {
             : picks.map { "What did I save about \($0.name)?" }
         return HStack(spacing: 10) {
             ForEach(questions, id: \.self) { q in
-                Button { appState.ask(q) } label: {
+                Button { appState.askNew(q) } label: {
                     Text(q)
                         .font(Aurora.ui(13, .regular))
                         .foregroundStyle(Aurora.ink2)
@@ -802,6 +803,10 @@ struct AuroraWorkspaceView: View {
     /// buttons both claiming it left which one won down to SwiftUI.
     private func back() {
         if panelRenaming { cancelRenameTick += 1; return }
+        if appState.capturePreview != nil {
+            withAnimation(.smooth(duration: 0.22)) { appState.capturePreview = nil }
+            return
+        }
         // A dialog or a menu is the nearest thing. They claim Esc themselves
         // too, so whichever claim wins, the outcome is the same.
         if folderToDelete != nil { folderToDelete = nil; return }
@@ -886,7 +891,7 @@ struct AuroraWorkspaceView: View {
         guard !typed.isEmpty else { return }
         query = ""
         searchFocused = false
-        appState.ask(typed)
+        appState.askNew(typed)
     }
 
     /// Files dragged notes into a folder. Anything that isn't a note this app

@@ -1,6 +1,7 @@
 #if DEBUG
 import SwiftUI
 import AppKit
+import NotefyCore
 
 /// Draws the orbit offscreen, for checking layout without a screen.
 ///
@@ -13,7 +14,8 @@ enum OrbitSnapshot {
 
     static func renderAll(into directory: String) {
         AuroraFolderPanel.drawsUnscrolled = true
-        defer { AuroraFolderPanel.drawsUnscrolled = false }
+        AuroraGrid.drawsUnscrolled = true
+        defer { AuroraFolderPanel.drawsUnscrolled = false; AuroraGrid.drawsUnscrolled = false }
         let dir = URL(fileURLWithPath: directory, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
@@ -37,6 +39,7 @@ enum OrbitSnapshot {
                         ("Reading", 1), ("Research", 4)]
             .map { tile($0.0, counts: [], tint: $0.1, chosen: true) }
         renderFaces(to: dir.appendingPathComponent("faces.png"))
+        renderGridAndViewer(into: dir)
         probeHover(starters + [tile("Unfiled", unfiled: true, counts: [8], tint: 2)], into: dir)
         render(starters, hover: "Learning", to: dir.appendingPathComponent("8-new-user.png"))
         render(starters + [tile("Unfiled", unfiled: true, counts: [8], tint: 2)],
@@ -74,6 +77,45 @@ enum OrbitSnapshot {
         let report = "on the line: " + runs.joined(separator: " → ")
             + "\nhits 40pt outside the band: \(outside)\n"
         try? report.write(to: dir.appendingPathComponent("hover-probe.txt"), atomically: true, encoding: .utf8)
+    }
+
+    /// The captures grid with a normal, a wide and a tall screenshot, and the
+    /// viewer on the wide one. Fixtures come from the --fixtures directory if
+    /// given; nothing here reads or writes the notes folder.
+    private static func renderGridAndViewer(into dir: URL) {
+        guard let i = CommandLine.arguments.firstIndex(of: "--fixtures"),
+              i + 1 < CommandLine.arguments.count else { return }
+        let f = CommandLine.arguments[i + 1]
+        func step(_ title: String, _ file: String?) -> ExplorationStep {
+            ExplorationStep(appName: "Chrome", windowTitle: title, url: "https://example.com/\(title)",
+                            selectedText: file == nil ? "A text capture with no picture, to check it still sits in the grid." : nil,
+                            screenshotPath: file.map { "\(f)/\($0).png" })
+        }
+        let steps = [step("one", "normal"), step("two", "tall"), step("three", nil),
+                     step("four", "wide"), step("five", "normal"), step("six", "normal")]
+        let grid = AuroraGrid(steps: steps, active: .constant(0), thought: { _ in .constant("why I kept this") },
+                              onRightClick: { _, _ in }, commit: { _ in }, open: { _ in },
+                              selection: .constant([]))
+            .frame(width: 1180, height: 1500)
+            .background(Aurora.ground)
+            .environment(\.colorScheme, .dark)
+        save(grid, scale: 1, to: dir.appendingPathComponent("grid.png"))
+
+        let viewer = AuroraCaptureViewer(steps: steps, index: .constant(3), thought: { _ in "Saved because the layout here is the one I want to copy." })
+            .frame(width: 1180, height: 780)
+            .environment(\.colorScheme, .dark)
+        save(viewer, scale: 1, to: dir.appendingPathComponent("viewer.png"))
+    }
+
+    private static func save<V: View>(_ view: V, scale: CGFloat, to url: URL) {
+        NSAppearance(named: .darkAqua)!.performAsCurrentDrawingAppearance {
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = scale
+            guard let image = renderer.nsImage, let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { return }
+            try? png.write(to: url)
+        }
     }
 
     /// The painted original beside the three drawn faces, large, so the idle
