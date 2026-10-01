@@ -83,8 +83,16 @@ enum Aurora {
         dyn((176, 150, 196), (146, 112, 224)),  // violet
         dyn((222, 197, 140), (208, 158, 74)),   // amber
         dyn((114, 152, 186), (72, 138, 220)),   // blue
-        dyn((126, 196, 190), (56, 176, 186))    // teal
+        dyn((126, 196, 190), (56, 176, 186)),   // teal
+        // Rose, from the aurora's magenta. Only reachable as an explicit tint:
+        // hashing still uses the first five, so no folder that already exists
+        // changes colour because the palette grew.
+        dyn((214, 150, 180), (224, 110, 160))   // rose
     ]
+
+    /// How many tints the hash chooses between. Fixed at the original five so
+    /// that adding a colour never moves an existing folder to a different one.
+    static let hashedTintCount = 5
 
     /// Amber: something is out of date, not wrong.
     static let warning = dyn((176, 118, 24), (235, 179, 76))
@@ -120,13 +128,19 @@ enum Aurora {
     }
 
     /// A stable tint index for any identifier.
-    static func tintIndex(for id: UUID) -> Int { stableHash(id.uuidString) % tints.count }
-    static func tintIndex(for text: String) -> Int { stableHash(text) % tints.count }
+    static func tintIndex(for id: UUID) -> Int { stableHash(id.uuidString) % hashedTintCount }
+    static func tintIndex(for text: String) -> Int { stableHash(text) % hashedTintCount }
 
     /// Three hues that are always distinct, seeded off one identifier.
     static func triad(seed: String) -> [Int] {
-        let base = stableHash(seed) % tints.count
-        return [base, (base + 2) % tints.count, (base + 4) % tints.count]
+        let base = stableHash(seed) % hashedTintCount
+        return [base, (base + 2) % hashedTintCount, (base + 4) % hashedTintCount]
+    }
+
+    /// The triad for a folder whose colour was chosen rather than hashed.
+    static func triad(chosen: Int) -> [Int] {
+        let n = tints.count
+        return [chosen % n, (chosen + 2) % n, (chosen + 4) % n]
     }
 
     // Type roles, on the three families the app already bundles: Boldonse for

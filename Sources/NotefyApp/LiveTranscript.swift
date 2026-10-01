@@ -114,6 +114,13 @@ final class LiveTranscriptEngine: ObservableObject {
         }
     }
 
+    #if DEBUG
+    /// Words for the offscreen renderer, as though they had been heard.
+    func debugSay(_ text: String) {
+        lines.append(LiveTranscriptLine(at: 0, voice: .you, text: text))
+    }
+    #endif
+
     func stop() {
         running = false
         status = .off

@@ -12,13 +12,18 @@ struct NoteFolder: Identifiable, Codable, Hashable {
     /// a point get laid out on a grid the first time they are shown.
     var x: Double?
     var y: Double?
+    /// A colour that was chosen rather than hashed from the id. Optional, so
+    /// every workspace written before this existed still decodes unchanged.
+    var tint: Int?
 
-    init(id: UUID = UUID(), name: String, parentID: UUID? = nil, x: Double? = nil, y: Double? = nil) {
+    init(id: UUID = UUID(), name: String, parentID: UUID? = nil,
+         x: Double? = nil, y: Double? = nil, tint: Int? = nil) {
         self.id = id
         self.name = name
         self.parentID = parentID
         self.x = x
         self.y = y
+        self.tint = tint
     }
 }
 

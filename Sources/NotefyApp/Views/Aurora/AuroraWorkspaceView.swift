@@ -51,7 +51,7 @@ struct AuroraWorkspaceView: View {
                 name: folder.name,
                 point: point,
                 notes: notes,
-                tints: Self.tints(seed: folder.id.uuidString)))
+                tints: folder.tint.map(Aurora.triad(chosen:)) ?? Self.tints(seed: folder.id.uuidString)))
         }
 
         let unfiled = snapshots.filter { $0.folderID == nil }
@@ -120,14 +120,14 @@ struct AuroraWorkspaceView: View {
             libraryLayer
 
             if mode == .orbit, let tile = focusedTile {
-                // The canvas overlay animates out of a tile's position on the
-                // map. In orbit there is no such position, so the folder opens
-                // as a sheet instead.
-                AuroraFolderSheet(
+                // Beside the ring, not over it. The canvas overlay animates out
+                // of a tile's place on the map, which the orbit does not have.
+                AuroraFolderPanel(
                     tile: tile,
                     onOpenNote: { note in open(note: note.url) },
                     onClose: { closeFolder() })
-                    .transition(.opacity)
+                    .id(tile.id)
+                    .transition(.move(edge: .trailing).combined(with: .opacity))
                     .zIndex(40)
             } else if let tile = focusedTile {
                 AuroraFocusOverlay(tile: tile,
@@ -283,7 +283,7 @@ struct AuroraWorkspaceView: View {
     /// type-checker's budget.
     @ViewBuilder
     private var libraryLayer: some View {
-        let focusing = focusedFolder != nil
+        let focusing = focusedFolder != nil && mode == .map
         Group {
             if mode == .map {
                 canvasLayer
@@ -300,7 +300,10 @@ struct AuroraWorkspaceView: View {
                     onListen: { appState.beginMoonListening() },
                     onStopListening: { appState.endMoonListening() },
                     listening: appState.isMoonListening,
-                    onAsk: { question in appState.ask(question) })
+                    onAsk: { question in appState.ask(question) },
+                    onShowAll: { withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { mode = .map } },
+                    focusedID: focusedFolder,
+                    shiftedFraction: focusedFolder == nil ? nil : AuroraFolderPanel.widthFraction)
             }
         }
         .blur(radius: focusing ? 9 : 0)
@@ -494,6 +497,11 @@ struct AuroraWorkspaceView: View {
                         .allowsHitTesting(query.isEmpty)
                 }
                 .padding(.bottom, 30)
+                // While the moon listens it has its own Send and Cancel, and a
+                // long sentence pushes them down to exactly where the pills sit.
+                // A folder open beside the ring needs no search under it.
+                .opacity(appState.isMoonListening || (mode == .orbit && focusedFolder != nil) ? 0 : 1)
+                .allowsHitTesting(!(appState.isMoonListening || (mode == .orbit && focusedFolder != nil)))
             }
             .frame(maxWidth: .infinity)
 

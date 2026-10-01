@@ -1,0 +1,120 @@
+#if DEBUG
+import SwiftUI
+import AppKit
+
+/// Draws the orbit offscreen, for checking layout without a screen.
+///
+/// The dock and the suggestion pills live in the workspace, not the orbit, so
+/// they are drawn here as outlined boxes at the positions the workspace gives
+/// them. Anything that collides with a box collides in the real window.
+@MainActor
+enum OrbitSnapshot {
+    static let size = CGSize(width: 1180, height: 780)
+
+    static func renderAll(into directory: String) {
+        AuroraFolderPanel.drawsUnscrolled = true
+        defer { AuroraFolderPanel.drawsUnscrolled = false }
+        let dir = URL(fileURLWithPath: directory, isDirectory: true)
+        try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+
+        let one = [tile("Unfiled", unfiled: true, counts: [8], tint: 2)]
+        let five = [
+            tile("Cognitive Psych", counts: [6, 5, 4, 3], tint: 0),
+            tile("Research Methods", counts: [5, 4], tint: 1),
+            tile("Readings", counts: [3, 2, 2], tint: 2),
+            tile("Half ideas", counts: [1], tint: 3),
+            tile("Unfiled", unfiled: true, counts: [2], tint: 4)
+        ]
+        let many = (0..<40).map { tile("Folder \($0)", counts: [1], tint: $0) }
+        let hundred = (0..<100).map { tile("Course \($0)", counts: [($0 % 7) + 1], tint: $0) }
+
+        render(one, hover: "Unfiled", to: dir.appendingPathComponent("1-one-folder.png"))
+        render(five, hover: "Readings", to: dir.appendingPathComponent("2-five-folders.png"))
+        render(five, hover: "Half ideas", to: dir.appendingPathComponent("3-hover-small.png"))
+        render(many, hover: nil, to: dir.appendingPathComponent("4-forty-folders.png"))
+        render(hundred, hover: AuroraOrbitView.overflowID, to: dir.appendingPathComponent("7-hundred-overflow.png"))
+        let starters = [("Work", 3), ("Passion", 5), ("Hobbies", 2),
+                        ("Learning", 0), ("Reading", 1), ("Research", 4)]
+            .map { tile($0.0, counts: [], tint: $0.1, chosen: true) }
+        render(starters, hover: "Passion", to: dir.appendingPathComponent("8-new-user.png"))
+        render(starters + [tile("Unfiled", unfiled: true, counts: [8], tint: 2)],
+               hover: nil, to: dir.appendingPathComponent("9-you-after-seeding.png"))
+        let psych = tile("Cognitive Psych", counts: [6, 5, 4, 3], tint: 0, chosen: true,
+                         titles: ["Correlation is not causation", "Memory and encoding",
+                                  "Seminar 9, the bits I missed", "Exam 2, likely themes"])
+        render([psych] + Array(five.dropFirst()), panel: psych,
+               to: dir.appendingPathComponent("10-folder-open.png"))
+        render(five, listening: "what did I save about correlation",
+               to: dir.appendingPathComponent("5-listening-short.png"))
+        render(five, listening: "so the thing I keep coming back to is whether a correlation in my readings was ever reported as a cause and what the seminar said about it",
+               to: dir.appendingPathComponent("6-listening-long.png"))
+    }
+
+    private static func tile(_ name: String, unfiled: Bool = false, counts: [Int], tint: Int,
+                             chosen: Bool = false, titles: [String] = []) -> AuroraFolderTile {
+        let notes = counts.enumerated().map { i, n in
+            CanvasNoteSnapshot(url: URL(fileURLWithPath: "/tmp/\(name)-\(i).md"),
+                               title: i < titles.count ? titles[i] : "\(name) \(i)",
+                               excerpt: i < titles.count ? "Two lecture slides and a voice note from after the seminar." : "",
+                               createdAt: Date().addingTimeInterval(-Double(i) * 86_400 * 3),
+                               folderID: nil, folderName: name, captureCount: n,
+                               hasOrganizedNote: false)
+        }
+        return AuroraFolderTile(id: name, folderID: unfiled ? nil : UUID(), name: name,
+                                point: .zero, notes: notes,
+                                tints: chosen ? Aurora.triad(chosen: tint) : [tint, tint + 2, tint + 4])
+    }
+
+    private static func render(_ tiles: [AuroraFolderTile], hover: String? = nil,
+                               listening: String? = nil, panel: AuroraFolderTile? = nil,
+                               to url: URL) {
+        let transcript = LiveTranscriptEngine()
+        if let listening { transcript.debugSay(listening) }
+
+        let view = ZStack {
+            Aurora.ground
+            AuroraOrbitView(tiles: tiles, transcript: transcript,
+                            onOpenFolder: { _ in }, onListen: {}, onStopListening: {},
+                            listening: listening != nil, onAsk: { _ in },
+                            focusedID: panel?.id,
+                            shiftedFraction: panel == nil ? nil : AuroraFolderPanel.widthFraction,
+                            previewHover: hover)
+            if let panel {
+                AuroraFolderPanel(tile: panel, onOpenNote: { _ in }, onClose: {})
+            }
+            if listening == nil && panel == nil { chromeOutline }
+        }
+        .frame(width: size.width, height: size.height)
+        .environment(\.colorScheme, .dark)
+
+        NSAppearance(named: .darkAqua)!.performAsCurrentDrawingAppearance {
+            let renderer = ImageRenderer(content: view)
+            renderer.scale = 1.5
+            guard let image = renderer.nsImage,
+                  let tiff = image.tiffRepresentation,
+                  let rep = NSBitmapImageRep(data: tiff),
+                  let png = rep.representation(using: .png, properties: [:]) else { return }
+            try? png.write(to: url)
+        }
+    }
+
+    /// Where the workspace puts the dock and the pills, from its own numbers:
+    /// 30 from the bottom, a 51 high bar at most 620 wide, 12 above it a row
+    /// of pills about 36 high.
+    private static var chromeOutline: some View {
+        VStack(spacing: 12) {
+            Spacer()
+            RoundedRectangle(cornerRadius: 18)
+                .strokeBorder(Color.red.opacity(0.85), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                .overlay(Text("PILLS").font(.system(size: 11, weight: .bold)).foregroundStyle(.red))
+                .frame(width: 560, height: 36)
+            Capsule()
+                .strokeBorder(Color.red.opacity(0.85), style: StrokeStyle(lineWidth: 2, dash: [6, 4]))
+                .overlay(Text("SEARCH DOCK").font(.system(size: 11, weight: .bold)).foregroundStyle(.red))
+                .frame(width: 620, height: 51)
+        }
+        .padding(.bottom, 30)
+        .allowsHitTesting(false)
+    }
+}
+#endif

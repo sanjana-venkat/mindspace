@@ -105,6 +105,15 @@ struct NotefyMenuBarApp: App {
 
     init() {
         _ = BundledFontRegistrar.register
+        #if DEBUG
+        // Renders the orbit offscreen and exits. Runs before the store lock and
+        // before AppState, so it never opens the notes folder.
+        if let i = CommandLine.arguments.firstIndex(of: "--render-orbit"),
+           i + 1 < CommandLine.arguments.count {
+            OrbitSnapshot.renderAll(into: CommandLine.arguments[i + 1])
+            exit(0)
+        }
+        #endif
         // Before anything reads or writes the notes folder, make sure this is the
         // only copy that will. `AppState` is built lazily by `StateObject`, so a
         // blocked launch never constructs one and never touches a file.

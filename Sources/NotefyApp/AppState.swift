@@ -470,6 +470,7 @@ final class AppState: ObservableObject {
             }
             .store(in: &cancellables)
 
+        seedStarterFoldersIfNeeded()
         refreshHistory()
         openMostRecentNoteOrCreate()
         refreshAudioInputDevices()
@@ -718,6 +719,31 @@ final class AppState: ObservableObject {
     }
 
     @discardableResult
+    /// An empty ring is a bad first impression: a moon and nothing around it.
+    /// So the first launch gets six folders, each its own colour, covering the
+    /// things people actually save.
+    ///
+    /// Runs once, ever. It is skipped if folders already exist, and a flag
+    /// stops it running again, so someone who deletes all six does not find
+    /// them back the next morning.
+    private func seedStarterFoldersIfNeeded() {
+        let key = "mindspace.starterFolders.v1"
+        guard !UserDefaults.standard.bool(forKey: key) else { return }
+        UserDefaults.standard.set(true, forKey: key)
+        guard workspace.folders.isEmpty else { return }
+
+        // Colours chosen so neighbours on the ring differ: blue, rose, amber,
+        // green, violet, teal.
+        let starters: [(String, Int)] = [
+            ("Work", 3), ("Passion", 5), ("Hobbies", 2),
+            ("Learning", 0), ("Reading", 1), ("Research", 4)
+        ]
+        for (name, tint) in starters {
+            workspace.folders.append(NoteFolder(name: name, tint: tint))
+        }
+        saveWorkspace()
+    }
+
     func createFolder(name: String, parentID: UUID? = nil) -> UUID {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
         let folder = NoteFolder(name: trimmed.isEmpty ? "New folder" : trimmed, parentID: parentID)

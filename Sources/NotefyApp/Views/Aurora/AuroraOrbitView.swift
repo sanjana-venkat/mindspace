@@ -17,6 +17,18 @@ struct AuroraOrbitView: View {
     /// microphone actually opened.
     let listening: Bool
     var onAsk: (String) -> Void
+    /// Where the overflow arc goes: the grid, which can show every folder.
+    var onShowAll: () -> Void = {}
+    /// The folder open in the panel. Its arc stays lit so you can see which
+    /// slice you are reading.
+    var focusedID: String? = nil
+    /// When a panel takes the right of the window, the ring centres in what is
+    /// left rather than sitting half under it.
+    var shiftedFraction: CGFloat? = nil
+    #if DEBUG
+    /// Lets the offscreen renderer draw the label without a real pointer.
+    var previewHover: String? = nil
+    #endif
 
     @State private var hovered: String?
     @State private var moonDown = false
@@ -31,7 +43,7 @@ struct AuroraOrbitView: View {
     /// Empty folders still deserve a sliver. A folder you made and have not
     /// filled is a thought you have not come back to, not an absence.
     private var weights: [Double] {
-        tiles.map { Double(max(1, $0.captureCount)) }
+        shown.map { Double(max(1, $0.captureCount)) }
     }
 
     private var total: Double { max(1, weights.reduce(0, +)) }
@@ -39,9 +51,41 @@ struct AuroraOrbitView: View {
     private struct Segment: Identifiable {
         let id: String
         let tile: AuroraFolderTile
+        /// Where the stroke's path runs. Round caps then add `capDegrees` past
+        /// each end, so the visible arc fills `slotStart...slotEnd - gap`.
         let start: Double
         let end: Double
+        /// The whole slice this folder owns, gap included. The pointer target
+        /// covers all of it, so there is no dead ground between two arcs.
+        let slotStart: Double
+        let slotEnd: Double
         let tint: Color
+        var isOverflow: Bool { id == AuroraOrbitView.overflowID }
+    }
+
+    static let overflowID = "__orbit_more__"
+
+    /// How far a round cap reaches past the end of its path, in degrees. The
+    /// old allocation ignored it, so with a 2.4° gap every pair of neighbours
+    /// overlapped by a couple of degrees and no gap was ever visible.
+    private var capDegrees: Double { Double(thickness / 2 / ringRadius) * 180 / .pi }
+
+    /// The least a folder can have: a dot, plus the gap after it.
+    private var minSweep: Double { capDegrees * 2 + gapDegrees }
+
+    /// More folders than fit as dots, and the smallest are gathered into a
+    /// single "more" arc that opens the grid. Forty slivers is not a picture of
+    /// anything; it is a beaded necklace nobody can click.
+    private var shown: [AuroraFolderTile] {
+        let capacity = max(1, Int(span / minSweep))
+        guard tiles.count > capacity else { return tiles }
+        let ranked = tiles.sorted { $0.captureCount > $1.captureCount }
+        let keep = Array(ranked.prefix(capacity - 1))
+        let rest = ranked.dropFirst(capacity - 1)
+        let more = AuroraFolderTile(
+            id: Self.overflowID, folderID: UUID(), name: "\(rest.count) more folders",
+            point: .zero, notes: rest.flatMap(\.notes), tints: [-1])
+        return keep + [more]
     }
 
     /// The ring never closes. A full circle reads as a meter at maximum, and
@@ -50,16 +94,27 @@ struct AuroraOrbitView: View {
     private let span: Double = 276
 
     private var segments: [Segment] {
+        let list = shown
+        // Every folder is guaranteed a dot and a gap; what is left over is
+        // shared by size. The big folders really do pay for the small ones now,
+        // instead of the small ones being drawn on top of their neighbours.
+        let floor = minSweep * Double(list.count)
+        let spare = max(0, span - floor)
         var out: [Segment] = []
         var angle = -90 + (360 - span) / 2
-        for (i, tile) in tiles.enumerated() {
-            let sweep = (weights[i] / total) * span
-            // Below about four degrees an arc with round caps reads as a dot,
-            // so give the slivers a floor and let the big folders pay for it.
-            let drawn = max(4.0, sweep - gapDegrees)
+        for (i, tile) in list.enumerated() {
+            let sweep = minSweep + spare * (weights[i] / total)
+            let pathStart = angle + capDegrees
+            let pathEnd = max(pathStart, angle + sweep - gapDegrees - capDegrees)
+            // Unfiled is the inbox, not a subject, so it takes no colour of its
+            // own. Hashed, it landed on amber, the same as Hobbies.
+            let tint = tile.id == Self.overflowID ? Aurora.ink3
+                : tile.isUnfiled ? Aurora.ink2
+                : Aurora.tint(tile.tints.first ?? 0)
             out.append(Segment(id: tile.id, tile: tile,
-                               start: angle, end: angle + drawn,
-                               tint: Aurora.tint(tile.tints.first ?? 0)))
+                               start: pathStart, end: pathEnd,
+                               slotStart: angle, slotEnd: angle + sweep,
+                               tint: tint))
             angle += sweep
         }
         return out
@@ -80,8 +135,13 @@ struct AuroraOrbitView: View {
     }
 
     private var hoveredSegment: Segment? {
-        guard let hovered else { return nil }
-        return segments.first { $0.id == hovered }
+        #if DEBUG
+        let id = hovered ?? previewHover
+        #else
+        let id = hovered
+        #endif
+        guard let id else { return nil }
+        return segments.first { $0.id == id }
     }
 
     /// Questions built from folders that actually exist, so the suggestions are
@@ -95,7 +155,8 @@ struct AuroraOrbitView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let centre = CGPoint(x: geo.size.width / 2, y: geo.size.height / 2 - 40)
+            let free = geo.size.width * (1 - (shiftedFraction ?? 0))
+            let centre = CGPoint(x: free / 2, y: geo.size.height / 2 - 40)
 
             ZStack {
                 if listening {
@@ -117,6 +178,7 @@ struct AuroraOrbitView: View {
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.84), value: hovered)
             .animation(.spring(response: 0.38, dampingFraction: 0.86), value: listening)
+            .animation(.spring(response: 0.48, dampingFraction: 0.86), value: shiftedFraction)
         }
     }
 
@@ -132,7 +194,7 @@ struct AuroraOrbitView: View {
                 .position(centre)
 
             ForEach(segments) { seg in
-                let lit = hovered == seg.id
+                let lit = hovered == seg.id || focusedID == seg.id
                 OrbitArc(start: seg.start, end: seg.end, radius: ringRadius)
                     .stroke(seg.tint.opacity(lit ? 1 : 0.85),
                             style: StrokeStyle(lineWidth: lit ? thickness + 5 : thickness,
@@ -149,14 +211,18 @@ struct AuroraOrbitView: View {
                     // the whole window, the wedge centres on the window rather
                     // than the moon, and the target sits 40pt below the arc
                     // you can see, which is why clicking the arc did nothing.
-                    .contentShape(OrbitWedge(start: seg.start, end: seg.end,
-                                             radius: ringRadius, thickness: thickness + 22))
+                    .contentShape(OrbitWedge(start: seg.slotStart, end: seg.slotEnd,
+                                             radius: ringRadius, thickness: thickness + 16))
                     .onHover { setHover(seg.id, $0) }
-                    .onTapGesture { onOpenFolder(seg.tile) }
-                    .help("Open \(seg.tile.name)")
+                    .onTapGesture { open(seg) }
+                    .help(seg.isOverflow ? "Show every folder" : "Open \(seg.tile.name)")
                     .position(centre)
             }
         }
+    }
+
+    private func open(_ seg: Segment) {
+        if seg.isOverflow { onShowAll() } else { onOpenFolder(seg.tile) }
     }
 
     // MARK: the moon
@@ -237,22 +303,33 @@ struct AuroraOrbitView: View {
                             onStopListening()
                             onAsk(text)
                         })
-            .position(x: centre.x, y: centre.y + ringRadius + 150)
+            .frame(width: 680, height: 260, alignment: .top)
+            .position(x: centre.x, y: centre.y + ringRadius + 70 + 130)
     }
 
     // MARK: the label
 
     private func chip(for seg: Segment, centre: CGPoint) -> some View {
-        let mid = (seg.start + seg.end) / 2 * .pi / 180
-        let out = ringRadius + 54
-        let point = CGPoint(x: centre.x + cos(mid) * out, y: centre.y + sin(mid) * out)
+        // Anchor the label's near edge just outside the ring, on the side the
+        // arc faces. Centring it there put half the label over the arc you
+        // were pointing at.
+        let mid = (seg.slotStart + seg.slotEnd - gapDegrees) / 2 * .pi / 180
+        let dx = cos(mid), dy = sin(mid)
+        let reach = ringRadius + thickness / 2 + 14
+        let anchor = CGPoint(x: centre.x + dx * reach, y: centre.y + dy * reach)
+        let side: Alignment = abs(dx) >= 0.45
+            ? (dx < 0 ? .trailing : .leading)
+            : (dy < 0 ? .bottom : .top)
 
-        return HStack(spacing: 9) {
+        let count = seg.tile.captureCount
+        let label = HStack(spacing: 9) {
             Circle().fill(seg.tint).frame(width: 9, height: 9)
             Text(seg.tile.name)
                 .font(Aurora.ui(14, .semibold))
                 .foregroundStyle(Aurora.ink)
-            Text("\(seg.tile.captureCount) ITEMS")
+            Text(seg.isOverflow ? "SHOW ALL"
+                 : count == 0 ? "EMPTY"
+                 : "\(count) \(count == 1 ? "ITEM" : "ITEMS")")
                 .font(Aurora.mono(11))
                 .tracking(0.8)
                 .foregroundStyle(Aurora.ink3)
@@ -270,11 +347,14 @@ struct AuroraOrbitView: View {
         .fixedSize()
         .contentShape(Capsule())
         .onHover { setHover(seg.id, $0) }
-        .onTapGesture { onOpenFolder(seg.tile) }
-        .help("Open \(seg.tile.name)")
-        .position(point)
-    }
+        .onTapGesture { open(seg) }
+        .help(seg.isOverflow ? "Show every folder" : "Open \(seg.tile.name)")
 
+        return Color.clear
+            .frame(width: 1, height: 1)
+            .overlay(alignment: side) { label }
+            .position(anchor)
+    }
 }
 
 /// One folder's slice of the ring, as a line to stroke.
@@ -345,6 +425,10 @@ struct AuroraHeardView: View {
                 .multilineTextAlignment(.center)
                 .lineSpacing(5)
                 .frame(maxWidth: 620)
+                // A long sentence keeps its newest words on screen. The start
+                // of what you said is the part you already know.
+                .lineLimit(3)
+                .truncationMode(.head)
                 .fixedSize(horizontal: false, vertical: true)
 
             HStack(spacing: 14) {
