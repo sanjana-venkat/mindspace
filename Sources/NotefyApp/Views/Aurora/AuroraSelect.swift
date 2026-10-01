@@ -63,8 +63,15 @@ struct AuroraSelect<ID: Hashable>: View {
         }
     }
 
+    /// Rows shown before the list scrolls. A provider can return thirty-odd
+    /// models; drawn inline at full length they ran off the bottom of the setup
+    /// card, which clips, so the lower ones could neither be seen nor chosen.
+    private static var visibleRows: Int { 7 }
+    private static var rowHeight: CGFloat { 35 }
+
+    @ViewBuilder
     private var list: some View {
-        VStack(spacing: 1) {
+        let rows = VStack(spacing: 1) {
             ForEach(options) { option in
                 Button {
                     selection = option.id
@@ -84,13 +91,33 @@ struct AuroraSelect<ID: Hashable>: View {
                     .contentShape(Rectangle())
                 }
                 .buttonStyle(AuroraHoverRow())
+                .id(option.identity)
             }
         }
         .padding(5)
+
+        Group {
+            if options.count > Self.visibleRows {
+                ScrollViewReader { proxy in
+                    ScrollView { rows }
+                        .frame(height: CGFloat(Self.visibleRows) * Self.rowHeight + 10)
+                        .scrollIndicators(.visible)
+                        // Open on the current choice, not at the top of a long
+                        // list where it might be out of sight.
+                        .onAppear {
+                            let current = options.first { $0.id == selection }?.identity
+                            if let current { proxy.scrollTo(current, anchor: .center) }
+                        }
+                }
+            } else {
+                rows
+            }
+        }
         .background(.ultraThinMaterial, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .background(fill, in: RoundedRectangle(cornerRadius: 12, style: .continuous))
         .overlay(RoundedRectangle(cornerRadius: 12, style: .continuous)
             .strokeBorder(stroke, lineWidth: 1))
+        .clipShape(RoundedRectangle(cornerRadius: 12, style: .continuous))
         .shadow(color: .black.opacity(0.3), radius: 22, y: 10)
     }
 }

@@ -516,7 +516,7 @@ private struct Sidebar: View {
                 showRenameNote = true
             }
             Menu("Move to folder") {
-                Button("Unfiled") { appState.moveNote(destination.url, toFolder: nil) }
+                Button(UnfiledName.current) { appState.moveNote(destination.url, toFolder: nil) }
                 ForEach(allFoldersFlattened, id: \.id) { entry in
                     Button(entry.path) { appState.moveNote(destination.url, toFolder: entry.id) }
                 }

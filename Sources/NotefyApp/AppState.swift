@@ -288,6 +288,7 @@ final class AppState: ObservableObject {
 
     /// Non-nil while the text button is armed and waiting for a highlight.
     private var armedTextCaptureTask: Task<Void, Never>?
+    private var armedTextMonitor: Any?
     /// Long enough to switch apps and find the passage, short enough that a
     /// forgotten arm doesn't sit live all afternoon.
     private static let armedTextCaptureTimeout: TimeInterval = 45
@@ -487,7 +488,9 @@ final class AppState: ObservableObject {
         pet.actions = MoonPetActions(
             captureRegion: { [weak self] in self?.captureSelectedRegion() },
             capturePage: { [weak self] in self?.captureActivePage() },
-            captureText: { [weak self] in self?.captureSelectedTextFromHotkey() },
+            // Press, then highlight. The moon is clicked first by its nature,
+            // so taking whatever was already selected got it backwards.
+            captureText: { [weak self] in self?.captureSelectedText() },
             audio: { [weak self] source in self?.toggleSessionVoiceNote(source: source) },
             meeting: { [weak self] in self?.toggleMeetingNote() },
             openApp: {
@@ -523,6 +526,33 @@ final class AppState: ObservableObject {
         pet.hide()
         permissionCenter.refresh()
         isShowingPermissionOnboarding = true
+    }
+
+    /// A capture needed a permission it does not have. Ask for that one thing.
+    ///
+    /// This used to reopen the whole setup tutorial. To someone who finished
+    /// setup weeks ago and whose Screen Recording was reset by a macOS update,
+    /// that looked exactly like the app had forgotten them.
+    ///
+    /// The first time, macOS shows its own prompt. After a denial it stays
+    /// silent forever, so from then on this goes straight to the right pane.
+    func askFor(_ permission: NotedPermission) {
+        permissionCenter.refresh()
+        guard !permissionCenter.snapshot.isGranted(permission) else { return }
+        let key = "mindspace.asked.\(permission)"
+        if UserDefaults.standard.bool(forKey: key) {
+            permissionCenter.openSettings(for: permission)
+        } else {
+            UserDefaults.standard.set(true, forKey: key)
+            permissionCenter.request(permission)
+        }
+        let what: String
+        switch permission {
+        case .screenRecording: what = "Turn on Screen Recording for Mindspace, then try again"
+        case .accessibility: what = "Turn on Accessibility for Mindspace, then try again"
+        case .microphone: what = "Turn on the Microphone for Mindspace, then try again"
+        }
+        pet.state.say(what, forSeconds: 10)
     }
 
     func finishPermissionOnboarding() {
@@ -1106,14 +1136,15 @@ final class AppState: ObservableObject {
     /// selection in the same breath, always finding nothing. So: if something
     /// is already highlighted, capture it; otherwise arm and wait for a
     /// selection to appear.
+    /// Press, then highlight: whatever you select next is kept.
+    ///
+    /// It used to take any text already selected the moment it was pressed.
+    /// There almost always is some, often a highlight left behind in the app
+    /// in front, so the button seemed to work backwards.
     func captureSelectedText() {
         FocusKeeper.remember()
         guard ensureCaptureSession() else { return }
-        if tracker.peekSelectedText() != nil {
-            performSelectedTextCapture()
-        } else {
-            armSelectedTextCapture()
-        }
+        armSelectedTextCapture()
     }
 
     /// A global shortcut is an explicit "capture what is selected now" action.
@@ -1129,37 +1160,85 @@ final class AppState: ObservableObject {
 
     /// Pressing the button again while armed cancels, so an accidental press
     /// isn't a thing you have to wait out.
+    /// Waits for a *new* highlight and takes it once it is finished.
+    ///
+    /// Two things made the old version unreliable. It accepted whatever was
+    /// already selected, and it checked every 0.2s and took the first selection
+    /// it saw, so dragging across a sentence handed it the first few words.
+    /// Now it ignores the selection that existed when it was pressed, and only
+    /// takes one after the mouse is released and the text has stopped changing.
+    ///
+    /// Apps that do not report their selection, Google Docs and other web
+    /// editors among them, are caught by watching for the drag itself and then
+    /// using the copy fallback.
     func armSelectedTextCapture() {
         if armedTextCaptureTask != nil {
             cancelArmedTextCapture(status: "Text capture cancelled")
             return
         }
-        instructionToast.show("Highlight any text — it gets captured automatically")
+        let baseline = tracker.peekSelectedText()
+        instructionToast.show("Highlight the text you want to keep")
+        pet.state.say("Highlight the text you want to keep", forSeconds: 6)
         recordingStatus = "Waiting for a highlight…"
+
+        let gesture = ArmedHighlight()
+        armedTextMonitor = NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDragged, .leftMouseUp]) { event in
+            if event.type == .leftMouseDragged {
+                gesture.dragged = true
+            } else if gesture.dragged || event.clickCount >= 2 {
+                // A drag across text, or a double or triple click, both select.
+                gesture.releasedAt = Date()
+                gesture.dragged = false
+            }
+        }
+
         armedTextCaptureTask = Task { [weak self] in
             let deadline = Date().addingTimeInterval(Self.armedTextCaptureTimeout)
+            var previous: String? = nil
             while !Task.isCancelled, Date() < deadline {
-                try? await Task.sleep(nanoseconds: 220_000_000)
+                try? await Task.sleep(nanoseconds: 150_000_000)
                 guard !Task.isCancelled, let self else { return }
-                // Ignore our own windows: the rail and the review panel are
-                // ours, and lifting text out of Noted into Noted is never
-                // what the button meant.
+                // Our own windows are never the source.
                 if NSWorkspace.shared.frontmostApplication?.bundleIdentifier
                     == Bundle.main.bundleIdentifier { continue }
-                guard self.tracker.peekSelectedText() != nil else { continue }
-                self.armedTextCaptureTask = nil
-                self.performSelectedTextCapture()
-                return
+                let mouseUp = NSEvent.pressedMouseButtons == 0
+                let now = self.tracker.peekSelectedText()
+
+                // A finished drag or click-select: take it if the text is new,
+                // or if the app does not report text at all (copy fallback).
+                if let released = gesture.releasedAt, Date().timeIntervalSince(released) > 0.12, mouseUp {
+                    gesture.releasedAt = nil
+                    if now == nil || now != baseline {
+                        self.finishArmedTextCapture()
+                        self.performSelectedTextCapture()
+                        return
+                    }
+                }
+
+                // Keyboard selection, shift and the arrows: new, settled text.
+                if let now, now != baseline, mouseUp, now == previous {
+                    self.finishArmedTextCapture()
+                    self.performSelectedTextCapture()
+                    return
+                }
+                previous = now
             }
             guard !Task.isCancelled, let self else { return }
-            self.armedTextCaptureTask = nil
+            self.finishArmedTextCapture()
             self.recordingStatus = "Nothing highlighted — press the text button or ⌘⇧T again."
         }
     }
 
+    /// Ends the wait without cancelling a capture already under way.
+    private func finishArmedTextCapture() {
+        armedTextCaptureTask = nil
+        if let armedTextMonitor { NSEvent.removeMonitor(armedTextMonitor) }
+        armedTextMonitor = nil
+    }
+
     func cancelArmedTextCapture(status: String? = nil) {
         armedTextCaptureTask?.cancel()
-        armedTextCaptureTask = nil
+        finishArmedTextCapture()
         recordingStatus = status
     }
 
@@ -1172,7 +1251,7 @@ final class AppState: ObservableObject {
                 ? "Selected text ready to keep"
                 : "No selected text was available. Keep the text highlighted, then try again."
             self.permissionCenter.refresh()
-            if !self.permissionCenter.snapshot.accessibility { self.showPermissionOnboarding() }
+            if !self.permissionCenter.snapshot.accessibility { self.askFor(.accessibility) }
         }
     }
 
@@ -1188,7 +1267,7 @@ final class AppState: ObservableObject {
                 : "Grant Screen & System Audio Recording access, then quit and reopen Mindspace."
             self.permissionCenter.refresh()
             if !captured && !self.permissionCenter.snapshot.screenRecording {
-                self.showPermissionOnboarding()
+                self.askFor(.screenRecording)
             }
         }
     }
@@ -1207,7 +1286,7 @@ final class AppState: ObservableObject {
             case .failure(let error):
                 self.recordingStatus = error.localizedDescription
                 self.permissionCenter.refresh()
-                if !self.permissionCenter.snapshot.screenRecording { self.showPermissionOnboarding() }
+                if !self.permissionCenter.snapshot.screenRecording { self.askFor(.screenRecording) }
             }
         }
     }
@@ -1875,7 +1954,7 @@ final class AppState: ObservableObject {
             } catch {
                 recordingStatus = "Could not start listening: \(error.localizedDescription)"
                 permissionCenter.refresh()
-                if !permissionCenter.snapshot.microphone { showPermissionOnboarding() }
+                if !permissionCenter.snapshot.microphone { askFor(.microphone) }
             }
         }
     }
@@ -1959,9 +2038,10 @@ final class AppState: ObservableObject {
                 ? "Could not start the microphone: \(error.localizedDescription)"
                 : "Could not start computer audio: \(error.localizedDescription)"
             permissionCenter.refresh()
-            if (source == .microphone && !permissionCenter.snapshot.microphone)
-                || (source == .systemAudio && !permissionCenter.snapshot.screenRecording) {
-                showPermissionOnboarding()
+            if source == .microphone, !permissionCenter.snapshot.microphone {
+                askFor(.microphone)
+            } else if source == .systemAudio, !permissionCenter.snapshot.screenRecording {
+                askFor(.screenRecording)
             }
         }
     }
@@ -2085,8 +2165,10 @@ final class AppState: ObservableObject {
             systemAudioSourceActive = false
             recordingStatus = "Could not start meeting recording: \(error.localizedDescription)"
             permissionCenter.refresh()
-            if !permissionCenter.snapshot.microphone || !permissionCenter.snapshot.screenRecording {
-                showPermissionOnboarding()
+            if !permissionCenter.snapshot.microphone {
+                askFor(.microphone)
+            } else if !permissionCenter.snapshot.screenRecording {
+                askFor(.screenRecording)
             }
         }
     }
@@ -2705,4 +2787,13 @@ final class AppState: ObservableObject {
                 return l > r
             }
     }
+}
+
+
+/// What the global mouse monitor has seen since text capture was armed. A
+/// reference, so the monitor and the waiting task share one record.
+@MainActor
+private final class ArmedHighlight {
+    var dragged = false
+    var releasedAt: Date?
 }

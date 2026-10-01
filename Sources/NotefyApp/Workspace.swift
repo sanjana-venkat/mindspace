@@ -55,3 +55,21 @@ struct Workspace: Codable {
         try? data.write(to: url, options: .atomic)
     }
 }
+
+/// What the bucket of not-yet-filed notes is called. It is not a folder, so it
+/// has no record to rename; this is the name people chose for it instead.
+enum UnfiledName {
+    static let key = "aurora.unfiled.name"
+    static let fallback = "Unfiled"
+
+    static var current: String {
+        let saved = UserDefaults.standard.string(forKey: key)?
+            .trimmingCharacters(in: .whitespacesAndNewlines) ?? ""
+        return saved.isEmpty ? fallback : saved
+    }
+
+    static func set(_ name: String) {
+        let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        UserDefaults.standard.set(trimmed.isEmpty ? nil : trimmed, forKey: key)
+    }
+}

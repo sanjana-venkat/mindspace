@@ -100,6 +100,12 @@ struct AuroraFolderNode: View {
                     .shadow(color: .black.opacity(0.09), radius: 14, y: 6)
             }
             .frame(width: 212, height: 168)
+            // The picture is a folder, and a folder opens however you click
+            // it. Double-click is how a Mac opens folders, and it used to mean
+            // rename here, so the most natural thing to try did nothing.
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) { if !editing { onOpen() } }
+            .onTapGesture { if !editing { onOpen() } }
 
             VStack(spacing: 3) {
                 HStack(alignment: .firstTextBaseline, spacing: 7) {
@@ -128,6 +134,12 @@ struct AuroraFolderNode: View {
                     .font(Aurora.mono(9.5)).tracking(1.2)
                     .foregroundStyle(Aurora.ink3)
             }
+            // The name renames on a double-click, as in Finder; a single click
+            // on it still opens the folder.
+            .contentShape(Rectangle())
+            .onTapGesture(count: 2) { draft = tile.name; editing = true }
+            .onTapGesture { if !editing { onOpen() } }
+            .help("Double-click the name to rename")
         }
         .frame(width: 212)
         // Search dims what doesn't match. It used to drain the colour too,
@@ -135,8 +147,6 @@ struct AuroraFolderNode: View {
         .opacity(dimmed ? 0.34 : 1)
         .offset(drag)
         .onHover { hover = $0 && !dimmed }
-        .onTapGesture(count: 2) { if !tile.isUnfiled { draft = tile.name; editing = true } }
-        .onTapGesture { if !editing { onOpen() } }
         .simultaneousGesture(
             DragGesture(minimumDistance: 4)
                 .onChanged { v in

@@ -11,6 +11,13 @@ struct AuroraFolderPanel: View {
     let tile: AuroraFolderTile
     var onOpenNote: (CanvasNoteSnapshot) -> Void
     var onClose: () -> Void
+    var onRenameFolder: (String) -> Void = { _ in }
+    var onRenameNote: (CanvasNoteSnapshot, String) -> Void = { _, _ in }
+    /// True while a title is being edited, so the window's Esc cancels the
+    /// edit rather than closing the folder.
+    @Binding var renaming: Bool
+    /// Bumped by the window when Esc is pressed mid-edit.
+    var cancelRenameTick: Int = 0
 
     enum Order: String, CaseIterable, Identifiable {
         case recent, az, most
@@ -26,6 +33,12 @@ struct AuroraFolderPanel: View {
 
     @State private var order: Order = .recent
     @State private var hovered: URL?
+
+    /// What is being renamed: the folder, or one note.
+    private enum Editing: Equatable { case folder, note(URL) }
+    @State private var editing: Editing?
+    @State private var draft = ""
+    @FocusState private var fieldFocused: Bool
 
     /// The share of the window the panel takes. The ring keeps the rest.
     static let widthFraction: CGFloat = 0.44
@@ -50,6 +63,16 @@ struct AuroraFolderPanel: View {
     private var tint: Color { Aurora.tint(tile.tints.first ?? 0) }
 
     var body: some View {
+        content(in: nil)
+            .onChange(of: fieldFocused) { _, focused in
+                if !focused, editing != nil { commit() }
+            }
+            .onChange(of: cancelRenameTick) { _, _ in cancel() }
+            .onDisappear { if editing != nil { cancel() } }
+    }
+
+    @ViewBuilder
+    private func content(in _: Void?) -> some View {
         GeometryReader { geo in
             let width = min(max(geo.size.width * Self.widthFraction, 380), 600)
             HStack(spacing: 0) {
@@ -97,11 +120,19 @@ struct AuroraFolderPanel: View {
             }
             .padding(.top, 4)
 
-            Text(tile.name)
-                .font(Aurora.display(40))
-                .foregroundStyle(Aurora.ink)
-                .lineLimit(2)
-                .padding(.top, 10)
+            Group {
+                if editing == .folder {
+                    renameField(font: Aurora.display(40))
+                } else {
+                    Text(tile.name)
+                        .font(Aurora.display(40))
+                        .foregroundStyle(Aurora.ink)
+                        .lineLimit(2)
+                        .onTapGesture(count: 2) { begin(.folder, from: tile.name) }
+                        .help("Double-click to rename")
+                }
+            }
+            .padding(.top, 10)
 
             sortRow
                 .padding(.top, 22)
@@ -170,15 +201,27 @@ struct AuroraFolderPanel: View {
     }
 
     /// A note is its words: a title, a line of what is in it, and when. No
-    /// icon, no card, no chevron. The whole row is the target.
+    /// icon, no card, no chevron.
+    ///
+    /// The title renames on a double-click, so a single click on it waits the
+    /// double-click interval before opening. The rest of the row opens at once.
     private func row(_ note: CanvasNoteSnapshot) -> some View {
         let lit = hovered == note.url
-        return Button { onOpenNote(note) } label: {
-            VStack(alignment: .leading, spacing: 6) {
+        let isEditing = editing == .note(note.url)
+        return VStack(alignment: .leading, spacing: 6) {
+            if isEditing {
+                renameField(font: Aurora.serif(21))
+            } else {
                 Text(note.title)
                     .font(Aurora.serif(21))
                     .foregroundStyle(lit ? tint : Aurora.ink)
                     .lineLimit(2)
+                    .contentShape(Rectangle())
+                    .onTapGesture(count: 2) { begin(.note(note.url), from: note.title) }
+                    .onTapGesture { onOpenNote(note) }
+                    .help("Double-click to rename")
+            }
+            VStack(alignment: .leading, spacing: 6) {
                 if !note.excerpt.isEmpty {
                     Text(note.excerpt)
                         .font(Aurora.ui(13.5, .regular))
@@ -191,10 +234,56 @@ struct AuroraFolderPanel: View {
             }
             .frame(maxWidth: .infinity, alignment: .leading)
             .contentShape(Rectangle())
+            .onTapGesture { if !isEditing { onOpenNote(note) } }
         }
-        .buttonStyle(.plain)
+        .frame(maxWidth: .infinity, alignment: .leading)
         .onHover { hovered = $0 ? note.url : (hovered == note.url ? nil : hovered) }
         .animation(.smooth(duration: 0.16), value: lit)
+    }
+
+    // MARK: renaming
+
+    private func renameField(font: Font) -> some View {
+        TextField("", text: $draft)
+            .textFieldStyle(.plain)
+            .font(font)
+            .foregroundStyle(Aurora.ink)
+            .focused($fieldFocused)
+            .onSubmit(commit)
+            .padding(.bottom, 4)
+            .overlay(alignment: .bottom) {
+                Rectangle().fill(tint).frame(height: 1.5)
+            }
+    }
+
+    private func begin(_ what: Editing, from current: String) {
+        draft = current
+        editing = what
+        renaming = true
+        DispatchQueue.main.async { fieldFocused = true }
+    }
+
+    /// Saves on Return or when the field loses focus, like Finder. An empty
+    /// name keeps the old one rather than erasing it.
+    private func commit() {
+        guard let what = editing else { return }
+        let name = draft.trimmingCharacters(in: .whitespacesAndNewlines)
+        editing = nil
+        renaming = false
+        guard !name.isEmpty else { return }
+        switch what {
+        case .folder:
+            if name != tile.name { onRenameFolder(name) }
+        case .note(let url):
+            if let note = tile.notes.first(where: { $0.url == url }), name != note.title {
+                onRenameNote(note, name)
+            }
+        }
+    }
+
+    private func cancel() {
+        editing = nil
+        renaming = false
     }
 
     private func stamp(_ note: CanvasNoteSnapshot) -> String {

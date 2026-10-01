@@ -36,6 +36,7 @@ enum OrbitSnapshot {
         let starters = [("Work", 3), ("Hobbies", 2), ("Learning", 0),
                         ("Reading", 1), ("Research", 4)]
             .map { tile($0.0, counts: [], tint: $0.1, chosen: true) }
+        renderFaces(to: dir.appendingPathComponent("faces.png"))
         probeHover(starters + [tile("Unfiled", unfiled: true, counts: [8], tint: 2)], into: dir)
         render(starters, hover: "Learning", to: dir.appendingPathComponent("8-new-user.png"))
         render(starters + [tile("Unfiled", unfiled: true, counts: [8], tint: 2)],
@@ -75,6 +76,38 @@ enum OrbitSnapshot {
         try? report.write(to: dir.appendingPathComponent("hover-probe.txt"), atomically: true, encoding: .utf8)
     }
 
+    /// The painted original beside the three drawn faces, large, so the idle
+    /// face can be checked against the art it replaces.
+    private static func renderFaces(to url: URL) {
+        let art = MoonPetArt.load()
+        let cell: CGFloat = 300
+        let view = HStack(spacing: 24) {
+            VStack(spacing: 10) {
+                art.idle?.resizable().scaledToFit().frame(width: cell, height: cell)
+                Text("ORIGINAL ART").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+            }
+            ForEach([("IDLE", MoonMood.Face.idle), ("ATTENTIVE", .attentive), ("SURPRISED", .surprised)], id: \.0) { label, face in
+                VStack(spacing: 10) {
+                    ZStack {
+                        art.blank?.resizable().scaledToFit()
+                        MoonFace(face: face)
+                    }
+                    .frame(width: cell, height: cell)
+                    Text(label).font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
+                }
+            }
+        }
+        .padding(24)
+        .background(Color(red: 0.06, green: 0.07, blue: 0.09))
+        let renderer = ImageRenderer(content: view)
+        renderer.scale = 1
+        if let image = renderer.nsImage, let tiff = image.tiffRepresentation,
+           let rep = NSBitmapImageRep(data: tiff),
+           let png = rep.representation(using: .png, properties: [:]) {
+            try? png.write(to: url)
+        }
+    }
+
     private static func tile(_ name: String, unfiled: Bool = false, counts: [Int], tint: Int,
                              chosen: Bool = false, titles: [String] = []) -> AuroraFolderTile {
         let notes = counts.enumerated().map { i, n in
@@ -105,7 +138,7 @@ enum OrbitSnapshot {
                             shiftedFraction: panel == nil ? nil : AuroraFolderPanel.widthFraction,
                             previewHover: hover)
             if let panel {
-                AuroraFolderPanel(tile: panel, onOpenNote: { _ in }, onClose: {})
+                AuroraFolderPanel(tile: panel, onOpenNote: { _ in }, onClose: {}, renaming: .constant(false))
             }
             if listening == nil && panel == nil { chromeOutline }
         }

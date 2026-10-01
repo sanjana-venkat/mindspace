@@ -367,7 +367,10 @@ struct AuroraNoteView: View {
             .opacity(steps.isEmpty ? 0.5 : 1)
             .help(fresh ? "Write this note up" : "Write it again from the captures as they are now")
         }
-        .padding(.trailing, 30).padding(.bottom, 30)
+        .padding(.trailing, 30)
+        // Over the write-up the question box is pinned to the foot, so the
+        // button sits above it rather than on top of it.
+        .padding(.bottom, mode == .organized ? 100 : 30)
         .animation(.smooth(duration: 0.25), value: stale)
         .animation(.smooth(duration: 0.25), value: appState.isOrganizing)
     }

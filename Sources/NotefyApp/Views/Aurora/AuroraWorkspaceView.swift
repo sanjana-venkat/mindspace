@@ -14,6 +14,11 @@ struct AuroraWorkspaceView: View {
     @State private var query = ""
     @State private var focusedFolder: String? = nil
     @State private var openNoteURL: URL? = nil
+    @AppStorage(UnfiledName.key) private var unfiledName = ""
+    /// Set while a title in the folder panel is being renamed, so Esc cancels
+    /// the rename instead of closing the folder underneath it.
+    @State private var panelRenaming = false
+    @State private var cancelRenameTick = 0
     @State private var settingsOpen = false
     @State private var cancelEdits = 0
     @State private var noteMenu: AuroraNoteTarget?
@@ -59,7 +64,7 @@ struct AuroraWorkspaceView: View {
             result.append(AuroraFolderTile(
                 id: "unfiled",
                 folderID: nil,
-                name: "Unfiled",
+                name: unfiledName.isEmpty ? UnfiledName.fallback : unfiledName,
                 point: CGPoint(x: unfiledX, y: unfiledY),
                 notes: unfiled,
                 tints: Aurora.triad(seed: "unfiled")))
@@ -119,14 +124,20 @@ struct AuroraWorkspaceView: View {
 
             libraryLayer
 
-            if mode == .orbit, let tile = focusedTile {
-                // Beside the ring, not over it. The canvas overlay animates out
-                // of a tile's place on the map, which the orbit does not have.
+            if mode == .orbit, openNoteURL == nil, let tile = focusedTile {
+                // Beside the ring, not over it. Hidden while a note is open,
+                // which is drawn lower and would otherwise sit under it; the
+                // folder is still open, so Back returns to it.
                 AuroraFolderPanel(
                     tile: tile,
                     onOpenNote: { note in open(note: note.url) },
-                    onClose: { closeFolder() })
+                    onClose: { closeFolder() },
+                    onRenameFolder: { name in rename(tile, to: name) },
+                    onRenameNote: { note, name in appState.renameNote(note.url, to: name) },
+                    renaming: $panelRenaming,
+                    cancelRenameTick: cancelRenameTick)
                     .id(tile.id)
+                    .blur(radius: appState.askOpen ? 26 : 0)
                     .transition(.move(edge: .trailing).combined(with: .opacity))
                     .zIndex(40)
             } else if let tile = focusedTile {
@@ -143,6 +154,8 @@ struct AuroraWorkspaceView: View {
             }
 
             chrome
+                .blur(radius: appState.askOpen ? 26 : 0)
+                .animation(.smooth(duration: 0.32), value: appState.askOpen)
 
             // The orbit hears you in its own ring. Anywhere else the same
             // words appear over the view, so the mic does the same thing from
@@ -164,7 +177,9 @@ struct AuroraWorkspaceView: View {
 
             if appState.askOpen {
                 ZStack {
-                    Color.black.opacity(0.34)
+                    // Blurred and dark enough that the answer is the only
+                    // thing with an edge, without the room disappearing.
+                    Color.black.opacity(0.5)
                         .ignoresSafeArea()
                         .onTapGesture { appState.askOpen = false }
                     AuroraAskView(
@@ -306,9 +321,10 @@ struct AuroraWorkspaceView: View {
                     shiftedFraction: focusedFolder == nil ? nil : AuroraFolderPanel.widthFraction)
             }
         }
-        .blur(radius: focusing ? 9 : 0)
+        .blur(radius: appState.askOpen ? 26 : (focusing ? 9 : 0))
         .opacity(focusing ? 0.4 : 1)
         .animation(.smooth(duration: 0.42), value: focusedFolder)
+        .animation(.smooth(duration: 0.32), value: appState.askOpen)
     }
 
     private var sortedTiles: [AuroraFolderTile] {
@@ -390,6 +406,10 @@ struct AuroraWorkspaceView: View {
 
     // MARK: chrome
 
+    /// A folder open beside the ring is a focused reading state. The panel
+    /// carries its own title and close, so the window's own controls go quiet.
+    private var panelOpen: Bool { mode == .orbit && focusedFolder != nil }
+
     private var chrome: some View {
         ZStack(alignment: .topLeading) {
             Color.clear
@@ -434,6 +454,7 @@ struct AuroraWorkspaceView: View {
                 }
             }
             .padding(.leading, 30).padding(.top, 44)
+            .modifier(StepsBack(when: panelOpen))
 
             HStack(spacing: 10) {
                 if mode == .map {
@@ -463,6 +484,7 @@ struct AuroraWorkspaceView: View {
             }
             .frame(maxWidth: .infinity, alignment: .trailing)
             .padding(.top, 44).padding(.trailing, 28)
+            .modifier(StepsBack(when: panelOpen))
 
             // Making something new sits in the far corner, opposite the light
             // switch: both are things you reach for deliberately, neither
@@ -485,6 +507,7 @@ struct AuroraWorkspaceView: View {
             .help(focusedTile == nil ? "Make a folder" : "Start a note in this folder")
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
             .padding(.trailing, 28).padding(.bottom, 30)
+            .modifier(StepsBack(when: panelOpen))
 
             VStack {
                 Spacer()
@@ -509,6 +532,7 @@ struct AuroraWorkspaceView: View {
             AuroraThemeToggle(swipe: $themeSwipe)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
                 .padding(.leading, 28).padding(.bottom, 30)
+                .modifier(StepsBack(when: panelOpen))
         }
     }
 
@@ -642,7 +666,7 @@ struct AuroraWorkspaceView: View {
                                 }
                                 Spacer(minLength: 8)
                                 Text(appState.folderPath(for: appState.folderID(for: hit.url)).isEmpty
-                                     ? "Unfiled" : appState.folderPath(for: appState.folderID(for: hit.url)))
+                                     ? UnfiledName.current : appState.folderPath(for: appState.folderID(for: hit.url)))
                                     .font(Aurora.ui(12.5, .regular)).foregroundStyle(Aurora.ink3).lineLimit(1)
                             }
                             .padding(.horizontal, 13).padding(.vertical, 9)
@@ -774,7 +798,18 @@ struct AuroraWorkspaceView: View {
         appState.openNote(url)
         openNoteURL = url
     }
+    /// Esc, in order of what is nearest to you. One owner for the key: two
+    /// buttons both claiming it left which one won down to SwiftUI.
     private func back() {
+        if panelRenaming { cancelRenameTick += 1; return }
+        // A dialog or a menu is the nearest thing. They claim Esc themselves
+        // too, so whichever claim wins, the outcome is the same.
+        if folderToDelete != nil { folderToDelete = nil; return }
+        if namingFolder { namingFolder = false; return }
+        if noteMenu != nil { noteMenu = nil; return }
+        if folderMenu != nil { folderMenu = nil; return }
+        if appState.isMoonListening { appState.endMoonListening(); return }
+        if appState.askOpen { appState.askOpen = false; return }
         if openNoteURL != nil { openNoteURL = nil }
         else if focusedFolder != nil { closeFolder() }
         else if !query.isEmpty { query = "" }
@@ -790,7 +825,9 @@ struct AuroraWorkspaceView: View {
 
     private func rename(_ tile: AuroraFolderTile, to name: String) {
         let trimmed = name.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty, let id = tile.folderID else { return }
+        guard !trimmed.isEmpty else { return }
+        // Unfiled is not a folder record, so its name is kept on its own.
+        guard let id = tile.folderID else { unfiledName = trimmed; return }
         appState.renameFolder(id, to: trimmed)
     }
 
@@ -941,5 +978,17 @@ struct AuroraWindowReader: NSViewRepresentable {
 
     func updateNSView(_ nsView: NSView, context: Context) {
         DispatchQueue.main.async { onResolve(nsView.window) }
+    }
+}
+
+/// Fades a piece of chrome out and takes it out of the hit path, without
+/// removing it, so nothing reflows when it comes back.
+private struct StepsBack: ViewModifier {
+    let when: Bool
+    func body(content: Content) -> some View {
+        content
+            .opacity(when ? 0 : 1)
+            .allowsHitTesting(!when)
+            .animation(.smooth(duration: 0.25), value: when)
     }
 }

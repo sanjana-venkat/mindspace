@@ -51,7 +51,7 @@ struct MoonPetView: View {
         var label: String {
             switch self {
             case .screenshot: return "Screen capture"
-            case .text: return "Selected text"
+            case .text: return "Highlight text"
             case .audio: return "Record audio"
             case .meeting: return "Meeting notes"
             }
@@ -495,6 +495,8 @@ struct MoonPetArt {
     var holding: Image?
     var catching: Image?
     var pleased: Image?
+    /// The idle art with its eyes and mouth removed, for faces drawn in code.
+    var blank: Image? = nil
 
     var isDrawn: Bool { idle == nil }
 
@@ -503,7 +505,8 @@ struct MoonPetArt {
             idle: image("moon-idle"),
             holding: image("moon-holding"),
             catching: image("moon-catching"),
-            pleased: image("moon-pleased"))
+            pleased: image("moon-pleased"),
+            blank: image("moon-face-blank"))
     }
 
     private static func image(_ name: String) -> Image? {

@@ -30,6 +30,11 @@ struct AuroraOrbitView: View {
     var previewHover: String? = nil
     #endif
 
+    @StateObject private var mood = MoonMood()
+    #if DEBUG
+    /// Lets the offscreen renderer draw a particular face.
+    var previewFace: MoonMood.Face? = nil
+    #endif
     @State private var hovered: String?
     @State private var moonDown = false
     /// Bumped on every hover change, so a delayed clear only lands if nothing
@@ -179,7 +184,10 @@ struct AuroraOrbitView: View {
                         .transition(.opacity.combined(with: .scale(scale: 0.96)))
                 }
 
-                if listening {
+                // With a folder open beside the ring, the window draws the
+                // words over everything instead; drawing them here as well put
+                // two Send buttons on screen.
+                if listening && shiftedFraction == nil {
                     heard(centre: centre, width: geo.size.width)
                 } else {
                 }
@@ -187,6 +195,12 @@ struct AuroraOrbitView: View {
             .animation(.spring(response: 0.3, dampingFraction: 0.84), value: hovered)
             .animation(.spring(response: 0.38, dampingFraction: 0.86), value: listening)
             .animation(.spring(response: 0.48, dampingFraction: 0.86), value: shiftedFraction)
+            .onChange(of: listening) { _, on in syncMood(on) }
+            .onAppear {
+                mood.startBlinking()
+                if listening { syncMood(true) }
+            }
+            .onDisappear { mood.stopBlinking(); mood.rest() }
         }
     }
 
@@ -263,19 +277,50 @@ struct AuroraOrbitView: View {
         if seg.isOverflow { onShowAll() } else { onOpenFolder(seg.tile) }
     }
 
+    private var shownFace: MoonMood.Face {
+        #if DEBUG
+        if let previewFace { return previewFace }
+        #endif
+        return mood.face
+    }
+
+    private func syncMood(_ on: Bool) {
+        if on {
+            let transcript = self.transcript
+            mood.listen(level: levelDB,
+                        words: { transcript.lines.count * 10_000 + (transcript.pending[.you]?.count ?? 0) })
+        } else {
+            mood.rest()
+        }
+    }
+
     // MARK: the moon
 
     private func moon(centre: CGPoint) -> some View {
         let art = MoonPetArt.load()
+        // No glow behind it at rest: the purple wash read as a stage light and
+        // pulled the eye off the ring. Listening keeps a faint green one, as
+        // the signal that the microphone is open.
         return ZStack {
-            Circle()
-                .fill(RadialGradient(colors: [(listening ? Aurora.accent : Aurora.tint(1)).opacity(0.5), .clear],
-                                     center: .center, startRadius: 10, endRadius: 190))
-                .frame(width: 236, height: 236)
-                .blur(radius: 20)
+            if listening {
+                Circle()
+                    .fill(RadialGradient(colors: [Aurora.accent.opacity(0.28), .clear],
+                                         center: .center, startRadius: 10, endRadius: 150))
+                    .frame(width: 236, height: 236)
+                    .blur(radius: 20)
+                    .transition(.opacity)
+            }
 
             Group {
-                if let idle = art.idle {
+                if let blank = art.blank {
+                    ZStack {
+                        blank.resizable().scaledToFit()
+                        MoonFace(face: shownFace, blinking: mood.blinking)
+                            .id(shownFace)
+                            .transition(.opacity)
+                    }
+                    .animation(.easeOut(duration: 0.16), value: shownFace)
+                } else if let idle = art.idle {
                     idle.resizable().scaledToFit()
                 } else {
                     Circle().fill(Color(red: 0.97, green: 0.96, blue: 0.93))
@@ -492,6 +537,8 @@ struct AuroraHeardView: View {
                     .background(Capsule().fill(Aurora.accent))
                 }
                 .buttonStyle(AuroraTapDown())
+                // Return sends; Esc is the window's back, which cancels.
+                .keyboardShortcut(.defaultAction)
                 .disabled(said.isEmpty)
                 .opacity(said.isEmpty ? 0.45 : 1)
             }

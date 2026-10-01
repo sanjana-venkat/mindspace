@@ -93,7 +93,10 @@ struct AuroraOnboarding: View {
 
     private var snapshot: NotedPermissionSnapshot { appState.permissionCenter.snapshot }
     private var canLeavePermissions: Bool { snapshot.screenRecording }
-    private var lastStep: Int { 7 }
+    private var lastStep: Int { 8 }
+    /// The page you cannot leave without Screen Recording. Named, because the
+    /// number moved when "how you'll use it" went in ahead of it.
+    private var permissionsStep: Int { 2 }
 
     private var capturedSomething: Bool {
         guard let capturesAtStart else { return false }
@@ -116,12 +119,13 @@ struct AuroraOnboarding: View {
                 Group {
                     switch step {
                     case 0: welcome
-                    case 1: permissions
-                    case 2: microphone
-                    case 3: speechModelStep
-                    case 4: model
-                    case 5: tryIt
-                    case 6: shortcuts
+                    case 1: howYoullUseIt
+                    case 2: permissions
+                    case 3: microphone
+                    case 4: speechModelStep
+                    case 5: model
+                    case 6: tryIt
+                    case 7: shortcuts
                     default: appearanceStep
                     }
                 }
@@ -259,7 +263,7 @@ struct AuroraOnboarding: View {
                     .foregroundStyle(fgSoft)
             }
             Spacer()
-            if step == 1, !canLeavePermissions {
+            if step == permissionsStep, !canLeavePermissions {
                 Text("Screen recording is the one Mindspace can't work without.")
                     .font(Aurora.ui(12, .medium)).foregroundStyle(fgFaint)
             }
@@ -274,8 +278,8 @@ struct AuroraOnboarding: View {
                     .background(solidFill, in: Capsule())
             }
             .buttonStyle(AuroraPressStyle())
-            .disabled(step == 1 && !canLeavePermissions)
-            .opacity(step == 1 && !canLeavePermissions ? 0.45 : 1)
+            .disabled(step == permissionsStep && !canLeavePermissions)
+            .opacity(step == permissionsStep && !canLeavePermissions ? 0.45 : 1)
             }
         }
         .padding(.top, 30)
@@ -321,14 +325,63 @@ struct AuroraOnboarding: View {
     // MARK: 0 — what this is
 
     private var welcome: some View {
-        page("Everything you want to remember, in one place.",
-             "Capture your screen, save text, record thoughts and meetings, then come back to any of it later.") {
+        page("Imagine you could Cmd + F your brain.",
+             "Mindspace keeps what you see, hear and think as you work, so you can find any of it again or just ask. A digital twin of what you know, kept on your Mac.") {
             AuroraDemoLoop(dark: dark)
                 .frame(width: 500, height: 300)
         }
     }
 
-    // MARK: 1 — permissions, one at a time
+    // MARK: 1 — what using it looks like
+
+    /// The welcome says what it is; this says what you do with it. Testers
+    /// finished setup without knowing that the moon records a meeting, which
+    /// is the single most useful thing in it. Shown before the permissions, so
+    /// each one is asked for something you have already seen it do.
+    private var howYoullUseIt: some View {
+        page("The moon does the remembering.",
+             "It floats on your desktop. Point at it and pick what to keep, without leaving what you're doing.") {
+            let moments: [(OverlayIcon.Kind, String, String)] = [
+                (.meeting, "In a meeting",
+                 "Pick Meeting notes. It transcribes Zoom or Meet as people talk, and files the notes when you stop."),
+                (.text, "Reading something",
+                 "Pick Highlight text, then select a paragraph. It's kept with the page it came from."),
+                (.capture, "Something on screen",
+                 "Pick Screen capture for the whole window, or drag over just the part you want."),
+                (.spark, "Later, when you need it",
+                 "Ask anything, like “what did we decide about pricing?” The answer points to the exact capture.")
+            ]
+            LazyVGrid(columns: [GridItem(.flexible(), spacing: 14), GridItem(.flexible(), spacing: 14)],
+                      spacing: 14) {
+                ForEach(moments, id: \.1) { icon, title, line in
+                    HStack(alignment: .top, spacing: 13) {
+                        OverlayIcon(kind: icon, tint: fg)
+                            .frame(width: 17, height: 17)
+                            .frame(width: 36, height: 36)
+                            .background(panelFill, in: Circle())
+                            .overlay(Circle().strokeBorder(panelStroke, lineWidth: 1))
+                        VStack(alignment: .leading, spacing: 5) {
+                            Text(title)
+                                .font(Aurora.ui(14, .bold)).foregroundStyle(fg)
+                            Text(line)
+                                .font(Aurora.ui(12.5, .regular)).foregroundStyle(fgSoft)
+                                .lineSpacing(3)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                        Spacer(minLength: 0)
+                    }
+                    .padding(15)
+                    .frame(maxWidth: .infinity, minHeight: 112, alignment: .topLeading)
+                    .background(panelFill, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)
+                        .strokeBorder(panelStroke, lineWidth: 1))
+                }
+            }
+            .frame(maxWidth: 680)
+        }
+    }
+
+    // MARK: 2 — permissions, one at a time
 
     /// The order they're asked in: screen first because nothing works without
     /// it, then voice, then selection.
@@ -799,8 +852,14 @@ struct AuroraOnboarding: View {
                     .lineSpacing(5)
                     .fixedSize(horizontal: false, vertical: true)
 
+                Text("From here the moon stays on your desktop. Point at it whenever there's something worth keeping, and it will be here when you need it.")
+                    .font(Aurora.ui(13, .regular))
+                    .foregroundStyle(fgSoft)
+                    .lineSpacing(4)
+                    .fixedSize(horizontal: false, vertical: true)
+
                 Button(action: finish) {
-                    Text("Open Mindspace")
+                    Text("Start remembering")
                         .font(Aurora.ui(14, .bold))
                         .foregroundStyle(solidText)
                         .padding(.horizontal, 22).padding(.vertical, 12)

@@ -85,7 +85,7 @@ struct AuroraAskView: View {
                     .background(Aurora.surface2, in: Circle())
             }
             .buttonStyle(AuroraTapDown())
-            .keyboardShortcut(.cancelAction)
+            .help("Close (Esc)")
         }
         .padding(.horizontal, 22).padding(.vertical, 14)
     }

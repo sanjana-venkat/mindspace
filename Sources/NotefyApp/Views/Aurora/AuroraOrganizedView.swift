@@ -16,32 +16,67 @@ struct AuroraOrganized: View {
     }
 
     var body: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 34) {
-                head
+        ScrollViewReader { proxy in
+            ScrollView {
+                VStack(alignment: .leading, spacing: 34) {
+                    head
 
-                if appState.isOrganizing {
-                    working
-                } else if blocks.isEmpty {
-                    empty
-                } else {
-                    ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
-                        AuroraDocBlockView(block: block)
+                    if appState.isOrganizing {
+                        working
+                    } else if blocks.isEmpty {
+                        empty
+                    } else {
+                        ForEach(Array(blocks.enumerated()), id: \.offset) { _, block in
+                            AuroraDocBlockView(block: block)
+                        }
+                        if !steps.isEmpty { sources }
                     }
-                    if !steps.isEmpty { sources }
+                    if showsChat {
+                        AuroraNoteChat(steps: steps,
+                                       title: appState.activeNoteTitle,
+                                       onJump: onJump)
+                    }
+                    Spacer(minLength: 40)
                 }
-                if !steps.isEmpty && !appState.isOrganizing {
-                    AuroraNoteChat(steps: steps,
-                                   title: appState.activeNoteTitle,
-                                   onJump: onJump)
-                }
-                Spacer(minLength: 120)
+                .frame(maxWidth: 720, alignment: .leading)
+                .frame(maxWidth: .infinity)
+                .padding(.top, 40).padding(.horizontal, 40)
             }
-            .frame(maxWidth: 720, alignment: .leading)
-            .frame(maxWidth: .infinity)
-            .padding(.top, 40).padding(.horizontal, 40)
+            .scrollIndicators(.never)
+            // The question box stays at the foot of the window instead of at
+            // the end of the write-up, where you had to scroll to find it.
+            .safeAreaInset(edge: .bottom, spacing: 0) {
+                if showsChat {
+                    AuroraNoteAskBar(steps: steps, title: appState.activeNoteTitle)
+                        .frame(maxWidth: 720)
+                        .padding(.horizontal, 40)
+                        .padding(.top, 22).padding(.bottom, 24)
+                        .frame(maxWidth: .infinity)
+                        .background {
+                            LinearGradient(stops: [.init(color: Aurora.ground.opacity(0), location: 0),
+                                                   .init(color: Aurora.ground.opacity(0.94), location: 0.5)],
+                                           startPoint: .top, endPoint: .bottom)
+                                .allowsHitTesting(false)
+                        }
+                }
+            }
+            // A new question, and again when its answer lands, scrolls the
+            // conversation into view below the write-up.
+            .onChange(of: appState.noteAskTurns.count) { _, _ in scrollToLatest(proxy) }
+            .onChange(of: appState.noteAskTurns.last?.thinking) { _, thinking in
+                if thinking == false { scrollToLatest(proxy) }
+            }
         }
-        .scrollIndicators(.never)
+    }
+
+    private var showsChat: Bool { !steps.isEmpty && !appState.isOrganizing }
+
+    private func scrollToLatest(_ proxy: ScrollViewProxy) {
+        guard let id = appState.noteAskTurns.last?.id else { return }
+        // Next run loop, so the new row exists before it is scrolled to.
+        DispatchQueue.main.async {
+            withAnimation(.smooth(duration: 0.45)) { proxy.scrollTo(id, anchor: .top) }
+        }
     }
 
     private var head: some View {
@@ -361,9 +396,15 @@ struct AuroraNoteChat: View {
     var onJump: (Int) -> Void
 
     @EnvironmentObject private var appState: AppState
-    @State private var question = ""
 
+    @ViewBuilder
     var body: some View {
+        if !appState.noteAskTurns.isEmpty { thread }
+    }
+
+    /// The conversation so far. The field that starts it is pinned to the
+    /// window's foot by the write-up, not drawn here.
+    private var thread: some View {
         VStack(alignment: .leading, spacing: 20) {
             HStack(spacing: 9) {
                 Circle().fill(Aurora.accent).frame(width: 7, height: 7)
@@ -387,10 +428,22 @@ struct AuroraNoteChat: View {
                     // list only agree while nothing has been added since.
                     if let i = steps.firstIndex(where: { $0.id == source.stepID }) { onJump(i) }
                 }
+                .id(turn.id)
             }
-
-            AskField(placeholder: "Ask anything about this note", text: $question, onSend: send)
         }
+    }
+}
+
+/// The question box for one note, pinned to the bottom of the write-up.
+struct AuroraNoteAskBar: View {
+    let steps: [ExplorationStep]
+    let title: String
+
+    @EnvironmentObject private var appState: AppState
+    @State private var question = ""
+
+    var body: some View {
+        AskField(placeholder: "Ask anything about this note", text: $question, onSend: send)
     }
 
     private func send() {

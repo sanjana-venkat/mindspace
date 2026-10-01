@@ -134,7 +134,7 @@ struct AuroraCaptureActions: View {
                     ForEach(appState.workspace.folders) { folder in
                         rows(in: folder.id, label: folder.name, keep: keep)
                     }
-                    rows(in: nil, label: "Unfiled", keep: keep)
+                    rows(in: nil, label: UnfiledName.current, keep: keep)
                 }
                 .padding(6)
             }
@@ -303,7 +303,7 @@ struct AuroraNoteActions: View {
 
             ScrollView {
                 VStack(alignment: .leading, spacing: 1) {
-                    row(title: "Unfiled", folder: nil)
+                    row(title: UnfiledName.current, folder: nil)
                     ForEach(appState.workspace.folders) { folder in
                         row(title: folder.name, folder: folder.id)
                     }
