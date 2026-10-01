@@ -30,6 +30,11 @@ struct AuroraOrganized: View {
                     }
                     if !steps.isEmpty { sources }
                 }
+                if !steps.isEmpty && !appState.isOrganizing {
+                    AuroraNoteChat(steps: steps,
+                                   title: appState.activeNoteTitle,
+                                   onJump: onJump)
+                }
                 Spacer(minLength: 120)
             }
             .frame(maxWidth: 720, alignment: .leading)
@@ -341,5 +346,57 @@ struct AuroraDocBlockView: View {
                 .font(Aurora.serif(17)).foregroundStyle(Aurora.ink)
                 .lineSpacing(6).fixedSize(horizontal: false, vertical: true)
         }
+    }
+}
+
+/// Asking questions of one note, with the answer citing that note's own
+/// sources by the same numbers shown under the write-up.
+///
+/// A summary you cannot interrogate is just a shorter document. This is the
+/// part that makes it yours: ask, and every claim points back at the capture
+/// it came from, which you can click.
+struct AuroraNoteChat: View {
+    let steps: [ExplorationStep]
+    let title: String
+    var onJump: (Int) -> Void
+
+    @EnvironmentObject private var appState: AppState
+    @State private var question = ""
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 20) {
+            HStack(spacing: 9) {
+                Circle().fill(Aurora.accent).frame(width: 7, height: 7)
+                Text("ASK THIS NOTE")
+                    .font(Aurora.mono(10.5)).tracking(1.6)
+                    .foregroundStyle(Aurora.ink)
+                Spacer()
+                if !appState.noteAskTurns.isEmpty {
+                    Button { appState.noteAskTurns.removeAll() } label: {
+                        Text("CLEAR")
+                            .font(Aurora.mono(10)).tracking(1)
+                            .foregroundStyle(Aurora.ink3)
+                    }
+                    .buttonStyle(AuroraTapDown())
+                }
+            }
+
+            ForEach(appState.noteAskTurns) { turn in
+                AskTurnView(turn: turn) { source in
+                    // Jump by identity, not position: the numbers and the
+                    // list only agree while nothing has been added since.
+                    if let i = steps.firstIndex(where: { $0.id == source.stepID }) { onJump(i) }
+                }
+            }
+
+            AskField(placeholder: "Ask anything about this note", text: $question, onSend: send)
+        }
+    }
+
+    private func send() {
+        let text = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !text.isEmpty else { return }
+        question = ""
+        appState.askThisNote(text, steps: steps, title: title)
     }
 }

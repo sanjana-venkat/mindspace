@@ -325,6 +325,12 @@ final class AppState: ObservableObject {
     let localTranscriber = LocalSpeechTranscriber()
     /// Runs beside a recording so you can watch it being heard.
     lazy var liveTranscript = LiveTranscriptEngine()
+    @Published var isMoonListening = false
+    @Published var askTurns: [AskTurn] = []
+    @Published var askOpen = false
+    /// Conversation inside the note that is open. Cleared when another opens.
+    @Published var noteAskTurns: [AskTurn] = []
+    private var moonListeningScratch: URL?
 
     private let tracker: ExplorationTracker
     private let meetingRecorder = MeetingRecorder()
@@ -1599,6 +1605,271 @@ final class AppState: ObservableObject {
         liveTranscript.stop()
     }
 
+    // MARK: asking
+
+    /// The two conversations: the whole library from the dock, and one note
+    /// from inside it. They run the same pipeline and differ only in scope.
+    enum AskThread { case library, note }
+
+    private func updateTurn(_ thread: AskThread, _ id: UUID, _ change: (inout AskTurn) -> Void) {
+        switch thread {
+        case .library:
+            if let i = askTurns.firstIndex(where: { $0.id == id }) { change(&askTurns[i]) }
+        case .note:
+            if let i = noteAskTurns.firstIndex(where: { $0.id == id }) { change(&noteAskTurns[i]) }
+        }
+    }
+
+    /// What one capture says, in words a model can read: your thought about it
+    /// first, then what you selected, the page, and what the screen showed.
+    private func passage(for step: ExplorationStep, thought: String?, screen: String? = nil) -> String {
+        var parts: [String] = []
+        if let thought = thought.map(Self.readable), !thought.isEmpty {
+            parts.append("Your thought: \(thought)")
+        }
+        if let selected = step.selectedText.map(Self.readable), !selected.isEmpty {
+            parts.append(selected)
+        }
+        if let page = step.pageText.map(Self.readable), !page.isEmpty, page != parts.last {
+            parts.append(page)
+        }
+        if let screen = screen.map(Self.readable), !screen.isEmpty {
+            parts.append("What the screenshot showed: \(screen)")
+        }
+        if let link = step.url, !link.isEmpty { parts.append("Link: \(link)") }
+        if parts.isEmpty { parts.append("\(step.appName): \(step.windowTitle)") }
+        return parts.joined(separator: "\n")
+    }
+
+    /// Every capture in the library, as candidate sources. Nothing is ranked
+    /// here: deciding what is relevant is the model's job, not a word count's.
+    private func libraryPassages() -> [AskSource] {
+        var out: [AskSource] = []
+        for url in historyFiles where !url.lastPathComponent.hasPrefix("Organized_Note_") {
+            guard let data = try? Data(contentsOf: sidecarURL(for: url)),
+                  let doc = try? JSONDecoder().decode(StoredNoteDocument.self, from: data)
+            else { continue }
+            let folder = folderPath(for: folderID(for: url))
+            let where_ = folder.isEmpty ? doc.title : "\(doc.title) (in \(folder))"
+            for step in doc.steps {
+                let text = passage(for: step, thought: doc.annotations[step.id.uuidString])
+                out.append(AskSource(
+                    index: out.count + 1, noteURL: url, noteTitle: where_, stepID: step.id,
+                    label: AskEngine.label(for: step), date: step.timestamp,
+                    text: String(text.prefix(2400))))
+            }
+        }
+        return out
+    }
+
+    /// The old word-overlap ranking, kept only as the fallback for when the
+    /// model cannot be asked to choose.
+    private func keywordPick(_ question: String, from candidates: [AskSource], limit: Int = 10) -> [AskSource] {
+        let words = AskEngine.keywords(question)
+        let since = AskEngine.timeWindow(in: question)
+        let scored = candidates.compactMap { c -> (Double, AskSource)? in
+            if let since, c.date < since { return nil }
+            let s = words.isEmpty
+                ? (since == nil ? 0 : 1.0 / (1.0 + max(0, Date().timeIntervalSince(c.date)) / 86_400))
+                : AskEngine.score(text: c.text, title: c.noteTitle, date: c.date, keywords: words)
+            return s > 0 ? (s, c) : nil
+        }
+        return scored.sorted { $0.0 > $1.0 }.prefix(limit).map(\.1)
+    }
+
+    /// Asks the library a question and keeps the answer beside the captures it
+    /// came from. Nothing is written: asking is not saving.
+    func ask(_ question: String) {
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        askOpen = true
+        run(trimmed, thread: .library, candidates: libraryPassages(), renumber: true,
+            scope: "Sources from across everything you saved", background: nil,
+            empty: "Your library is empty so far. Capture something first, then ask about it.")
+    }
+
+    /// Asking inside one note. The sources are that note's own captures, and
+    /// the numbers match the SOURCES list under the write-up, so a citation of
+    /// [3] is the third row you can already see.
+    func askThisNote(_ question: String, steps: [ExplorationStep], title: String) {
+        let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        let candidates = steps.enumerated().map { i, step in
+            AskSource(
+                index: i + 1,
+                noteURL: activeNoteURL ?? URL(fileURLWithPath: "/"),
+                noteTitle: title,
+                stepID: step.id,
+                label: AskEngine.label(for: step),
+                date: step.timestamp,
+                text: String(passage(for: step, thought: stepAnnotations[step.id],
+                                     screen: vlmResults[step.id]).prefix(3000)))
+        }
+        let writeUp = Self.readable(organizedDraft).trimmingCharacters(in: .whitespacesAndNewlines)
+        run(trimmed, thread: .note, candidates: candidates, renumber: false,
+            scope: "Sources from the note \"\(title)\"",
+            background: writeUp.isEmpty ? nil : String(writeUp.prefix(8000)),
+            empty: "This note has no captures to answer from yet.")
+    }
+
+    /// The pipeline both conversations share.
+    ///
+    /// A small set of captures goes to the model whole. A large one is searched
+    /// first: the model reads a one-line index of every capture and picks the
+    /// ones that matter, by meaning, and only those are read in full. Either
+    /// way the answer cites numbered sources that become the chips.
+    private func run(_ question: String, thread: AskThread, candidates: [AskSource],
+                     renumber: Bool, scope: String, background: String?, empty: String) {
+        let earlier = (thread == .library ? askTurns : noteAskTurns)
+            .filter { !$0.thinking && $0.failure == nil && !$0.answer.isEmpty }
+            .suffix(3)
+        let history = earlier.isEmpty ? "" : "Earlier in this conversation:\n" + earlier.map {
+            "Q: \($0.question)\nA: \($0.answer)"
+        }.joined(separator: "\n\n") + "\n\n"
+
+        let turn = AskTurn(question: question)
+        switch thread {
+        case .library: askTurns.append(turn)
+        case .note: noteAskTurns.append(turn)
+        }
+        let id = turn.id
+
+        guard !candidates.isEmpty else {
+            updateTurn(thread, id) { $0.failure = empty; $0.thinking = false }
+            return
+        }
+
+        let respond: ([AskSource]) -> Void = { [weak self] picked in
+            guard let self else { return }
+            let sources = renumber
+                ? picked.enumerated().map { i, s in
+                    AskSource(index: i + 1, noteURL: s.noteURL, noteTitle: s.noteTitle,
+                              stepID: s.stepID, label: s.label, date: s.date, text: s.text)
+                }
+                : picked
+            self.updateTurn(thread, id) {
+                $0.sources = sources
+                $0.status = "Reading what you saved…"
+            }
+            let body = sources.map { s in
+                "[\(s.index)] From \(s.noteTitle) · \(s.label) · saved \(AskEngine.stamp(s.date))\n\(s.text)"
+            }.joined(separator: "\n\n")
+            var context = "Today is \(AskEngine.today).\n\n\(history)"
+            if let background {
+                context += "Your write-up of this note, for orientation only. Cite the numbered sources, not this:\n\(background)\n\n"
+            }
+            context += "Question: \(question)\n\n\(scope):\n\n\(body)"
+
+            self.visionClient.generateNote(systemPrompt: AskEngine.systemPrompt, context: context) { result in
+                Task { @MainActor [weak self] in
+                    self?.updateTurn(thread, id) { turn in
+                        switch result {
+                        case .success(let text):
+                            turn.answer = text.trimmingCharacters(in: .whitespacesAndNewlines)
+                            turn.cited = AskEngine.citations(in: text)
+                        case .failure(let error):
+                            turn.failure = (error as? GeminiFailure)?.summary ?? error.localizedDescription
+                        }
+                        turn.thinking = false
+                    }
+                }
+            }
+        }
+
+        // Small enough to read whole: no search step, nothing missed.
+        let total = candidates.reduce(0) { $0 + $1.text.count }
+        if total <= 60_000 {
+            respond(candidates)
+            return
+        }
+
+        updateTurn(thread, id) { $0.status = "Searching everything you saved…" }
+        let excerptLength = max(120, min(320, 400_000 / candidates.count))
+        let index = candidates.map { c in
+            let excerpt = c.text.replacingOccurrences(of: "\n", with: " ").prefix(excerptLength)
+            return "[\(c.index)] \(c.noteTitle) · \(c.label) · \(AskEngine.stamp(c.date)) — \(excerpt)"
+        }.joined(separator: "\n")
+        let lastQuestion = earlier.last.map { "(Follows the earlier question: \($0.question))\n" } ?? ""
+        let query = "Today is \(AskEngine.today).\n\nQuestion: \(question)\n\(lastQuestion)\nIndex:\n\(index)"
+
+        visionClient.generateNote(systemPrompt: AskEngine.retrievalPrompt, context: query) { result in
+            Task { @MainActor [weak self] in
+                guard let self else { return }
+                let byIndex = Dictionary(uniqueKeysWithValues: candidates.map { ($0.index, $0) })
+                switch result {
+                case .success(let reply):
+                    var picked = AskEngine.pickedIndices(in: reply).compactMap { byIndex[$0] }.prefix(12)
+                    if picked.isEmpty { picked = ArraySlice(self.keywordPick(question, from: candidates)) }
+                    guard !picked.isEmpty else {
+                        self.updateTurn(thread, id) {
+                            $0.failure = "Nothing you saved seems to touch on that. Try asking it another way, or capture something about it first."
+                            $0.thinking = false
+                        }
+                        return
+                    }
+                    respond(Array(picked))
+                case .failure(let error):
+                    self.updateTurn(thread, id) {
+                        $0.failure = (error as? GeminiFailure)?.summary ?? error.localizedDescription
+                        $0.thinking = false
+                    }
+                }
+            }
+        }
+    }
+
+    func clearAsk() {
+        askTurns.removeAll()
+        askOpen = false
+    }
+
+    // MARK: asking out loud
+
+    /// Listening to a question, which is not the same as recording a note.
+    ///
+    /// Nothing is written to disk and no panel appears. The microphone feeds
+    /// the on-device transcript, the orbit shows the words as they land, and
+    /// when you are done the sentence is a query. A question you asked is not
+    /// a thing you saved.
+    func beginMoonListening() {
+        guard !isRecording, !isMoonListening else { return }
+        Task { @MainActor in
+            do {
+                meetingRecorder.preferredInputDeviceUID = settings.audio.inputDeviceUID
+                let scratch = FileManager.default.temporaryDirectory
+                    .appendingPathComponent("ask_\(UUID().uuidString).wav")
+                moonListeningScratch = scratch
+                try await meetingRecorder.startMicrophoneOnly(saveMicrophoneTo: scratch)
+                meetingRecorder.onMicrophonePCM = { [weak self] samples in
+                    Task { @MainActor in self?.liveTranscript.appendMicrophone(samples) }
+                }
+                liveTranscript.start(mode: .microphone)
+                isMoonListening = true
+                pet.state.listening("Listening")
+            } catch {
+                recordingStatus = "Could not start listening: \(error.localizedDescription)"
+                permissionCenter.refresh()
+                if !permissionCenter.snapshot.microphone { showPermissionOnboarding() }
+            }
+        }
+    }
+
+    /// Stops listening and throws the audio away. The transcript has already
+    /// been read off the stream; the recording itself was never the point.
+    func endMoonListening() {
+        guard isMoonListening else { return }
+        isMoonListening = false
+        Task { @MainActor in
+            meetingRecorder.onMicrophonePCM = nil
+            liveTranscript.stop()
+            _ = await meetingRecorder.stop()
+            if let scratch = moonListeningScratch {
+                try? FileManager.default.removeItem(at: scratch)
+                moonListeningScratch = nil
+            }
+        }
+    }
+
     /// Voice note captured *during* an active exploration session — folded into that session's timeline.
     /// The rail offers two sources: what the Mac is playing, or what you are
     /// saying. They record and transcribe the same way; only the input differs.
@@ -2271,6 +2542,7 @@ final class AppState: ObservableObject {
     }
 
     private func loadNote(_ url: URL) {
+        noteAskTurns.removeAll()
         activeNoteURL = url
         touchLastOpened(url)
         _ = tracker.stop()

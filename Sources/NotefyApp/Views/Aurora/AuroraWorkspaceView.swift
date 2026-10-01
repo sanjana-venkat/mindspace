@@ -8,7 +8,7 @@ struct AuroraWorkspaceView: View {
     @EnvironmentObject private var appState: AppState
 
     @StateObject private var canvas = AuroraCanvasState()
-    @State private var mode: AuroraViewMode = .map
+    @State private var mode: AuroraViewMode = .orbit
     @State private var filter: AuroraFilter = .all
     @State private var sort: AuroraSort = .name
     @State private var query = ""
@@ -119,7 +119,17 @@ struct AuroraWorkspaceView: View {
 
             libraryLayer
 
-            if mode == .map, let tile = focusedTile {
+            if mode == .orbit, let tile = focusedTile {
+                // The canvas overlay animates out of a tile's position on the
+                // map. In orbit there is no such position, so the folder opens
+                // as a sheet instead.
+                AuroraFolderSheet(
+                    tile: tile,
+                    onOpenNote: { note in open(note: note.url) },
+                    onClose: { closeFolder() })
+                    .transition(.opacity)
+                    .zIndex(40)
+            } else if let tile = focusedTile {
                 AuroraFocusOverlay(tile: tile,
                                    onClose: { closeFolder() },
                                    onOpenNote: { open(note: $0) },
@@ -133,6 +143,47 @@ struct AuroraWorkspaceView: View {
             }
 
             chrome
+
+            // The orbit hears you in its own ring. Anywhere else the same
+            // words appear over the view, so the mic does the same thing from
+            // either view instead of throwing you back to the orbit.
+            if appState.isMoonListening, mode != .orbit || focusedFolder != nil {
+                ZStack {
+                    Color.black.opacity(0.4).ignoresSafeArea()
+                    AuroraHeardView(transcript: appState.liveTranscript,
+                                    onCancel: { appState.endMoonListening() },
+                                    onSend: { text in
+                                        appState.endMoonListening()
+                                        appState.ask(text)
+                                    })
+                        .padding(40)
+                }
+                .transition(.opacity)
+                .zIndex(45)
+            }
+
+            if appState.askOpen {
+                ZStack {
+                    Color.black.opacity(0.34)
+                        .ignoresSafeArea()
+                        .onTapGesture { appState.askOpen = false }
+                    AuroraAskView(
+                        turns: appState.askTurns,
+                        onOpenSource: { source in
+                            // Land on the capture the sentence came from, not
+                            // the top of the note.
+                            openNoteStep = source.stepID
+                            openNoteOrganized = false
+                            appState.askOpen = false
+                            open(note: source.noteURL)
+                        },
+                        onClose: { appState.askOpen = false },
+                        onClear: { appState.clearAsk() },
+                        onAsk: { appState.ask($0) })
+                }
+                .transition(.opacity)
+                .zIndex(50)
+            }
 
             if let target = noteMenu {
                 GeometryReader { geo in
@@ -205,6 +256,8 @@ struct AuroraWorkspaceView: View {
         .animation(.smooth(duration: 0.22), value: folderMenu)
         .animation(.smooth(duration: 0.2), value: folderToDelete)
         .animation(.smooth(duration: 0.2), value: namingFolder)
+        .animation(.smooth(duration: 0.22), value: appState.askOpen)
+        .animation(.smooth(duration: 0.22), value: appState.isMoonListening)
         .background(shortcuts)
         .onAppear { canvas.enabled = canvasLive; seedFolderPoints() }
         .onChange(of: focusedFolder) { _, _ in canvas.enabled = canvasLive }
@@ -230,29 +283,24 @@ struct AuroraWorkspaceView: View {
     /// type-checker's budget.
     @ViewBuilder
     private var libraryLayer: some View {
-        let focusing = focusedFolder != nil && mode == .map
+        let focusing = focusedFolder != nil
         Group {
             if mode == .map {
                 canvasLayer
             } else {
-                AuroraFeedView(tiles: sortedTiles, query: query, sort: $sort,
-                               focused: $focusedFolder,
-                               onOpenNote: { open(note: $0) },
-                               onRenameFolder: { tile, name in rename(tile, to: name) },
-                               onDeleteFolder: { tile in
-                                   guard let id = tile.folderID else { return }
-                                   folderToDelete = AuroraFolderTarget(id: id, name: tile.name, point: .zero)
-                               },
-                               onRenameNote: { note, name in appState.renameNote(note.url, to: name) },
-                               onDeleteNote: { note in appState.deleteNote(note.url) },
-                               onNoteRightClick: { note, point in
-                                   // The row already renames on a double-click
-                                   // and deletes on a swipe; filing is what is
-                                   // left for the menu.
-                                   noteMenu = AuroraNoteTarget(url: note.url, title: note.title,
-                                                               point: point, style: .moveOnly)
-                               },
-                               onDropNotes: { tile, urls in file(notes: urls, into: tile) })
+                AuroraOrbitView(
+                    tiles: sortedTiles,
+                    transcript: appState.liveTranscript,
+                    levelDB: { appState.microphonePowerDB },
+                    onOpenFolder: { tile in
+                        withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+                            focusedFolder = tile.id
+                        }
+                    },
+                    onListen: { appState.beginMoonListening() },
+                    onStopListening: { appState.endMoonListening() },
+                    listening: appState.isMoonListening,
+                    onAsk: { question in appState.ask(question) })
             }
         }
         .blur(radius: focusing ? 9 : 0)
@@ -437,7 +485,15 @@ struct AuroraWorkspaceView: View {
 
             VStack {
                 Spacer()
-                searchDock.padding(.bottom, 30)
+                VStack(spacing: 12) {
+                    searchDock
+                    // Always laid out, only hidden while typing. Removing the
+                    // row moved the bar down under your cursor mid-word.
+                    suggestionPills
+                        .opacity(query.isEmpty ? 1 : 0)
+                        .allowsHitTesting(query.isEmpty)
+                }
+                .padding(.bottom, 30)
             }
             .frame(maxWidth: .infinity)
 
@@ -449,8 +505,8 @@ struct AuroraWorkspaceView: View {
 
     private var modeToggle: some View {
         HStack(spacing: 2) {
-            modeItem("square.grid.2x2", "Map", .map)
-            modeItem("list.bullet", "Feed", .feed)
+            modeItem("circle.circle", "Orbit", .orbit)
+            modeItem("square.grid.2x2", "Folders", .map)
         }
         .padding(4)
         .background(.regularMaterial, in: Capsule())
@@ -496,9 +552,31 @@ struct AuroraWorkspaceView: View {
             // Results are a response to typing, not a standing panel.
             let typed = query.trimmingCharacters(in: .whitespaces)
             let folderHits = typed.isEmpty ? [] : Array(matchingFolders(typed).prefix(3))
-            let hits = typed.isEmpty ? [] : Array(appState.searchNotes(query: typed).prefix(7))
-            if !hits.isEmpty || !folderHits.isEmpty {
+            let hits = typed.isEmpty ? [] : Array(appState.searchNotes(query: typed).prefix(5))
+            if !typed.isEmpty {
                 VStack(spacing: 2) {
+                    // Return asks. The matches underneath are shortcuts to
+                    // things whose name you already know.
+                    Button { submit() } label: {
+                        HStack(spacing: 12) {
+                            Image(systemName: "sparkle")
+                                .font(.system(size: 11, weight: .semibold))
+                                .foregroundStyle(Aurora.accent)
+                                .frame(width: 14)
+                            Text("Ask your mindspace: \u{201C}\(typed)\u{201D}")
+                                .font(Aurora.ui(14.5)).foregroundStyle(Aurora.ink).lineLimit(1)
+                            Spacer(minLength: 8)
+                            Text("↩").font(Aurora.mono(12)).foregroundStyle(Aurora.ink3)
+                        }
+                        .padding(.horizontal, 13).padding(.vertical, 9)
+                        .contentShape(Rectangle())
+                    }
+                    .buttonStyle(AuroraHoverRow())
+
+                    if !folderHits.isEmpty || !hits.isEmpty {
+                        Rectangle().fill(Aurora.line).frame(height: 1).padding(.horizontal, 10)
+                    }
+
                     // Folders first, and marked as folders: a name you half
                     // remember is as likely to be a folder's as a note's.
                     ForEach(folderHits) { tile in
@@ -574,10 +652,8 @@ struct AuroraWorkspaceView: View {
             HStack(spacing: 10) {
                     Image(systemName: "magnifyingglass")
                         .font(.system(size: 15, weight: .semibold)).foregroundStyle(Aurora.ink3)
-                // Results appear as you type and Return opens the top one.
-                // It no longer makes a folder out of whatever you typed —
-                // that is the button up with the view controls, and always
-                // a deliberate act.
+                // Matches appear as you type; Return asks. The bar is the
+                // same in both views, mic and all.
                     TextField(dockPlaceholder, text: $query)
                         .textFieldStyle(.plain)
                         .font(Aurora.ui(16, .regular))
@@ -594,6 +670,27 @@ struct AuroraWorkspaceView: View {
                         .buttonStyle(AuroraTapDown())
                         .help("Clear")
                     }
+                    Button { appState.beginMoonListening() } label: {
+                        Image(systemName: "mic.fill")
+                            .font(.system(size: 12))
+                            .foregroundStyle(Aurora.ink2)
+                            .frame(width: 30, height: 30)
+                            .background(Aurora.surface2, in: Circle())
+                    }
+                    .buttonStyle(AuroraTapDown())
+                    .help("Ask out loud")
+
+                    Button { submit() } label: {
+                        Image(systemName: "arrow.right")
+                            .font(.system(size: 12, weight: .semibold))
+                            .foregroundStyle(.white)
+                            .frame(width: 30, height: 30)
+                            .background(Aurora.accent, in: Circle())
+                    }
+                    .buttonStyle(AuroraTapDown())
+                    .disabled(query.trimmingCharacters(in: .whitespaces).isEmpty)
+                    .opacity(query.trimmingCharacters(in: .whitespaces).isEmpty ? 0.4 : 1)
+                    .help("Ask your mindspace")
                 }
             .padding(.horizontal, 20)
             .frame(height: 51)
@@ -611,17 +708,41 @@ struct AuroraWorkspaceView: View {
         return sortedTiles.filter { !$0.isUnfiled && $0.name.lowercased().contains(needle) }
     }
 
-    private var dockPlaceholder: String {
-        if let t = focusedTile { return "Search in \(t.name)" }
-        return "Search captures, notes and folders"
+    /// Openers made of real folders, so a suggestion never promises something
+    /// the library cannot answer.
+    private var suggestionPills: some View {
+        let picks = sortedTiles
+            .filter { !$0.isUnfiled && $0.captureCount > 0 }
+            .sorted { $0.captureCount > $1.captureCount }
+            .prefix(3)
+        let questions = picks.isEmpty
+            ? ["What did I save this week?"]
+            : picks.map { "What did I save about \($0.name)?" }
+        return HStack(spacing: 10) {
+            ForEach(questions, id: \.self) { q in
+                Button { appState.ask(q) } label: {
+                    Text(q)
+                        .font(Aurora.ui(13, .regular))
+                        .foregroundStyle(Aurora.ink2)
+                        .lineLimit(1)
+                        .padding(.horizontal, 16).padding(.vertical, 9)
+                        .background(Capsule().fill(Aurora.surface.opacity(0.5)))
+                        .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
+                }
+                .buttonStyle(AuroraTapDown())
+            }
+        }
     }
+
+    /// The same words in both views: the bar does the same thing in both.
+    private var dockPlaceholder: String { "Ask anything" }
 
     private var shortcuts: some View {
         ZStack {
             Button("") { back() }.keyboardShortcut(.cancelAction)
             Button("") { searchFocused = true }.keyboardShortcut("f", modifiers: .command)
             Button("") { appState.showCapturePet() }.keyboardShortcut("k", modifiers: [.command, .shift])
-            Button("") { withAnimation { mode = mode == .map ? .feed : .map } }
+            Button("") { withAnimation { mode = mode == .map ? .orbit : .map } }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
         }
         .opacity(0).frame(width: 0, height: 0)
@@ -710,18 +831,15 @@ struct AuroraWorkspaceView: View {
         }
     }
 
-    /// Return in the dock opens the top result. It used to make a folder when
-    /// nothing matched, which turned a fruitless search into a surprise folder
-    /// named after the thing you were looking for.
+    /// Return in the dock asks, in either view. It used to open the top keyword
+    /// match in one view and ask in the other, so the same keystroke did two
+    /// different things depending on which icon was lit.
     private func submit() {
-        let typed = query.trimmingCharacters(in: .whitespaces)
-        guard !typed.isEmpty, let hit = appState.searchNotes(query: typed).first else { return }
-        let found = appState.searchHit(for: hit.url, query: typed)
-        openNoteMark = typed
-        openNoteStep = found?.stepID
-        openNoteOrganized = found?.organized ?? false
+        let typed = query.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !typed.isEmpty else { return }
         query = ""
-        open(note: hit.url)
+        searchFocused = false
+        appState.ask(typed)
     }
 
     /// Files dragged notes into a folder. Anything that isn't a note this app
