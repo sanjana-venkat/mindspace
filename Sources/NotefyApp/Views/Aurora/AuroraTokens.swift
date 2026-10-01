@@ -346,7 +346,8 @@ struct AuroraHoverRow: ButtonStyle {
 extension Aurora {
     static let fieldFill = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(srgbRed: 8/255, green: 9/255, blue: 10/255, alpha: 0.96)
+            // Dark grey, a step below the ground. Near black read as a hole.
+            ? NSColor(srgbRed: 34/255, green: 35/255, blue: 37/255, alpha: 0.94)
             : NSColor(srgbRed: 1, green: 1, blue: 1, alpha: 0.96)
     })
 }
@@ -357,8 +358,7 @@ struct AuroraRaisedField: ViewModifier {
     func body(content: Content) -> some View {
         content
             .background {
-                // Near black at night, so the field reads as a slot cut into
-                // the page rather than a grey lozenge on it. White by day.
+                // A dark grey a step below the ground at night, white by day.
                 Capsule().fill(Aurora.fieldFill)
             }
             .overlay {

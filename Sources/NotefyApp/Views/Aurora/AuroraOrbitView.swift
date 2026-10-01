@@ -94,10 +94,11 @@ struct AuroraOrbitView: View {
         return keep + [more]
     }
 
-    /// The ring never closes. A full circle reads as a meter at maximum, and
-    /// with a single folder it would say nothing at all, so the arcs share
-    /// three quarters of the circle and the open wedge sits at the top.
-    private let span: Double = 276
+    /// The arcs go all the way round. The open wedge at the top was there for
+    /// a lone folder, where a closed ring would read as a meter at maximum;
+    /// with Ungrouped always on the ring there is never just one, and the gap
+    /// read as a broken ring instead.
+    private let span: Double = 360
 
     private var segments: [Segment] {
         let list = shown
