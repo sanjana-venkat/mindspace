@@ -499,9 +499,10 @@ struct AuroraWorkspaceView: View {
                 .padding(.bottom, 30)
                 // While the moon listens it has its own Send and Cancel, and a
                 // long sentence pushes them down to exactly where the pills sit.
-                // A folder open beside the ring needs no search under it.
-                .opacity(appState.isMoonListening || (mode == .orbit && focusedFolder != nil) ? 0 : 1)
-                .allowsHitTesting(!(appState.isMoonListening || (mode == .orbit && focusedFolder != nil)))
+                // An open folder is the thing you are looking at, in either
+                // view. A search bar over it reads as part of the folder.
+                .opacity(appState.isMoonListening || focusedFolder != nil ? 0 : 1)
+                .allowsHitTesting(!(appState.isMoonListening || focusedFolder != nil))
             }
             .frame(maxWidth: .infinity)
 
@@ -763,6 +764,7 @@ struct AuroraWorkspaceView: View {
     @State private var canvasWindow: NSWindow?
 
     private func openFolder(_ id: String) {
+        query = ""
         withAnimation(.spring(response: 0.5, dampingFraction: 0.85)) { focusedFolder = id }
     }
     private func closeFolder() {

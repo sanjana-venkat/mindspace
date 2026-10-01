@@ -33,10 +33,11 @@ enum OrbitSnapshot {
         render(five, hover: "Half ideas", to: dir.appendingPathComponent("3-hover-small.png"))
         render(many, hover: nil, to: dir.appendingPathComponent("4-forty-folders.png"))
         render(hundred, hover: AuroraOrbitView.overflowID, to: dir.appendingPathComponent("7-hundred-overflow.png"))
-        let starters = [("Work", 3), ("Passion", 5), ("Hobbies", 2),
-                        ("Learning", 0), ("Reading", 1), ("Research", 4)]
+        let starters = [("Work", 3), ("Hobbies", 2), ("Learning", 0),
+                        ("Reading", 1), ("Research", 4)]
             .map { tile($0.0, counts: [], tint: $0.1, chosen: true) }
-        render(starters, hover: "Passion", to: dir.appendingPathComponent("8-new-user.png"))
+        probeHover(starters + [tile("Unfiled", unfiled: true, counts: [8], tint: 2)], into: dir)
+        render(starters, hover: "Learning", to: dir.appendingPathComponent("8-new-user.png"))
         render(starters + [tile("Unfiled", unfiled: true, counts: [8], tint: 2)],
                hover: nil, to: dir.appendingPathComponent("9-you-after-seeding.png"))
         let psych = tile("Cognitive Psych", counts: [6, 5, 4, 3], tint: 0, chosen: true,
@@ -48,6 +49,30 @@ enum OrbitSnapshot {
                to: dir.appendingPathComponent("5-listening-short.png"))
         render(five, listening: "so the thing I keep coming back to is whether a correlation in my readings was ever reported as a cause and what the seminar said about it",
                to: dir.appendingPathComponent("6-listening-long.png"))
+    }
+
+    /// Walks the pointer once around the ring, a degree at a time, on the arc
+    /// line and just outside the band, and writes down what it hit. Each folder
+    /// should appear once, in ring order, and the band's edge should hit
+    /// nothing.
+    private static func probeHover(_ tiles: [AuroraFolderTile], into dir: URL) {
+        let view = AuroraOrbitView(tiles: tiles, transcript: LiveTranscriptEngine(),
+                                   onOpenFolder: { _ in }, onListen: {}, onStopListening: {},
+                                   listening: false, onAsk: { _ in })
+        let size = (116.0 + 9 + 24) * 2, c = size / 2
+        var runs: [String] = []
+        var outside = 0
+        for deg in stride(from: 0.0, to: 360.0, by: 1.0) {
+            let a = deg * .pi / 180
+            let on = CGPoint(x: c + cos(a) * 116, y: c + sin(a) * 116)
+            let id = view.segmentID(at: on) ?? "·gap"
+            if runs.last != id { runs.append(id) }
+            let off = CGPoint(x: c + cos(a) * (116 + 40), y: c + sin(a) * (116 + 40))
+            if view.segmentID(at: off) != nil { outside += 1 }
+        }
+        let report = "on the line: " + runs.joined(separator: " → ")
+            + "\nhits 40pt outside the band: \(outside)\n"
+        try? report.write(to: dir.appendingPathComponent("hover-probe.txt"), atomically: true, encoding: .utf8)
     }
 
     private static func tile(_ name: String, unfiled: Bool = false, counts: [Int], tint: Int,

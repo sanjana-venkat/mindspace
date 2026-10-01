@@ -35,6 +35,7 @@ struct AuroraOrbitView: View {
     /// Bumped on every hover change, so a delayed clear only lands if nothing
     /// has been hovered since.
     @State private var hoverToken = 0
+    @State private var releasing = false
 
     private let ringRadius: CGFloat = 116
     private let thickness: CGFloat = 9
@@ -122,15 +123,22 @@ struct AuroraOrbitView: View {
 
     /// Leaving an arc lets go after a beat rather than at once, so the label
     /// is still there when the pointer crosses the gap to click it.
-    private func setHover(_ id: String, _ inside: Bool) {
-        hoverToken += 1
-        if inside {
-            hovered = id
-            return
-        }
+    /// The pointer is on a folder. Cancels any pending release.
+    private func grab(_ id: String) {
+        if hovered != id { hovered = id }
+        if releasing { releasing = false; hoverToken += 1 }
+    }
+
+    /// The pointer left. The label stays a beat, so crossing from the arc to
+    /// the label to click it does not lose it on the way.
+    private func release() {
+        guard hovered != nil, !releasing else { return }
+        releasing = true
         let token = hoverToken
-        DispatchQueue.main.asyncAfter(deadline: .now() + 0.35) {
-            if hoverToken == token, hovered == id { hovered = nil }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            guard hoverToken == token else { return }
+            hovered = nil
+            releasing = false
         }
     }
 
@@ -200,25 +208,55 @@ struct AuroraOrbitView: View {
                             style: StrokeStyle(lineWidth: lit ? thickness + 5 : thickness,
                                                lineCap: .round))
                     .shadow(color: lit ? seg.tint.opacity(0.7) : .clear, radius: 14)
-                    .frame(width: ringRadius * 2 + thickness * 3,
-                           height: ringRadius * 2 + thickness * 3)
-                    // The stroke is the picture; this wedge is what the pointer
-                    // actually hits, and it is deliberately fatter than the line
-                    // so a 13pt arc is not a 13pt target.
-                    //
-                    // The shape has to be set while the view is still the
-                    // ring's own square. Applied after `.position`, the view is
-                    // the whole window, the wedge centres on the window rather
-                    // than the moon, and the target sits 40pt below the arc
-                    // you can see, which is why clicking the arc did nothing.
-                    .contentShape(OrbitWedge(start: seg.slotStart, end: seg.slotEnd,
-                                             radius: ringRadius, thickness: thickness + 16))
-                    .onHover { setHover(seg.id, $0) }
-                    .onTapGesture { open(seg) }
-                    .help(seg.isOverflow ? "Show every folder" : "Open \(seg.tile.name)")
+                    .frame(width: trackSize, height: trackSize)
                     .position(centre)
+                    .allowsHitTesting(false)
             }
+
+            // One pointer target for the whole ring. Each arc used to carry its
+            // own `.onHover`, but on macOS that tracks the view's rectangle, not
+            // its content shape, and every arc's rectangle was the same square.
+            // All seven reported hover at once and the last one drawn won,
+            // which is why every arc said "Work". Working out the folder from
+            // the pointer's angle is exact and cannot overlap.
+            Color.clear
+                .frame(width: trackSize, height: trackSize)
+                .contentShape(Rectangle())
+                .onContinuousHover(coordinateSpace: .local) { phase in
+                    switch phase {
+                    case .active(let p):
+                        if let id = segmentID(at: p) { grab(id) } else { release() }
+                    case .ended:
+                        release()
+                    }
+                }
+                .onTapGesture(coordinateSpace: .local) { p in
+                    guard let id = segmentID(at: p),
+                          let seg = segments.first(where: { $0.id == id }) else { return }
+                    open(seg)
+                }
+                .position(centre)
         }
+    }
+
+    /// The square the ring and its pointer target share.
+    private var trackSize: CGFloat { (ringRadius + thickness + 24) * 2 }
+
+    /// Which folder a point in the ring's square belongs to, by distance from
+    /// the centre and angle around it. A band either side of the line counts,
+    /// so the target is wider than the 9pt arc you can see. Gaps belong to the
+    /// folder before them, so there is no dead ground between arcs.
+    func segmentID(at p: CGPoint) -> String? {
+        let c = trackSize / 2
+        let dx = p.x - c, dy = p.y - c
+        let r = (dx * dx + dy * dy).squareRoot()
+        guard abs(r - ringRadius) <= thickness / 2 + 12 else { return nil }
+        let list = segments
+        guard let first = list.first else { return nil }
+        var a = atan2(dy, dx) * 180 / .pi
+        while a < first.slotStart { a += 360 }
+        while a >= first.slotStart + 360 { a -= 360 }
+        return list.first { a >= $0.slotStart && a < $0.slotEnd }?.id
     }
 
     private func open(_ seg: Segment) {
@@ -346,7 +384,7 @@ struct AuroraOrbitView: View {
         }
         .fixedSize()
         .contentShape(Capsule())
-        .onHover { setHover(seg.id, $0) }
+        .onHover { $0 ? grab(seg.id) : release() }
         .onTapGesture { open(seg) }
         .help(seg.isOverflow ? "Show every folder" : "Open \(seg.tile.name)")
 
