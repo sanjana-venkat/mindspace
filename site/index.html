@@ -55,10 +55,7 @@
   .small { color: var(--ink-3); font-size: 14px; margin-top: 14px; }
 
   .video { margin: 56px auto 0; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); background: #0c0e14; aspect-ratio: 16 / 9; position: relative; box-shadow: 0 30px 80px rgba(0,0,0,.45); }
-  .video video, .video iframe { width: 100%; height: 100%; display: block; border: 0; object-fit: cover; }
-  .video .fallback { position: absolute; inset: 0; display: none; place-items: center; text-align: center; color: var(--ink-3); }
-  .video.missing .fallback { display: grid; }
-  .video.missing video { display: none; }
+  .video iframe { width: 100%; height: 100%; display: block; border: 0; object-fit: cover; }
 
   section { padding: 80px 0 0; }
   h2 { font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: clamp(30px, 4.5vw, 44px); line-height: 1.1; margin: 12px 0 20px; }
@@ -73,6 +70,10 @@
   .phone { width: 100%; max-width: 300px; border-radius: 28px; border: 1px solid var(--line); box-shadow: 0 30px 80px rgba(0,0,0,.45); justify-self: center; }
   @media (max-width: 760px) { .split { grid-template-columns: 1fr; gap: 32px; } header nav a:not(:last-child) { display: none; } }
 
+  .shots { display: grid; gap: 40px; margin-top: 32px; }
+  .shots figure { margin: 0; }
+  .shots img { width: 100%; height: auto; display: block; border-radius: 12px; border: 1px solid var(--line); box-shadow: 0 30px 80px rgba(0,0,0,.45); }
+  .shots figcaption { color: var(--ink-2); font-size: 15px; margin-top: 14px; text-align: center; }
   ul.plain { list-style: none; padding: 0; margin: 0; }
   ul.plain li { padding: 14px 0; border-top: 1px solid var(--line); color: var(--ink-2); }
   ul.plain li strong { color: var(--ink); font-weight: 600; }
@@ -89,6 +90,7 @@
     <nav>
       <a href="#demo">Demo</a>
       <a href="#how">How it works</a>
+      <a href="#app">Screenshots</a>
       <a href="https://github.com/sanjana-venkat/mindspace">GitHub</a>
     </nav>
   </header>
@@ -104,12 +106,8 @@
     <p class="small">Free · macOS 14 Sonoma or newer · Apple silicon and Intel</p>
   </div>
 
-  <!-- To change the demo: replace assets/demo.mp4, or swap the <video> for a YouTube/Loom <iframe>. -->
   <div class="video" id="demo">
-    <video controls playsinline preload="metadata">
-      <source src="assets/demo.mp4" type="video/mp4">
-    </video>
-    <div class="fallback"><div><p class="mono">Demo video</p><p>Coming soon.</p></div></div>
+    <iframe src="https://www.youtube-nocookie.com/embed/31xJv7tqQM8?rel=0" title="Mindspace demo" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture" allowfullscreen loading="lazy"></iframe>
   </div>
 
   <section id="how">
@@ -121,6 +119,16 @@
       <div class="card"><span class="dot" style="background:var(--violet)"></span><h3>Save selected text</h3><p>Whatever you have highlighted, in any app. ⌘⇧T</p></div>
       <div class="card"><span class="dot" style="background:var(--blue)"></span><h3>Talk it out</h3><p>Voice notes, transcribed on your Mac. Nothing leaves it. ⌘⇧A</p></div>
       <div class="card"><span class="dot" style="background:var(--amber)"></span><h3>Meeting notes</h3><p>You on one side, everyone else on the other. Only when you say so. ⌘⇧M</p></div>
+    </div>
+  </section>
+
+  <section id="app">
+    <p class="mono">On your Mac</p>
+    <h2>Every capture, and why you kept it.</h2>
+    <div class="shots">
+      <figure><img src="assets/mac-grid.webp" alt="A note's captures laid out as tiles: voice notes, screenshots and the thought written under each" loading="lazy"><figcaption>Every capture in a note, with the line you wrote about why you kept it.</figcaption></figure>
+      <figure><img src="assets/mac-panels.webp" alt="Panels view: your thought on the left, the capture it belongs to on the right" loading="lazy"><figcaption>Your thought beside the thing it was about.</figcaption></figure>
+      <figure><img src="assets/mac-writeup.webp" alt="The write-up Mindspace made from a note's captures" loading="lazy"><figcaption>When a note has enough in it, Mindspace writes the tidy version, and says when it is out of date.</figcaption></figure>
     </div>
   </section>
 
@@ -152,15 +160,5 @@
     <span><a href="https://github.com/sanjana-venkat/mindspace">Source on GitHub</a></span>
   </footer>
 </div>
-<script>
-  // Show a "coming soon" panel instead of a broken player when there is no demo file yet.
-  const box = document.querySelector('.video');
-  const vid = box.querySelector('video');
-  const src = vid.querySelector('source');
-  const missing = () => box.classList.add('missing');
-  src.addEventListener('error', missing);
-  vid.addEventListener('error', missing);
-  if (vid.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) missing();
-</script>
 </body>
 </html>
