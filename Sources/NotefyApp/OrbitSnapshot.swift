@@ -13,9 +13,8 @@ enum OrbitSnapshot {
     static let size = CGSize(width: 1180, height: 780)
 
     static func renderAll(into directory: String) {
-        AuroraFolderPanel.drawsUnscrolled = true
         AuroraGrid.drawsUnscrolled = true
-        defer { AuroraFolderPanel.drawsUnscrolled = false; AuroraGrid.drawsUnscrolled = false }
+        defer { AuroraGrid.drawsUnscrolled = false }
         let dir = URL(fileURLWithPath: directory, isDirectory: true)
         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
 
@@ -62,8 +61,13 @@ enum OrbitSnapshot {
         let psych = tile("Cognitive Psych", counts: [6, 5, 4, 3], tint: 0, chosen: true,
                          titles: ["Correlation is not causation", "Memory and encoding",
                                   "Seminar 9, the bits I missed", "Exam 2, likely themes"])
-        render([psych] + Array(five.dropFirst()), panel: psych,
-               to: dir.appendingPathComponent("10-folder-open.png"))
+        render([psych] + Array(five.dropFirst()), panel: psych, side: .right,
+               to: dir.appendingPathComponent("10-topic-open-right.png"))
+        let reading = tile("Readings", counts: [3, 2, 2, 1, 4, 2], tint: 2, chosen: true,
+                           titles: ["Thinking, Fast and Slow", "The Extended Mind", "How We Learn",
+                                    "Make It Stick", "Peak", "Range"])
+        render(Array(five.prefix(2)) + [reading] + Array(five.dropFirst(3)), panel: reading, side: .left,
+               to: dir.appendingPathComponent("11-topic-open-left.png"))
         render(five, listening: "what did I save about correlation",
                to: dir.appendingPathComponent("5-listening-short.png"))
         render(five, listening: "so the thing I keep coming back to is whether a correlation in my readings was ever reported as a cause and what the seminar said about it",
@@ -76,7 +80,7 @@ enum OrbitSnapshot {
     /// nothing.
     private static func probeHover(_ tiles: [AuroraFolderTile], into dir: URL) {
         let view = AuroraOrbitView(tiles: tiles, transcript: LiveTranscriptEngine(),
-                                   onOpenFolder: { _ in }, onListen: {}, onStopListening: {},
+                                   onOpenFolder: { _, _ in }, onListen: {}, onStopListening: {},
                                    listening: false, onAsk: { _ in })
         let size = (116.0 + 9 + 24) * 2, c = size / 2
         var runs: [String] = []
@@ -182,20 +186,21 @@ enum OrbitSnapshot {
 
     private static func render(_ tiles: [AuroraFolderTile], hover: String? = nil,
                                listening: String? = nil, panel: AuroraFolderTile? = nil,
-                               to url: URL) {
+                               side: AuroraNoteArc.Side = .right, to url: URL) {
         let transcript = LiveTranscriptEngine()
         if let listening { transcript.debugSay(listening) }
 
         let view = ZStack {
             Aurora.ground
             AuroraOrbitView(tiles: tiles, transcript: transcript,
-                            onOpenFolder: { _ in }, onListen: {}, onStopListening: {},
+                            onOpenFolder: { _, _ in }, onListen: {}, onStopListening: {},
                             listening: listening != nil, onAsk: { _ in },
                             focusedID: panel?.id,
-                            shiftedFraction: panel == nil ? nil : AuroraFolderPanel.widthFraction,
+                            centreFraction: panel == nil ? nil : AuroraNoteArc.ringCentreFraction(for: side),
                             previewHover: hover)
             if let panel {
-                AuroraFolderPanel(tile: panel, onOpenNote: { _ in }, onClose: {}, renaming: .constant(false))
+                AuroraNoteArc(tile: panel, side: side, onOpenNote: { _ in }, onClose: {},
+                              renaming: .constant(false), startsOpen: true)
             }
             if listening == nil && panel == nil { chromeOutline }
         }

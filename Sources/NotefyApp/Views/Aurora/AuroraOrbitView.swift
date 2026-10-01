@@ -10,7 +10,9 @@ struct AuroraOrbitView: View {
     let tiles: [AuroraFolderTile]
     @ObservedObject var transcript: LiveTranscriptEngine
     var levelDB: () -> Float = { -160 }
-    var onOpenFolder: (AuroraFolderTile) -> Void
+    /// Opens a topic, saying which side of the ring its arc is on, so its
+    /// notes can come out on that side.
+    var onOpenFolder: (AuroraFolderTile, AuroraNoteArc.Side) -> Void
     var onListen: () -> Void
     var onStopListening: () -> Void
     /// Owned by AppState, so the ring can only claim to be listening when the
@@ -22,9 +24,9 @@ struct AuroraOrbitView: View {
     /// The folder open in the panel. Its arc stays lit so you can see which
     /// slice you are reading.
     var focusedID: String? = nil
-    /// When a panel takes the right of the window, the ring centres in what is
-    /// left rather than sitting half under it.
-    var shiftedFraction: CGFloat? = nil
+    /// Where the moon sits across the window, as a fraction of its width.
+    /// Nil is the middle; an open topic moves it aside for its notes.
+    var centreFraction: CGFloat? = nil
     #if DEBUG
     /// Lets the offscreen renderer draw the label without a real pointer.
     var previewHover: String? = nil
@@ -42,7 +44,7 @@ struct AuroraOrbitView: View {
     @State private var hoverToken = 0
     @State private var releasing = false
 
-    private let ringRadius: CGFloat = 116
+    private var ringRadius: CGFloat { Mindspace.ringRadius }
     private let thickness: CGFloat = 9
     private let gapDegrees: Double = 2.4
 
@@ -169,8 +171,8 @@ struct AuroraOrbitView: View {
 
     var body: some View {
         GeometryReader { geo in
-            let free = geo.size.width * (1 - (shiftedFraction ?? 0))
-            let centre = CGPoint(x: free / 2, y: geo.size.height / 2 - 40)
+            let centre = CGPoint(x: geo.size.width * (centreFraction ?? 0.5),
+                                 y: geo.size.height / 2 - 40)
 
             ZStack {
                 if listening {
@@ -188,14 +190,14 @@ struct AuroraOrbitView: View {
                 // With a folder open beside the ring, the window draws the
                 // words over everything instead; drawing them here as well put
                 // two Send buttons on screen.
-                if listening && shiftedFraction == nil {
+                if listening && centreFraction == nil {
                     heard(centre: centre, width: geo.size.width)
                 } else {
                 }
             }
             .animation(.spring(response: 0.3, dampingFraction: 0.84), value: hovered)
             .animation(.spring(response: 0.38, dampingFraction: 0.86), value: listening)
-            .animation(.spring(response: 0.48, dampingFraction: 0.86), value: shiftedFraction)
+            .animation(.spring(response: 0.48, dampingFraction: 0.86), value: centreFraction)
             .onChange(of: listening) { _, on in syncMood(on) }
             .onAppear {
                 mood.startBlinking()
@@ -275,7 +277,9 @@ struct AuroraOrbitView: View {
     }
 
     private func open(_ seg: Segment) {
-        if seg.isOverflow { onShowAll() } else { onOpenFolder(seg.tile) }
+        if seg.isOverflow { onShowAll(); return }
+        let mid = (seg.slotStart + seg.slotEnd) / 2 * .pi / 180
+        onOpenFolder(seg.tile, cos(mid) >= 0 ? .right : .left)
     }
 
     private var shownFace: MoonMood.Face {

@@ -19,6 +19,8 @@ struct AuroraWorkspaceView: View {
     /// the rename instead of closing the folder underneath it.
     @State private var panelRenaming = false
     @State private var cancelRenameTick = 0
+    /// Which side an open topic's notes fan out on.
+    @State private var arcSide: AuroraNoteArc.Side = .right
     @State private var settingsOpen = false
     @State private var cancelEdits = 0
     @State private var noteMenu: AuroraNoteTarget?
@@ -130,19 +132,22 @@ struct AuroraWorkspaceView: View {
                 // Beside the ring, not over it. Hidden while a note is open,
                 // which is drawn lower and would otherwise sit under it; the
                 // folder is still open, so Back returns to it.
-                AuroraFolderPanel(
+                AuroraNoteArc(
                     tile: tile,
+                    side: arcSide,
                     onOpenNote: { note in open(note: note.url) },
                     onClose: { closeFolder() },
                     onRenameFolder: { name in rename(tile, to: name) },
-                    onRenameNote: { note, name in appState.renameNote(note.url, to: name) },
+                    onNoteRightClick: { note, point in
+                        noteMenu = AuroraNoteTarget(url: note.url, title: note.title, point: point)
+                    },
                     renaming: $panelRenaming,
                     cancelRenameTick: cancelRenameTick)
-                    .id(tile.id)
+                    .id("\(tile.id)-\(arcSide)")
                     .blur(radius: appState.askOpen ? 26 : 0)
-                    .transition(.move(edge: .trailing).combined(with: .opacity))
+                    .transition(.opacity)
                     .zIndex(40)
-            } else if let tile = focusedTile {
+            } else if mode == .map, let tile = focusedTile {
                 AuroraFocusOverlay(tile: tile,
                                    onClose: { closeFolder() },
                                    onOpenNote: { open(note: $0) },
@@ -303,13 +308,35 @@ struct AuroraWorkspaceView: View {
         Group {
             if mode == .map {
                 canvasLayer
+            } else if mode == .feed {
+                // The list, as it was: easier to scan than tiles once there
+                // are dozens of topics, and the search filters it.
+                AuroraFeedView(tiles: sortedTiles, query: query, sort: $sort,
+                               focused: $focusedFolder,
+                               onOpenNote: { open(note: $0) },
+                               onRenameFolder: { tile, name in rename(tile, to: name) },
+                               onDeleteFolder: { tile in
+                                   guard let id = tile.folderID else { return }
+                                   folderToDelete = AuroraFolderTarget(id: id, name: tile.name, point: .zero)
+                               },
+                               onRenameNote: { note, name in appState.renameNote(note.url, to: name) },
+                               onDeleteNote: { note in appState.deleteNote(note.url) },
+                               onNoteRightClick: { note, point in
+                                   noteMenu = AuroraNoteTarget(url: note.url, title: note.title,
+                                                               point: point, style: .moveOnly)
+                               },
+                               onDropNotes: { tile, urls in file(notes: urls, into: tile) })
             } else {
                 AuroraOrbitView(
                     tiles: sortedTiles,
                     transcript: appState.liveTranscript,
                     levelDB: { appState.microphonePowerDB },
-                    onOpenFolder: { tile in
+                    onOpenFolder: { tile, side in
+                        // Clicking the open topic's arc again puts it away.
+                        if focusedFolder == tile.id { closeFolder(); return }
+                        searchFocused = false
                         withAnimation(.spring(response: 0.45, dampingFraction: 0.86)) {
+                            arcSide = side
                             focusedFolder = tile.id
                         }
                     },
@@ -317,9 +344,9 @@ struct AuroraWorkspaceView: View {
                     onStopListening: { appState.endMoonListening() },
                     listening: appState.isMoonListening,
                     onAsk: { question in appState.askNew(question) },
-                    onShowAll: { withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { mode = .map } },
+                    onShowAll: { withAnimation(.spring(response: 0.4, dampingFraction: 0.85)) { mode = .feed } },
                     focusedID: focusedFolder,
-                    shiftedFraction: focusedFolder == nil ? nil : AuroraFolderPanel.widthFraction)
+                    centreFraction: focusedFolder == nil ? nil : AuroraNoteArc.ringCentreFraction(for: arcSide))
             }
         }
         .blur(radius: appState.askOpen ? 26 : (focusing ? 9 : 0))
@@ -525,8 +552,8 @@ struct AuroraWorkspaceView: View {
                 // long sentence pushes them down to exactly where the pills sit.
                 // An open folder is the thing you are looking at, in either
                 // view. A search bar over it reads as part of the folder.
-                .opacity(appState.isMoonListening || focusedFolder != nil ? 0 : 1)
-                .allowsHitTesting(!(appState.isMoonListening || focusedFolder != nil))
+                .opacity(appState.isMoonListening || (focusedFolder != nil && mode != .feed) ? 0 : 1)
+                .allowsHitTesting(!(appState.isMoonListening || (focusedFolder != nil && mode != .feed)))
             }
             .frame(maxWidth: .infinity)
 
@@ -540,7 +567,7 @@ struct AuroraWorkspaceView: View {
     private var modeToggle: some View {
         HStack(spacing: 2) {
             modeItem("circle.circle", "Orbit", .orbit)
-            modeItem("square.grid.2x2", "Folders", .map)
+            modeItem("list.bullet", "List", .feed)
         }
         .padding(4)
         .background(.regularMaterial, in: Capsule())
@@ -774,7 +801,7 @@ struct AuroraWorkspaceView: View {
             Button("") { back() }.keyboardShortcut(.cancelAction)
             Button("") { searchFocused = true }.keyboardShortcut("f", modifiers: .command)
             Button("") { appState.showCapturePet() }.keyboardShortcut("k", modifiers: [.command, .shift])
-            Button("") { withAnimation { mode = mode == .map ? .orbit : .map } }
+            Button("") { withAnimation { mode = mode == .orbit ? .feed : .orbit } }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
         }
         .opacity(0).frame(width: 0, height: 0)

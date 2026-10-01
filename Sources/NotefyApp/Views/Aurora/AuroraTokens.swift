@@ -361,12 +361,8 @@ struct AuroraRaisedField: ViewModifier {
                 // A dark grey a step below the ground at night, white by day.
                 Capsule().fill(Aurora.fieldFill)
             }
-            .overlay {
-                Capsule().strokeBorder(
-                    LinearGradient(colors: [Aurora.ink.opacity(0.16), Aurora.ink.opacity(0.02)],
-                                   startPoint: .top, endPoint: .bottom),
-                    lineWidth: 1)
-            }
+            // No edge drawn at all: even a faint lit line on top read as a
+            // stray white line. The fill and the shadow carry the shape.
             .shadow(color: .black.opacity(lift ? 0.28 : 0.12), radius: lift ? 20 : 8, y: lift ? 8 : 3)
     }
 }

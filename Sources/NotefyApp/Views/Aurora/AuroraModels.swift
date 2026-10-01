@@ -38,10 +38,11 @@ final class AuroraCanvasState: ObservableObject {
     func reset() { pan = .zero; zoom = 1 }
 }
 
-/// The library has two shapes. `orbit` is the mind: folders as arcs around the
-/// moon, sized by how much of you is in each. `map` is the desk: the same
-/// folders as tiles you can arrange and drag notes between.
-enum AuroraViewMode: String { case orbit, map }
+/// The library's shapes. `orbit` is the mind: topics as arcs around the moon,
+/// sized by how much of you is in each. `feed` is the list, for scanning many
+/// topics at once. `map`, the canvas of folder tiles, is no longer offered in
+/// the toggle but its code stays reachable.
+enum AuroraViewMode: String { case orbit, feed, map }
 
 enum AuroraSort: String, CaseIterable {
     case name, recent, size
