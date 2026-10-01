@@ -1,0 +1,166 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Mindspace</title>
+<meta name="description" content="Mindspace keeps the things you see and the thoughts you had about them, in one place. A free, private macOS app.">
+<link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Hanken+Grotesk:wght@400;500;600&family=Geist+Mono:wght@400;500&family=Instrument+Serif&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --bg: #12151d;
+    --bg-2: #1a1e2a;
+    --ink: #eceaf2;
+    --ink-2: #a9adbd;
+    --ink-3: #6c7184;
+    --line: rgba(236, 234, 242, 0.10);
+    --teal: #5fb8bc;
+    --green: #4fa874;
+    --violet: #8d72d9;
+    --blue: #5583cf;
+    --amber: #c9a250;
+  }
+  * { box-sizing: border-box; }
+  html { -webkit-font-smoothing: antialiased; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    background-image: radial-gradient(60rem 40rem at 50% -10%, #2b2d4a 0%, transparent 60%);
+    color: var(--ink);
+    font: 17px/1.6 "Hanken Grotesk", system-ui, sans-serif;
+  }
+  a { color: var(--teal); }
+  .wrap { max-width: 1040px; margin: 0 auto; padding: 0 24px; }
+  .mono { font-family: "Geist Mono", ui-monospace, monospace; letter-spacing: 0.18em; text-transform: uppercase; font-size: 13px; color: var(--teal); }
+
+  header { display: flex; align-items: center; justify-content: space-between; padding: 24px 0; }
+  .brand { display: flex; align-items: center; gap: 10px; font-weight: 600; color: var(--ink); text-decoration: none; }
+  .brand img { width: 28px; height: 28px; }
+  header nav a { color: var(--ink-2); text-decoration: none; margin-left: 20px; font-size: 15px; }
+  header nav a:hover { color: var(--ink); }
+
+  .hero { text-align: center; padding: 48px 0 32px; }
+  .moon { width: 132px; height: auto; animation: float 5s ease-in-out infinite; filter: drop-shadow(0 0 40px rgba(180, 170, 255, 0.35)); }
+  @keyframes float { 50% { transform: translateY(-10px); } }
+  h1 { font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: clamp(40px, 7vw, 72px); line-height: 1.05; margin: 24px 0 16px; letter-spacing: -0.01em; }
+  .lede { max-width: 620px; margin: 0 auto; color: var(--ink-2); font-size: 19px; }
+  .cta { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; margin-top: 32px; }
+  .btn { display: inline-block; padding: 12px 22px; border-radius: 999px; text-decoration: none; font-weight: 500; font-size: 16px; }
+  .btn.primary { background: var(--teal); color: #0d1418; }
+  .btn.ghost { border: 1px solid var(--line); color: var(--ink); }
+  .btn:hover { filter: brightness(1.1); }
+  .small { color: var(--ink-3); font-size: 14px; margin-top: 14px; }
+
+  .video { margin: 56px auto 0; border-radius: 16px; overflow: hidden; border: 1px solid var(--line); background: #0c0e14; aspect-ratio: 16 / 9; position: relative; box-shadow: 0 30px 80px rgba(0,0,0,.45); }
+  .video video, .video iframe { width: 100%; height: 100%; display: block; border: 0; object-fit: cover; }
+  .video .fallback { position: absolute; inset: 0; display: none; place-items: center; text-align: center; color: var(--ink-3); }
+  .video.missing .fallback { display: grid; }
+  .video.missing video { display: none; }
+
+  section { padding: 80px 0 0; }
+  h2 { font-family: "Instrument Serif", Georgia, serif; font-weight: 400; font-size: clamp(30px, 4.5vw, 44px); line-height: 1.1; margin: 12px 0 20px; }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-top: 32px; }
+  .card { background: var(--bg-2); border: 1px solid var(--line); border-radius: 14px; padding: 22px; }
+  .card h3 { margin: 0 0 6px; font-size: 17px; font-weight: 600; }
+  .card p { margin: 0; color: var(--ink-2); font-size: 15px; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; margin-bottom: 14px; }
+
+  .split { display: grid; grid-template-columns: 1fr 300px; gap: 56px; align-items: center; }
+  .split p { color: var(--ink-2); }
+  .phone { width: 100%; max-width: 300px; border-radius: 28px; border: 1px solid var(--line); box-shadow: 0 30px 80px rgba(0,0,0,.45); justify-self: center; }
+  @media (max-width: 760px) { .split { grid-template-columns: 1fr; gap: 32px; } header nav a:not(:last-child) { display: none; } }
+
+  ul.plain { list-style: none; padding: 0; margin: 0; }
+  ul.plain li { padding: 14px 0; border-top: 1px solid var(--line); color: var(--ink-2); }
+  ul.plain li strong { color: var(--ink); font-weight: 600; }
+
+  footer { margin-top: 96px; padding: 32px 0 48px; border-top: 1px solid var(--line); color: var(--ink-3); font-size: 14px; display: flex; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+  footer a { color: var(--ink-2); }
+  @media (prefers-reduced-motion: reduce) { .moon { animation: none; } }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <a class="brand" href="#"><img src="assets/moon-idle.png" alt="">Mindspace</a>
+    <nav>
+      <a href="#demo">Demo</a>
+      <a href="#how">How it works</a>
+      <a href="https://github.com/sanjana-venkat/mindspace">GitHub</a>
+    </nav>
+  </header>
+
+  <div class="hero">
+    <img class="moon" src="assets/moon-idle.png" alt="The Mindspace moon">
+    <h1>Keep what you saw,<br>and what you thought.</h1>
+    <p class="lede">Mindspace captures anything on your screen, the text you selected, a voice note or a whole meeting, then asks you for one line about why you kept it. When a note has enough in it, Mindspace writes the tidy version for you.</p>
+    <div class="cta">
+      <a class="btn primary" href="https://github.com/sanjana-venkat/mindspace/releases/latest">Download for Mac</a>
+      <a class="btn ghost" href="#demo">Watch the demo</a>
+    </div>
+    <p class="small">Free · macOS 14 Sonoma or newer · Apple silicon and Intel</p>
+  </div>
+
+  <!-- To change the demo: replace assets/demo.mp4, or swap the <video> for a YouTube/Loom <iframe>. -->
+  <div class="video" id="demo">
+    <video controls playsinline preload="metadata">
+      <source src="assets/demo.mp4" type="video/mp4">
+    </video>
+    <div class="fallback"><div><p class="mono">Demo video</p><p>Coming soon.</p></div></div>
+  </div>
+
+  <section id="how">
+    <p class="mono">How it works</p>
+    <h2>A small moon on your desktop.</h2>
+    <p style="color:var(--ink-2);max-width:640px">Hover it and its options fan out. Capture without leaving whatever you are doing, or use a shortcut and never touch it at all.</p>
+    <div class="grid">
+      <div class="card"><span class="dot" style="background:var(--green)"></span><h3>Grab the screen</h3><p>A whole window, or drag a box around part of it. ⌘⇧G / ⌘⇧P</p></div>
+      <div class="card"><span class="dot" style="background:var(--violet)"></span><h3>Save selected text</h3><p>Whatever you have highlighted, in any app. ⌘⇧T</p></div>
+      <div class="card"><span class="dot" style="background:var(--blue)"></span><h3>Talk it out</h3><p>Voice notes, transcribed on your Mac. Nothing leaves it. ⌘⇧A</p></div>
+      <div class="card"><span class="dot" style="background:var(--amber)"></span><h3>Meeting notes</h3><p>You on one side, everyone else on the other. Only when you say so. ⌘⇧M</p></div>
+    </div>
+  </section>
+
+  <section>
+    <div class="split">
+      <div>
+        <p class="mono">Tap the moon and talk</p>
+        <h2>Ask your mindspace.</h2>
+        <p>Around the moon, each arc is a folder, sized by how much of your mind lives in it. Ask it a question and it answers from the things you kept, and the thoughts you had about them.</p>
+        <p>Storing what you read is easy. Keeping the thinking around it is not. Mindspace keeps both, side by side.</p>
+      </div>
+      <img class="phone" src="assets/mobile-home.jpg" alt="Mindspace home screen: the moon surrounded by a ring of coloured folder arcs">
+    </div>
+  </section>
+
+  <section>
+    <p class="mono">Private by default</p>
+    <h2>Yours, on your Mac.</h2>
+    <ul class="plain">
+      <li><strong>Plain files.</strong> Notes are ordinary Markdown in a Desktop folder — readable anywhere, there whether or not Mindspace is running.</li>
+      <li><strong>On-device speech.</strong> Speech is transcribed locally. No audio is sent anywhere.</li>
+      <li><strong>No accounts, no analytics, no meeting bot.</strong> It never starts recording on its own.</li>
+      <li><strong>Bring a model if you want.</strong> Works free with a local model; optionally connect OpenAI, Gemini, Claude or Ollama for better write-ups.</li>
+    </ul>
+  </section>
+
+  <footer>
+    <span>Mindspace · MIT licensed</span>
+    <span><a href="https://github.com/sanjana-venkat/mindspace">Source on GitHub</a></span>
+  </footer>
+</div>
+<script>
+  // Show a "coming soon" panel instead of a broken player when there is no demo file yet.
+  const box = document.querySelector('.video');
+  const vid = box.querySelector('video');
+  const src = vid.querySelector('source');
+  const missing = () => box.classList.add('missing');
+  src.addEventListener('error', missing);
+  vid.addEventListener('error', missing);
+  if (vid.networkState === HTMLMediaElement.NETWORK_NO_SOURCE) missing();
+</script>
+</body>
+</html>

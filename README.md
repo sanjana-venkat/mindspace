@@ -9,6 +9,12 @@ what it was written from.
 
 For Macs running macOS 14 (Sonoma) or newer. Works on Apple silicon and Intel.
 
+<p align="center">
+  <img src="docs/screenshots/mobile-home.jpg" alt="Mindspace home: the moon, ringed by one arc per folder" width="300">
+</p>
+
+<p align="center"><em>Tap the moon and talk. Each arc is a folder, sized by how much of your mind lives in it.</em></p>
+
 ---
 
 ## Install it
