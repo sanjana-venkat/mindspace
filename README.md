@@ -16,11 +16,22 @@ For Macs running macOS 14 (Sonoma) or newer. Works on Apple silicon and Intel.
 <p align="center"><em>Tap the moon and talk. Each arc is a folder, sized by how much of your mind lives in it.</em></p>
 
 <p align="center">
-  <img src="Sources/NotefyApp/Resources/Pet/moon-idle.png" alt="The moon, idle" width="110">
-  <img src="Sources/NotefyApp/Resources/Pet/moon-catching.png" alt="The moon, catching a capture" width="110">
-  <img src="Sources/NotefyApp/Resources/Pet/moon-holding.png" alt="The moon, holding a capture" width="110">
-  <img src="Sources/NotefyApp/Resources/Pet/moon-pleased.png" alt="The moon, pleased" width="110">
+  <img src="docs/screenshots/mac-grid.webp" alt="A note's captures laid out as tiles: voice notes, screenshots and the thought written under each">
 </p>
+
+<p align="center"><em>Every capture in a note, with the line you wrote about why you kept it.</em></p>
+
+<p align="center">
+  <img src="docs/screenshots/mac-panels.webp" alt="Panels view: your thought on the left, the capture it belongs to on the right">
+</p>
+
+<p align="center"><em>Your thought beside the thing it was about.</em></p>
+
+<p align="center">
+  <img src="docs/screenshots/mac-writeup.webp" alt="The write-up Mindspace made from a note's captures, as a bullet list">
+</p>
+
+<p align="center"><em>When a note has enough in it, Mindspace writes the tidy version, and says when it is out of date.</em></p>
 
 ---
 
