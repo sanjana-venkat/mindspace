@@ -25,11 +25,11 @@ For Macs running macOS 14 (Sonoma) or newer. Works on Apple silicon and Intel.
     <td><b>Open a topic from the ring.</b> Its notes fan out beside the moon. Scroll or use the arrow keys to go through them.</td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/ask-a-note.jpg" alt="Asking a question of a note, with the answer citing numbered sources"></td>
+    <td><img src="docs/screenshots/ask-mindspace.jpg" alt="Asking Mindspace why it was built, answered from a saved capture with its source attached"></td>
     <td><img src="docs/screenshots/captures-grid.jpg" alt="Every capture in a note, as a grid of screenshots, text and voice notes"></td>
   </tr>
   <tr>
-    <td><b>Ask your own notes.</b> Answers come only from what you saved, and every one points to the capture it came from.</td>
+    <td><b>Ask your mindspace.</b> Answers come only from what you saved, and every one points to the capture it came from. If it isn't in there, it says so.</td>
     <td><b>Every capture in one place.</b> Screenshots, highlighted text and voice notes, each with the thought you had about it.</td>
   </tr>
 </table>
@@ -123,6 +123,27 @@ records nothing until you click **Take notes**.
 **Your notes** live in a folder on your Desktop called **Mindspace**. They are ordinary text
 files — readable in any app, yours to move or back up, and there whether or not Mindspace is
 running.
+
+---
+
+## Where this is going
+
+Most AI memory tries to make machines remember more. We want to make sure people don't
+remember less.
+
+Today Mindspace **remembers for you**: it keeps what you saw and what you thought, and answers
+from it with sources. That is the first of three layers we are building, one at a time:
+
+| | | |
+|---|---|---|
+| **Remember for me** | Your captures, plus sources you choose to connect, like your email | Shipping now |
+| **Help me remember** | A recall dial, from *just tell me* to *make me remember*, that gives the smallest cue that works for you | Next |
+| **Remember me** | Your signature: how you write and think, kept on your Mac and carried into the AI you already use, so you stop re-prompting it | Later |
+
+The dial rests on well-established memory research: recalling something strengthens it more
+than rereading it, and a memory that fades is usually still there to be reached. If AI can
+remember everything for us, it should also know when to hand us the answer and when to help
+us find it ourselves.
 
 ---
 

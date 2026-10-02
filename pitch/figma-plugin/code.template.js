@@ -28,6 +28,9 @@ const TINTS = [C.green, C.lav, C.amber, C.blue, C.teal];
 const SHARES = [30, 14, 11, 9, 8, 7, 6, 5, 4, 3, 2, 1];
 
 const W = 1920, H = 1080, M = 140, GAP = 180;
+/// Where the first slide goes on a Design canvas: to the right of anything
+/// already on the page, so building a deck never lands on top of existing work.
+let BASE_X = 0;
 
 /* ----------------------------------------------------------------- helpers */
 function rgb(hex) {
@@ -250,7 +253,7 @@ function slide(i, name) {
     figma.currentPage.appendChild(f);
     f.name = name;
     f.resize(W, H);
-    f.x = i * (W + GAP); f.y = 0;
+    f.x = BASE_X + i * (W + GAP); f.y = 0;
     safe(function () { f.clipsContent = true; });
   }
   MADE[i] = f;
@@ -273,11 +276,11 @@ function notes(i, words, str) {
     return;
   }
   const head = T(figma.currentPage, {
-    x: i * (W + GAP), y: H + 70, str: 'SPEAKER NOTES  ·  ' + words + ' WORDS',
+    x: BASE_X + i * (W + GAP), y: H + 70, str: 'SPEAKER NOTES  ·  ' + words + ' WORDS',
     font: F.mono, size: 16, color: '#7A8494', ls: 12
   });
   const body = T(figma.currentPage, {
-    x: i * (W + GAP), y: H + 108, w: 1400, str: str,
+    x: BASE_X + i * (W + GAP), y: H + 108, w: 1400, str: str,
     font: F.ui, size: 26, lh: 38, color: '#2A3342'
   });
   head.name = 'notes label'; body.name = 'speaker notes';
@@ -291,11 +294,11 @@ function asideNotes(i, str) {
     return;
   }
   const head = T(figma.currentPage, {
-    x: i * (W + GAP), y: H + 70, str: 'IF ASKED',
+    x: BASE_X + i * (W + GAP), y: H + 70, str: 'IF ASKED',
     font: F.mono, size: 16, color: '#7A8494', ls: 12
   });
   const body = T(figma.currentPage, {
-    x: i * (W + GAP), y: H + 108, w: 1400, str: str,
+    x: BASE_X + i * (W + GAP), y: H + 108, w: 1400, str: str,
     font: F.ui, size: 26, lh: 38, color: '#2A3342'
   });
   head.name = 'notes label'; body.name = 'if asked';
@@ -876,6 +879,228 @@ function slideA3() {
   asideNotes(9, 'One cohort, then revision week, then a department with a budget. The blanks are deliberate: fill them once, in your own hand, rather than inventing a number on stage.');
 }
 
+
+/* ------------------------------------------------------------ vision deck */
+// The long-term direction, kept apart from the pitch: everything here is
+// where OpenHuman is going, not what Mindspace does today, and it says so.
+
+function visionHeader(f, eyebrowText, title, color) {
+  eyebrow(f, M, 150, eyebrowText, color || C.teal);
+  return T(f, { x: M, y: 192, w: 1400, str: title, font: F.h, size: 56, lh: 66, color: C.pearl, ls: -1.5 });
+}
+
+function columnCards(f, y, cols, h) {
+  const n = cols.length, gap = 40;
+  const w = (W - M * 2 - gap * (n - 1)) / n;
+  for (let i = 0; i < n; i++) {
+    const x = M + i * (w + gap);
+    const c = cols[i];
+    R(f, { x: x, y: y, w: w, h: h, r: 22, fill: C.panel, fillOpacity: 0.85, stroke: C.line, name: 'card ' + c[1] });
+    T(f, { x: x + 32, y: y + 30, str: c[0], font: F.mono, size: 12, color: c[3] || C.teal, ls: 14 });
+    T(f, { x: x + 32, y: y + 60, w: w - 64, str: c[1], font: F.h, size: 28, lh: 34, color: C.pearl });
+    T(f, { x: x + 32, y: y + 116, w: w - 64, str: c[2], font: F.ui, size: 18, lh: 28, color: C.ink2 });
+  }
+}
+
+function vision1() {
+  const f = slide(0, 'V1 · Help me remember');
+  const cx = 1460, cy = 540;
+  glow(f, { cx: cx, cy: cy, rx: 380, hex: C.lav, opacity: 0.22, blur: 100 });
+  glow(f, { cx: cx + 120, cy: cy + 140, rx: 260, hex: C.teal, opacity: 0.16, blur: 100 });
+  ring(f, { cx: cx, cy: cy, radius: 250, thickness: 12, segOpacity: 0.9 });
+  moon(f, { cx: cx, cy: cy, size: 230 });
+
+  eyebrow(f, M, 286, 'OPEN HUMAN  ·  WHERE THIS IS GOING');
+  const t = T(f, { x: M, y: 330, w: 900, str: 'Help me remember.', font: F.serif, size: 84, lh: 96, color: C.pearl });
+  T(f, { x: M, y: 330 + t.height + 36, w: 760,
+         str: 'Most AI memory tries to make machines remember more. We want to make sure people don’t remember less.',
+         font: F.ui, size: 26, lh: 40, color: C.ink2 });
+  hairline(f, M, 900, 220, C.teal, 0.5);
+  T(f, { x: M, y: 924, str: 'A VISION, NOT A FEATURE LIST', font: F.mono, size: 13, color: C.ink3, ls: 14 });
+  grain(f);
+  notes(0, 52, 'Mindspace started as a way to Cmd + F your brain. Where we are going is harder and more human. If AI can remember everything for us, it should also know when to hand us the answer, and when to help us find it ourselves. That is the company we want to build.');
+}
+
+function vision2() {
+  const f = slide(1, 'V2 · Where we are');
+  visionHeader(f, 'WHERE WE ARE  ·  SHIPPING TODAY', 'Today, Mindspace remembers for you.', C.green);
+  columnCards(f, 380, [
+    ['01  CAPTURE', 'Keep what you see and hear', 'Screens, highlighted text, voice and meetings, each with the thought you had about it.', C.green],
+    ['02  ORGANIZE', 'Topics on a ring', 'Notes gather into topics around the moon, written up by AI beside your own words.', C.green],
+    ['03  ASK', 'Answers with sources', 'Questions are answered only from what you saved, and every answer points to its capture.', C.green]
+  ], 330);
+  T(f, { x: M, y: 770, w: 1500, str: 'That is the foundation. It is also the trap.', font: F.serifIt, size: 34, color: C.pearl });
+  grain(f);
+  notes(1, 41, 'Today the product captures what you see and hear, keeps the thought you had about it, and answers questions only from what you saved, with the source attached. That is a real, shipping foundation. It is also the trap, and that is where the vision starts.');
+}
+
+function vision3() {
+  const f = slide(2, 'V3 · The trap');
+  visionHeader(f, 'THE PROBLEM WITH PERFECT RECALL', 'An answer every time is a memory never used.', C.amber);
+  T(f, { x: M, y: 290, w: 1150, str: 'Every time a tool remembers for you, you skip the act that makes a memory stick. A perfect second brain can quietly weaken the first one.',
+         font: F.ui, size: 24, lh: 38, color: C.ink2 });
+  const cards = [
+    ['Forgetting is not erasing.', 'What fades is usually still stored, and comes back faster the second time you learn it.', 'EBBINGHAUS'],
+    ['Stored is not the same as reachable.', 'A memory can be held strongly and still be hard to reach. Reaching for it is what strengthens it.', 'BJORK']
+  ];
+  for (let i = 0; i < 2; i++) {
+    const x = M + i * 840, y = 470;
+    R(f, { x: x, y: y, w: 800, h: 300, r: 22, fill: C.amber, fillOpacity: 0.06, stroke: C.amber, strokeOpacity: 0.3, name: 'finding' });
+    T(f, { x: x + 36, y: y + 34, str: cards[i][2], font: F.mono, size: 12, color: C.amber, ls: 14 });
+    T(f, { x: x + 36, y: y + 66, w: 728, str: cards[i][0], font: F.serif, size: 36, lh: 46, color: C.pearl });
+    T(f, { x: x + 36, y: y + 170, w: 728, str: cards[i][1], font: F.ui, size: 20, lh: 30, color: C.ink2 });
+  }
+  T(f, { x: M, y: 830, w: 1500, str: 'Established findings from memory research, named so anyone can look them up.', font: F.mono, size: 13, color: C.ink3 });
+  grain(f);
+  notes(2, 47, 'Here is the trap. Every time a tool answers for you, you skip the effort that makes memories stick. Memory research has known this for a century. Forgetting is not erasing, and a memory you can reach for gets stronger every time you do. Remembering for people can quietly make them worse at it.');
+}
+
+function vision4() {
+  const f = slide(3, 'V4 · The recall dial');
+  visionHeader(f, 'THE RECALL DIAL', 'You choose how much it remembers for you.');
+  const stops = ['Just tell me', 'Recognize', 'Cue me', 'Guide me', 'Challenge me', 'Make me remember'];
+  const y = 400, x0 = M + 60, x1 = W - M - 60;
+  R(f, { x: x0, y: y, w: x1 - x0, h: 6, r: 3, fill: C.line, name: 'dial track' });
+  const grad = R(f, { x: x0, y: y, w: x1 - x0, h: 6, r: 3, fill: C.teal, name: 'dial fill' });
+  grad.fills = [{ type: 'GRADIENT_LINEAR', gradientTransform: [[1, 0, 0], [0, 1, 0]],
+                  gradientStops: [{ position: 0, color: Object.assign({}, rgb(C.teal), { a: 1 }) },
+                                  { position: 1, color: Object.assign({}, rgb(C.lav), { a: 1 }) }] }];
+  for (let i = 0; i < stops.length; i++) {
+    const sx = x0 + (x1 - x0) * i / (stops.length - 1);
+    const lit = i === 2;
+    R(f, { x: sx - (lit ? 13 : 9), y: y + 3 - (lit ? 13 : 9), w: lit ? 26 : 18, h: lit ? 26 : 18, r: 13,
+           fill: lit ? C.pearl : C.panel2, stroke: lit ? C.pearl : C.ink3, strokeOpacity: 0.8, strokeW: 2, name: 'stop' });
+    T(f, { x: sx - 110, y: y + 36, w: 220, align: 'CENTER', str: stops[i], font: lit ? F.uiMed : F.ui, size: 18, color: lit ? C.pearl : C.ink2 });
+  }
+  T(f, { x: x0 - 20, y: y - 52, str: 'REMEMBER FOR ME', font: F.mono, size: 12, color: C.tealSoft, ls: 14 });
+  T(f, { x: x1 - 260, y: y - 52, w: 280, align: 'RIGHT', str: 'HELP ME REMEMBER', font: F.mono, size: 12, color: C.lavSoft, ls: 14 });
+
+  const ex = [
+    ['YOU', 'What was the psychologist behind the forgetting curve?', C.ink2],
+    ['CUE ME', '“You read about him while researching the recall dial.”', C.tealSoft],
+    ['GUIDE ME', '“His name starts with E.”', C.tealSoft],
+    ['CHALLENGE ME', '“Ebb_____”', C.lavSoft],
+    ['YOU', 'Ebbinghaus.', C.pearl]
+  ];
+  let ey = 560;
+  for (let i = 0; i < ex.length; i++) {
+    T(f, { x: M + 60, y: ey + 6, w: 200, str: ex[i][0], font: F.mono, size: 12, color: C.ink3, ls: 12 });
+    T(f, { x: M + 280, y: ey, w: 1300, str: ex[i][1], font: i === 0 || i === 4 ? F.ui : F.serifIt, size: 24, lh: 32, color: ex[i][2] });
+    ey += 62;
+  }
+  T(f, { x: M + 60, y: ey + 14, w: 1500, str: 'Each step gives a little more, only as much as you need. Illustrative exchange.', font: F.mono, size: 13, color: C.ink3 });
+  grain(f);
+  notes(3, 56, 'So we are building a dial. At one end it just tells you. At the other it makes you remember, and guides you there. In between it can let you recognize the answer, give you a cue, or challenge you. You choose how hard it should be, and it gives the smallest nudge that works.');
+}
+
+function vision5() {
+  const f = slide(4, 'V5 · Why it works');
+  visionHeader(f, 'WHY IT WORKS', 'Each step is grounded in how memory works.');
+  const items = [
+    ['Retrieval practice', 'Recalling something strengthens it more than reading it again.'],
+    ['Desirable difficulty', 'Effort helps learning, as long as you can still succeed.'],
+    ['Generation', 'An answer you produce sticks better than one you are handed.'],
+    ['Context', 'Where you were when you learned something can bring it back.'],
+    ['Spacing', 'Returning just before you would forget is the most efficient time.']
+  ];
+  const w = 300, gap = 30;
+  for (let i = 0; i < items.length; i++) {
+    const x = M + i * (w + gap);
+    R(f, { x: x, y: 330, w: w, h: 360, r: 22, fill: C.panel, fillOpacity: 0.85, stroke: C.line, name: 'principle' });
+    T(f, { x: x + 28, y: 360, str: String(i + 1).padStart(2, '0'), font: F.mono, size: 12, color: C.teal, ls: 14 });
+    T(f, { x: x + 28, y: 392, w: w - 56, str: items[i][0], font: F.h, size: 26, lh: 32, color: C.pearl });
+    T(f, { x: x + 28, y: 470, w: w - 56, str: items[i][1], font: F.ui, size: 18, lh: 28, color: C.ink2 });
+  }
+  T(f, { x: M, y: 760, w: 1500, str: 'Each is established on its own. How they combine for one person is what we want to learn.',
+         font: F.serifIt, size: 30, lh: 40, color: C.pearl });
+  grain(f);
+  notes(4, 52, 'None of this is guesswork. Recalling strengthens memory more than rereading. Effort helps if you can still succeed. Answers you produce stick better. Context brings memories back. Spacing is the most efficient way to keep them. Each is well established. How they combine for one real person is the open question.');
+}
+
+function vision6() {
+  const f = slide(5, 'V6 · Three layers');
+  visionHeader(f, 'THREE LAYERS', 'Remember for me. Help me remember. Remember me.');
+  columnCards(f, 340, [
+    ['01  DIGITAL MEMORY', 'Remember for me', 'Your captures, plus the sources you choose to connect: your email, the newsletters you meant to read.', C.tealSoft],
+    ['02  HUMAN MEMORY', 'Help me remember', 'The recall dial. It learns which cues work for you, and when to ask instead of answer.', C.lavSoft],
+    ['03  YOUR SIGNATURE', 'Remember me', 'How you write, decide and think, kept on your machine and carried into the AI you already use.', C.amber]
+  ], 380);
+  grain(f);
+  notes(5, 45, 'That gives us three layers. Remember for me is the archive, your captures and the sources you connect. Help me remember is the dial, learning what cues work for you. Remember me is your signature, how you think and speak, kept locally and carried wherever you use AI.');
+}
+
+function vision7() {
+  const f = slide(6, 'V7 · Your signature');
+  visionHeader(f, 'YOUR SIGNATURE', 'Stop re-prompting AI to sound like you.');
+  T(f, { x: M, y: 290, w: 1200,
+         str: 'Connect Mindspace to Claude or ChatGPT and it brings your context and your voice with it. You stop correcting it, because it already knows how you speak and what you mean.',
+         font: F.ui, size: 24, lh: 38, color: C.ink2 });
+  const pts = [
+    ['Yours', 'Built only from what you chose to keep and connect.'],
+    ['Local', 'Lives on your machine. You decide what leaves it.'],
+    ['Portable', 'Shared with the AI you use through MCP, an open protocol for giving models context.']
+  ];
+  for (let i = 0; i < 3; i++) {
+    const y = 470 + i * 120;
+    R(f, { x: M, y: y + 8, w: 4, h: 64, r: 2, fill: C.amber, fillOpacity: 0.8, name: 'rule' });
+    T(f, { x: M + 30, y: y, str: pts[i][0], font: F.serif, size: 36, color: C.pearl });
+    T(f, { x: M + 30, y: y + 48, w: 1200, str: pts[i][1], font: F.ui, size: 20, lh: 30, color: C.ink2 });
+  }
+  grain(f);
+  notes(6, 44, 'The third layer is the one people feel first. Today you keep re-prompting AI to sound like you. Your signature fixes that. It is built from what you chose to keep, it stays on your machine, and it travels to the AI you already use through an open protocol.');
+}
+
+function vision8() {
+  const f = slide(7, 'V8 · The research');
+  glow(f, { cx: 1500, cy: 520, rx: 420, hex: C.lav, opacity: 0.14, blur: 100 });
+  visionHeader(f, 'THE RESEARCH', 'A model of how one person remembers.');
+  T(f, { x: M, y: 290, w: 1100,
+         str: 'Every time someone uses the dial we can learn which cue unlocked a memory, how long it took, and how sure they were. Over years that becomes a model of one person’s memory, not just their data.',
+         font: F.ui, size: 24, lh: 38, color: C.ink2 });
+  const sig = ['Which cue worked', 'How long it took', 'How much help they asked for', 'How confident they were', 'How long since they last saw it', 'Whether they remembered it wrongly'];
+  for (let i = 0; i < sig.length; i++) {
+    const col = i % 2, row = Math.floor(i / 2);
+    chip(f, { x: M + col * 440, y: 470 + row * 64, str: sig[i], font: F.ui, size: 18, ls: 0,
+              color: C.lavSoft, stroke: C.lav, strokeOpacity: 0.35, fill: C.lav, fillOpacity: 0.08, padX: 20, padY: 11 });
+  }
+  T(f, { x: M, y: 720, w: 1500,
+         str: '“How does one person’s memory behave across thousands of real experiences, over years?”',
+         font: F.serifIt, size: 34, lh: 46, color: C.pearl });
+  T(f, { x: M, y: 860, str: 'That model is the hard part to copy.', font: F.mono, size: 14, color: C.ink3, ls: 8 });
+  grain(f);
+  notes(7, 46, 'This is the research. Each time someone uses the dial we learn something about how their memory works: which cue helped, how long it took, how sure they were. Over years that becomes a model of one person’s memory. That is very hard to copy.');
+}
+
+function vision9() {
+  const f = slide(8, 'V9 · Now, next, later');
+  visionHeader(f, 'NOW  ·  NEXT  ·  LATER', 'One layer at a time.');
+  columnCards(f, 340, [
+    ['NOW', 'Remember for me', 'Capture, topics, and asking with sources. Shipping on macOS today.', C.green],
+    ['NEXT', 'Help me remember', 'The recall dial, and connecting the sources you choose, starting with email.', C.tealSoft],
+    ['LATER', 'Remember me', 'A personal memory model, and your signature carried into the AI you use.', C.lavSoft]
+  ], 300);
+  T(f, { x: M, y: 700, w: 1500, str: 'Each layer is useful on its own, and each one makes the next one possible.',
+         font: F.serifIt, size: 30, lh: 40, color: C.pearl });
+  grain(f);
+  notes(8, 36, 'We build it one layer at a time. Remember for me is shipping now. Help me remember comes next, with the dial and connected sources. Remember me comes after. Each layer is useful alone, and each makes the next possible.');
+}
+
+function vision10() {
+  const f = slide(9, 'V10 · The question');
+  const cx = 1500, cy = 620;
+  glow(f, { cx: cx, cy: cy, rx: 300, hex: C.lav, opacity: 0.2, blur: 100 });
+  ring(f, { cx: cx, cy: cy, radius: 190, thickness: 10, segOpacity: 0.85 });
+  moon(f, { cx: cx, cy: cy, size: 170 });
+  eyebrow(f, M, 220, 'THE QUESTION WE ARE BUILDING AROUND');
+  T(f, { x: M, y: 270, w: 1050,
+         str: 'If AI can remember everything for us, how should it decide what to tell us, and what to help us remember ourselves?',
+         font: F.serif, size: 54, lh: 70, color: C.pearl });
+  hairline(f, M, 900, 220, C.teal, 0.5);
+  T(f, { x: M, y: 924, str: 'OPEN HUMAN  ·  MINDSPACE', font: F.mono, size: 14, color: C.ink2, ls: 16 });
+  grain(f);
+  notes(9, 33, 'So this is the question we are building around. If AI can remember everything for us, how should it decide what to tell us, and what to help us remember ourselves? We think answering that well is a company.');
+}
+
 /* -------------------------------------------------------------------- main */
 
 // Errors go into a window that stays open, because a toast disappears before
@@ -910,8 +1135,17 @@ async function main() {
     MOON_HASH = figma.createImage(b64(ASSETS.moon)).hash;
     GRAIN_HASH = figma.createImage(b64(ASSETS.grain)).hash;
 
-    const builders = [slide1, slide2, slide3, slide4, slide5, slide6, slide7,
-                      slideA1, slideA2, slideA3];
+    // Two decks, one per menu item. The vision deck is kept separate from
+    // the pitch so nothing in it can be mistaken for what ships today.
+    const isVision = figma.command === 'vision';
+    if (!IS_SLIDES) {
+      let right = 0;
+      figma.currentPage.children.forEach(function (n) { right = Math.max(right, n.x + n.width); });
+      BASE_X = figma.currentPage.children.length ? Math.ceil(right + 400) : 0;
+    }
+    const builders = isVision
+      ? [vision1, vision2, vision3, vision4, vision5, vision6, vision7, vision8, vision9, vision10]
+      : [slide1, slide2, slide3, slide4, slide5, slide6, slide7, slideA1, slideA2, slideA3];
     for (let i = 0; i < builders.length; i++) {
       step = 'building slide ' + (i + 1);
       builders[i]();
@@ -922,10 +1156,11 @@ async function main() {
       const frames = figma.currentPage.children.filter(function (n) { return n.type === 'FRAME'; });
       safe(function () { figma.viewport.scrollAndZoomIntoView(frames); });
     }
+    const what = isVision ? 'Vision deck' : 'Mindspace deck';
     figma.closePlugin(
       IS_SLIDES
-        ? 'Mindspace deck built. 10 slides, speaker notes on each.'
-        : 'Mindspace deck built. 10 frames, speaker notes under each.'
+        ? what + ' built. ' + builders.length + ' slides, speaker notes on each.'
+        : what + ' built. ' + builders.length + ' frames, speaker notes under each.'
     );
   } catch (e) {
     report(step, e);

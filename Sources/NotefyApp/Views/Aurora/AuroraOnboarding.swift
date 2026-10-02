@@ -852,7 +852,7 @@ struct AuroraOnboarding: View {
                     .lineSpacing(5)
                     .fixedSize(horizontal: false, vertical: true)
 
-                Text("From here the moon stays on your desktop. Point at it whenever there's something worth keeping, and it will be here when you need it.")
+                Text("From here the moon stays on your desktop. Point at it whenever there's something worth keeping. It remembers for you now, and in time it will help you remember for yourself.")
                     .font(Aurora.ui(13, .regular))
                     .foregroundStyle(fgSoft)
                     .lineSpacing(4)

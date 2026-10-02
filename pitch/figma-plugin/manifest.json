@@ -1,7 +1,11 @@
 {
-  "name": "Mindspace Pitch Deck",
+  "name": "Mindspace Decks",
   "id": "open-human-mindspace-pitch",
   "api": "1.0.0",
   "main": "code.js",
-  "editorType": ["figma", "slides"]
+  "editorType": ["figma", "slides"],
+  "menu": [
+    { "name": "Pitch deck", "command": "pitch" },
+    { "name": "Long-term vision", "command": "vision" }
+  ]
 }
