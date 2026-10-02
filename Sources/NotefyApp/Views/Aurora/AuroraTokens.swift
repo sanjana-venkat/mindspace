@@ -360,6 +360,22 @@ struct AuroraHoverRow: ButtonStyle {
 /// at the top and fades out below. A full outline was too hard a line on the
 /// dark ground; no edge at all and the field disappeared into it.
 extension Aurora {
+    /// Frosted glass, as on the arrows beside a capture: white at 14% with a
+    /// 30% white edge at night; the ink equivalents by day, where white glass
+    /// on a white page would vanish.
+    static let glassFill = Color(nsColor: NSColor(name: nil) { a in
+        a.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(white: 1, alpha: 0.14) : NSColor(srgbRed: 16/255, green: 20/255, blue: 16/255, alpha: 0.06)
+    })
+    static let glassEdge = Color(nsColor: NSColor(name: nil) { a in
+        a.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(white: 1, alpha: 0.30) : NSColor(srgbRed: 16/255, green: 20/255, blue: 16/255, alpha: 0.16)
+    })
+    static let glassInk = Color(nsColor: NSColor(name: nil) { a in
+        a.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(white: 1, alpha: 0.92) : NSColor(srgbRed: 16/255, green: 20/255, blue: 16/255, alpha: 0.86)
+    })
+
     static let fieldFill = Color(nsColor: NSColor(name: nil) { appearance in
         appearance.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             // Dark grey, a step below the ground. Near black read as a hole.

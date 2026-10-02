@@ -49,6 +49,15 @@ enum OrbitSnapshot {
             .auroraRaisedField()
             AskField(placeholder: "Ask anything about this note", text: .constant(""), onSend: {})
                 .frame(width: 620)
+            HStack(spacing: 8) {
+                Image(systemName: "sparkle").font(.system(size: 12, weight: .semibold))
+                Text("Ask").font(Aurora.ui(15, .semibold))
+            }
+            .foregroundStyle(Aurora.glassInk)
+            .padding(.horizontal, 22).frame(height: 44)
+            .background(Capsule().fill(.ultraThinMaterial).overlay(Capsule().fill(Aurora.glassFill)))
+            .overlay(Capsule().strokeBorder(Aurora.glassEdge, lineWidth: 1))
+            .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
         }
         .padding(60)
         .background(Aurora.ground)

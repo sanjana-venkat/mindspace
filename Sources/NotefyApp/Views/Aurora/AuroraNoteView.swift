@@ -53,13 +53,7 @@ struct AuroraNoteView: View {
 
     /// Display order matches the rest of the app: `steps` is stored one way and
     /// read the other.
-    private var steps: [ExplorationStep] {
-        Array(appState.steps.reversed()).filter { step in
-            if step.screenshotPath != nil { return true }
-            let text = (step.selectedText ?? "") + (step.pageText ?? "")
-            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
-        }
-    }
+    private var steps: [ExplorationStep] { appState.stepsInViewOrder }
 
     var body: some View {
         ZStack {
@@ -164,6 +158,9 @@ struct AuroraNoteView: View {
             }
         }
         .coordinateSpace(name: "auroraNote")
+        .onAppear { appState.noteMode = mode }
+        .onChange(of: mode) { _, m in appState.noteMode = m }
+        .onDisappear { appState.noteMode = nil }
         .animation(.smooth(duration: 0.22), value: menuTarget)
         .ignoresSafeArea()
         // The words travel with the note, so every capture can mark them.
@@ -382,7 +379,7 @@ struct AuroraNoteView: View {
         .padding(.trailing, 30)
         // Over the write-up the question box is pinned to the foot, so the
         // button sits above it rather than on top of it.
-        .padding(.bottom, mode == .organized ? 100 : 30)
+        .padding(.bottom, 30)
         .animation(.smooth(duration: 0.25), value: stale)
         .animation(.smooth(duration: 0.25), value: appState.isOrganizing)
     }

@@ -334,6 +334,20 @@ final class AppState: ObservableObject {
     /// The capture open in the full-size viewer, by its place in the grid.
     /// Held here so the window's Esc can close it before it closes the note.
     @Published var capturePreview: Int?
+    /// Which tab of a note is open, or nil when no note is. The ask bar reads
+    /// it: over a write-up it asks that note, everywhere else the library.
+    @Published var noteMode: AuroraNoteMode?
+
+    /// The open note's captures in the order the note shows them, oldest
+    /// first. One definition, so a citation's number and the row it points to
+    /// can never disagree.
+    var stepsInViewOrder: [ExplorationStep] {
+        Array(steps.reversed()).filter { step in
+            if step.screenshotPath != nil { return true }
+            let text = (step.selectedText ?? "") + (step.pageText ?? "")
+            return !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        }
+    }
     private var moonListeningScratch: URL?
 
     private let tracker: ExplorationTracker
@@ -1788,6 +1802,7 @@ final class AppState: ObservableObject {
         let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
         askOpen = true
+        logQuestion(trimmed, kind: "ask", scope: "library")
         run(trimmed, thread: .library, candidates: libraryPassages(), renumber: true,
             scope: "Sources from across everything you saved", background: nil,
             empty: "Your library is empty so far. Capture something first, then ask about it.")
@@ -1799,6 +1814,7 @@ final class AppState: ObservableObject {
     func askThisNote(_ question: String, steps: [ExplorationStep], title: String) {
         let trimmed = question.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmed.isEmpty else { return }
+        logQuestion(trimmed, kind: "ask", scope: "note: \(title)")
         let candidates = steps.enumerated().map { i, step in
             AskSource(
                 index: i + 1,
@@ -1929,6 +1945,43 @@ final class AppState: ObservableObject {
     func askNew(_ question: String) {
         askTurns.removeAll()
         ask(question)
+    }
+
+    /// Every question asked, kept on this Mac and nowhere else.
+    ///
+    /// Not shown anywhere in the app. It is the start of a record of what a
+    /// person wonders about over time, which the recall dial will need, and
+    /// it costs nothing to begin keeping now. One JSON object per line, in a
+    /// file only this user can read, next to the API keys.
+    func logQuestion(_ text: String, kind: String, scope: String? = nil) {
+        let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !trimmed.isEmpty else { return }
+        var entry: [String: Any] = [
+            "at": ISO8601DateFormatter().string(from: Date()),
+            "kind": kind,
+            "text": trimmed
+        ]
+        if let scope { entry["scope"] = scope }
+        guard let data = try? JSONSerialization.data(withJSONObject: entry, options: [.sortedKeys]),
+              var line = String(data: data, encoding: .utf8) else { return }
+        line += "\n"
+        let url = Self.questionLogURL
+        let fm = FileManager.default
+        try? fm.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true,
+                                attributes: [.posixPermissions: 0o700])
+        if !fm.fileExists(atPath: url.path) {
+            fm.createFile(atPath: url.path, contents: nil, attributes: [.posixPermissions: 0o600])
+        }
+        guard let handle = try? FileHandle(forWritingTo: url) else { return }
+        defer { try? handle.close() }
+        _ = try? handle.seekToEnd()
+        try? handle.write(contentsOf: Data(line.utf8))
+    }
+
+    static var questionLogURL: URL {
+        FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask).first!
+            .appendingPathComponent("Notefy", isDirectory: true)
+            .appendingPathComponent("questions.jsonl")
     }
 
     func clearAsk() {

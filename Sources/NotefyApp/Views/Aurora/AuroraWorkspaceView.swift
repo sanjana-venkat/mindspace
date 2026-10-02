@@ -21,6 +21,9 @@ struct AuroraWorkspaceView: View {
     @State private var cancelRenameTick = 0
     /// Which side an open topic's notes fan out on.
     @State private var arcSide: AuroraNoteArc.Side = .right
+    /// The ask bar is a small pill until clicked, then widens into the field.
+    @State private var askExpanded = false
+    @Namespace private var askSpace
     @State private var settingsOpen = false
     @State private var cancelEdits = 0
     @State private var noteMenu: AuroraNoteTarget?
@@ -272,6 +275,13 @@ struct AuroraWorkspaceView: View {
                     .environmentObject(appState)
                     .transition(.opacity)
                     .zIndex(10)
+            }
+        }
+        .overlay(alignment: .bottom) {
+            if askBarShown {
+                askBar
+                    .padding(.bottom, appState.noteMode == .grid ? 76 : 30)
+                    .transition(.opacity)
             }
         }
         .animation(.smooth(duration: 0.3), value: openNoteURL)
@@ -545,25 +555,6 @@ struct AuroraWorkspaceView: View {
             newButton
                 .modifier(StepsBack(when: panelOpen))
 
-            VStack {
-                Spacer()
-                VStack(spacing: 12) {
-                    searchDock
-                    // Always laid out, only hidden while typing. Removing the
-                    // row moved the bar down under your cursor mid-word.
-                    suggestionPills
-                        .opacity(query.isEmpty ? 1 : 0)
-                        .allowsHitTesting(query.isEmpty)
-                }
-                .padding(.bottom, 30)
-                // While the moon listens it has its own Send and Cancel, and a
-                // long sentence pushes them down to exactly where the pills sit.
-                // An open folder is the thing you are looking at, in either
-                // view. A search bar over it reads as part of the folder.
-                .opacity(appState.isMoonListening || (focusedFolder != nil && mode != .feed) ? 0 : 1)
-                .allowsHitTesting(!(appState.isMoonListening || (focusedFolder != nil && mode != .feed)))
-            }
-            .frame(maxWidth: .infinity)
 
             AuroraThemeToggle(swipe: $themeSwipe)
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomLeading)
@@ -678,6 +669,7 @@ struct AuroraWorkspaceView: View {
                     ForEach(hits) { hit in
                         let found = appState.searchHit(for: hit.url, query: typed)
                         Button {
+                            appState.logQuestion(typed, kind: "search")
                             openNoteMark = typed
                             openNoteStep = found?.stepID
                             openNoteOrganized = found?.organized ?? false
@@ -763,6 +755,7 @@ struct AuroraWorkspaceView: View {
                 }
             .padding(.horizontal, 20)
             .frame(height: 51)
+            .background(Capsule().fill(Color.clear).matchedGeometryEffect(id: "ask", in: askSpace))
             .auroraRaisedField()
         }
         .frame(maxWidth: 620)
@@ -787,7 +780,7 @@ struct AuroraWorkspaceView: View {
             : picks.map { "What did I save about \($0.name)?" }
         return HStack(spacing: 10) {
             ForEach(questions, id: \.self) { q in
-                Button { appState.askNew(q) } label: {
+                Button { appState.askNew(q); collapseAsk() } label: {
                     Text(q)
                         .font(Aurora.ui(13, .regular))
                         .foregroundStyle(Aurora.ink2)
@@ -802,12 +795,86 @@ struct AuroraWorkspaceView: View {
     }
 
     /// The same words in both views: the bar does the same thing in both.
-    private var dockPlaceholder: String { "Ask anything" }
+    // MARK: the ask bar
+
+    /// Everywhere, except where something else already has the floor: the ask
+    /// panel has its own field, the listening moon its own Send, and the
+    /// full-size viewer wants the whole screen.
+    private var askBarShown: Bool {
+        !appState.askOpen && !appState.isMoonListening && appState.capturePreview == nil
+            && !namingFolder && folderToDelete == nil && noteMenu == nil && folderMenu == nil
+    }
+
+    /// Over a note's write-up the bar asks that note; anywhere else, the
+    /// whole library.
+    private var asksTheNote: Bool { openNoteURL != nil && appState.noteMode == .organized }
+
+    @ViewBuilder
+    private var askBar: some View {
+        if askExpanded {
+            VStack(spacing: 12) {
+                searchDock
+                if query.isEmpty && openNoteURL == nil { suggestionPills }
+            }
+            .frame(maxWidth: 620)
+            .padding(.horizontal, 24)
+            // Clicking away with nothing typed folds it back into the pill.
+            // A beat's grace, so clicking a suggestion or a result still lands.
+            .onChange(of: searchFocused) { _, focused in
+                guard !focused else { return }
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                    if !searchFocused && query.trimmingCharacters(in: .whitespaces).isEmpty { collapseAsk() }
+                }
+            }
+        } else {
+            askPill
+        }
+    }
+
+    /// The bar at rest: frosted glass, the same as the arrows beside a
+    /// capture, so it reads as part of the app rather than a button on it.
+    private var askPill: some View {
+        Button { expandAsk() } label: {
+            HStack(spacing: 8) {
+                Image(systemName: "sparkle")
+                    .font(.system(size: 12, weight: .semibold))
+                Text("Ask")
+                    .font(Aurora.ui(15, .semibold))
+            }
+            .foregroundStyle(Aurora.glassInk)
+            .padding(.horizontal, 22)
+            .frame(height: 44)
+            .background {
+                Capsule().fill(.ultraThinMaterial)
+                    .overlay(Capsule().fill(Aurora.glassFill))
+                    .matchedGeometryEffect(id: "ask", in: askSpace)
+            }
+            .overlay(Capsule().strokeBorder(Aurora.glassEdge, lineWidth: 1))
+            .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
+            .contentShape(Capsule())
+        }
+        .buttonStyle(AuroraTapDown())
+        .help("Ask anything  (⌘F)")
+    }
+
+    private func expandAsk() {
+        withAnimation(.spring(response: 0.42, dampingFraction: 0.84)) { askExpanded = true }
+        DispatchQueue.main.async { searchFocused = true }
+    }
+
+    private func collapseAsk() {
+        searchFocused = false
+        withAnimation(.spring(response: 0.38, dampingFraction: 0.88)) { askExpanded = false }
+    }
+
+    private var dockPlaceholder: String {
+        asksTheNote ? "Ask anything about this note" : "Ask anything"
+    }
 
     private var shortcuts: some View {
         ZStack {
             Button("") { back() }.keyboardShortcut(.cancelAction)
-            Button("") { searchFocused = true }.keyboardShortcut("f", modifiers: .command)
+            Button("") { expandAsk() }.keyboardShortcut("f", modifiers: .command)
             Button("") { appState.showCapturePet() }.keyboardShortcut("k", modifiers: [.command, .shift])
             Button("") { withAnimation { mode = mode == .orbit ? .feed : .orbit } }
                 .keyboardShortcut("l", modifiers: [.command, .shift])
@@ -848,6 +915,7 @@ struct AuroraWorkspaceView: View {
         if folderMenu != nil { folderMenu = nil; return }
         if appState.isMoonListening { appState.endMoonListening(); return }
         if appState.askOpen { appState.askOpen = false; return }
+        if askExpanded { query = ""; collapseAsk(); return }
         if openNoteURL != nil { openNoteURL = nil }
         else if focusedFolder != nil { closeFolder() }
         else if !query.isEmpty { query = "" }
@@ -923,8 +991,12 @@ struct AuroraWorkspaceView: View {
         let typed = query.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !typed.isEmpty else { return }
         query = ""
-        searchFocused = false
-        appState.askNew(typed)
+        if asksTheNote {
+            appState.askThisNote(typed, steps: appState.stepsInViewOrder, title: appState.activeNoteTitle)
+        } else {
+            appState.askNew(typed)
+        }
+        collapseAsk()
     }
 
     /// Files dragged notes into a folder. Anything that isn't a note this app

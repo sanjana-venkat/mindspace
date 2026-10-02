@@ -36,27 +36,16 @@ struct AuroraOrganized: View {
                                        title: appState.activeNoteTitle,
                                        onJump: onJump)
                     }
-                    Spacer(minLength: 40)
+                    // Room for the last lines to scroll clear of the ask bar.
+                    Spacer(minLength: 120)
                 }
                 .frame(maxWidth: 720, alignment: .leading)
                 .frame(maxWidth: .infinity)
                 .padding(.top, 40).padding(.horizontal, 40)
             }
             .scrollIndicators(.never)
-            // The question box stays at the foot of the window instead of at
-            // the end of the write-up, where you had to scroll to find it.
-            .safeAreaInset(edge: .bottom, spacing: 0) {
-                if showsChat {
-                    // Floats on its own lift. The dark band that used to sit
-                    // behind it blacked out the last lines of the write-up.
-                    AuroraNoteAskBar(steps: steps, title: appState.activeNoteTitle)
-                        .shadow(color: .black.opacity(0.22), radius: 18, y: 8)
-                        .frame(maxWidth: 720)
-                        .padding(.horizontal, 40)
-                        .padding(.top, 10).padding(.bottom, 24)
-                        .frame(maxWidth: .infinity)
-                }
-            }
+            // The ask bar at the foot of every screen asks this note while the
+            // write-up is open, so there is no second field here.
             // A new question, and again when its answer lands, scrolls the
             // conversation into view below the write-up.
             .onChange(of: appState.noteAskTurns.count) { _, _ in scrollToLatest(proxy) }

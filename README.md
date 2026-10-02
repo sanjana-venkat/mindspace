@@ -207,6 +207,11 @@ No analytics, no accounts, no meeting bot. Meeting detection looks at the frontm
 whether the microphone is in use, entirely on your Mac, and never starts recording on its own.
 Whatever you send to a cloud provider, by choosing one, is handled under that provider's terms.
 
+The questions you ask are kept in a private file on your Mac
+(`~/Library/Application Support/Notefy/questions.jsonl`, readable only by you), as the start of
+the record the recall dial will learn from. They are never uploaded on their own, and you can
+delete the file whenever you like.
+
 ## License
 
 MIT — see [LICENSE](LICENSE). Use it, change it, ship it; keep the copyright notice.
