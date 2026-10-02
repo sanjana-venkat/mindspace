@@ -147,6 +147,10 @@ struct AuroraWorkspaceView: View {
                     .blur(radius: appState.askOpen ? 26 : 0)
                     .transition(.opacity)
                     .zIndex(40)
+
+                newButton
+                    .transition(.opacity)
+                    .zIndex(41)
             } else if mode == .map, let tile = focusedTile {
                 AuroraFocusOverlay(tile: tile,
                                    onClose: { closeFolder() },
@@ -438,6 +442,27 @@ struct AuroraWorkspaceView: View {
     /// carries its own title and close, so the window's own controls go quiet.
     private var panelOpen: Bool { mode == .orbit && focusedFolder != nil }
 
+    private var newButton: some View {
+            Button {
+            if focusedTile != nil { create() } else { namingFolder = true }
+        } label: {
+            HStack(spacing: 6) {
+                Image(systemName: "plus")
+                    .font(.system(size: 10.5, weight: .bold))
+                Text(focusedTile == nil ? "New topic" : "New note")
+                    .font(Aurora.ui(13.5))
+            }
+            .foregroundStyle(Aurora.onSolid)
+            .padding(.horizontal, 15).padding(.vertical, 7)
+            .background(Aurora.solid, in: Capsule())
+            .contentShape(Capsule())
+        }
+        .buttonStyle(AuroraTapDown())
+        .help(focusedTile == nil ? "Make a topic" : "Start a note here")
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
+        .padding(.trailing, 28).padding(.bottom, 30)
+    }
+
     private var chrome: some View {
         ZStack(alignment: .topLeading) {
             Color.clear
@@ -515,27 +540,10 @@ struct AuroraWorkspaceView: View {
             .modifier(StepsBack(when: panelOpen))
 
             // Making something new sits in the far corner, opposite the light
-            // switch: both are things you reach for deliberately, neither
-            // belongs in the path of the search.
-            Button {
-                if focusedTile != nil { create() } else { namingFolder = true }
-            } label: {
-                HStack(spacing: 6) {
-                    Image(systemName: "plus")
-                        .font(.system(size: 10.5, weight: .bold))
-                    Text(focusedTile == nil ? "New topic" : "New note")
-                        .font(Aurora.ui(13.5))
-                }
-                .foregroundStyle(Aurora.onSolid)
-                .padding(.horizontal, 15).padding(.vertical, 7)
-                .background(Aurora.solid, in: Capsule())
-                .contentShape(Capsule())
-            }
-            .buttonStyle(AuroraTapDown())
-            .help(focusedTile == nil ? "Make a topic" : "Start a note here")
-            .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
-            .padding(.trailing, 28).padding(.bottom, 30)
-            .modifier(StepsBack(when: panelOpen))
+            // switch. While a topic is fanned out it is drawn above the fan
+            // instead, as New note, so it stays reachable.
+            newButton
+                .modifier(StepsBack(when: panelOpen))
 
             VStack {
                 Spacer()
