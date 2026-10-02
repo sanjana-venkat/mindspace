@@ -130,55 +130,92 @@ struct AuroraNoteArc: View {
         return min(max(selected, Self.reach), notes.count - 1 - Self.reach)
     }
 
-    private func card(_ note: CanvasNoteSnapshot, at i: Int, centre: CGPoint, r: CGFloat) -> some View {
-        // Place by position in the window; weight by distance from the selection.
-        let d = i - windowCentre
-        let away = abs(i - selected)
-        let shown = abs(d) <= Self.reach
-        let sign: Double = side == .right ? 1 : -1
-        // Right: angles run downward from 3 o'clock. Left: from 9 o'clock.
-        let angle = (side == .right ? 0 : 180) + Double(d) * Self.step * sign
-        let a = angle * .pi / 180
-        let point = CGPoint(x: centre.x + cos(a) * r,
-                            y: centre.y + Self.drop + sin(a) * r)
-        // The card's near edge sits on the curve and the card reaches outward.
-        let x = point.x + sign * Self.card.width / 2
-        let lit = hovered == note.url
-        let scale = away == 0 ? 1.0 : (away == 1 ? 0.92 : 0.84)
+    /// Where and how one card sits on the curve, worked out once with every
+    /// type spelled out. Inline, the arithmetic and the modifier chain took the
+    /// compiler a full second, which the toolchain CI uses does not allow.
+    private struct Placement {
+        let shown: Bool
+        let away: Int
+        let lit: Bool
+        let scale: Double
+        let tiltDegrees: Double
+        let anchor: UnitPoint
+        let position: CGPoint
+        let opacity: Double
+        let shadowOpacity: Double
+        let shadowRadius: CGFloat
+        let shadowY: CGFloat
+        let z: Double
+        let bloomDelay: Double
+    }
 
-        return AuroraNoteCard(note: note,
-                              tint: tile.tints[i % tile.tints.count],
-                              isNew: note.url == tile.freshNoteID,
-                              open: {
-                                  if i == selected { onOpenNote(note) } else { move(to: i) }
-                              },
-                              onRightClick: { point in onNoteRightClick?(note, point) })
-            .scaleEffect(scale * (lit && away != 0 ? 1.03 : 1), anchor: side == .right ? .leading : .trailing)
+    private func placement(_ note: CanvasNoteSnapshot, at i: Int, centre: CGPoint, r: CGFloat) -> Placement {
+        // Place by position in the window; weight by distance from the selection.
+        let d: Int = i - windowCentre
+        let away: Int = abs(i - selected)
+        let shown: Bool = abs(d) <= Self.reach
+        let right: Bool = side == .right
+        let sign: Double = right ? 1.0 : -1.0
+        // Right: angles run downward from 3 o'clock. Left: from 9 o'clock.
+        let angle: Double = (right ? 0.0 : 180.0) + Double(d) * Self.step * sign
+        let a: Double = angle * Double.pi / 180.0
+        let px: Double = Double(centre.x) + cos(a) * Double(r)
+        let py: Double = Double(centre.y) + Double(Self.drop) + sin(a) * Double(r)
+        // The card's near edge sits on the curve and the card reaches outward.
+        let x: Double = px + sign * Double(Self.card.width) / 2.0
+        let restX: Double = Double(centre.x) + sign * (Double(Mindspace.ringRadius) + 20.0)
+        let lit: Bool = hovered == note.url
+        let scale: Double = away == 0 ? 1.0 : (away == 1 ? 0.92 : 0.84)
+        let opacity: Double = (!shown || !bloom) ? 0.0 : (away == 0 ? 1.0 : (away == 1 ? 0.85 : 0.62))
+        let pos = CGPoint(x: bloom ? x : restX, y: bloom ? py : Double(centre.y))
+        return Placement(
+            shown: shown, away: away, lit: lit, scale: scale,
+            tiltDegrees: Double(d) * Self.step * 0.32 * sign,
+            anchor: right ? .leading : .trailing,
+            position: pos, opacity: opacity,
+            shadowOpacity: away == 0 ? 0.3 : 0.14,
+            shadowRadius: away == 0 ? 30 : 12,
+            shadowY: away == 0 ? 14 : 6,
+            z: Double(100 - away * 10) + (lit ? 5.0 : 0.0),
+            bloomDelay: Double(min(abs(d) + Self.reach, 4)) * 0.04)
+    }
+
+    private func card(_ note: CanvasNoteSnapshot, at i: Int, centre: CGPoint, r: CGFloat) -> some View {
+        let p: Placement = placement(note, at: i, centre: centre, r: r)
+        let hoverScale: Double = (p.lit && p.away != 0) ? 1.03 : 1.0
+        let ringOpacity: Double = (p.away == 0 && notes.count > 1) ? 0.9 : 0.0
+        let open: () -> Void = {
+            if i == selected { onOpenNote(note) } else { move(to: i) }
+        }
+        let base = AuroraNoteCard(note: note,
+                                  tint: tile.tints[i % tile.tints.count],
+                                  isNew: note.url == tile.freshNoteID,
+                                  open: open,
+                                  onRightClick: { point in onNoteRightClick?(note, point) })
+        let leaned = base
+            .scaleEffect(p.scale * hoverScale, anchor: p.anchor)
             // Each card leans with the curve.
-            .rotationEffect(.degrees(Double(d) * Self.step * 0.32 * sign),
-                            anchor: side == .right ? .leading : .trailing)
-            .opacity(!shown || !bloom ? 0 : (away == 0 ? 1 : (away == 1 ? 0.85 : 0.62)))
-            .shadow(color: .black.opacity(away == 0 ? 0.3 : 0.14), radius: away == 0 ? 30 : 12, y: away == 0 ? 14 : 6)
-            // The selected note is ringed in its topic's colour, so arrowing
-            // through the curve always shows where you are.
-            .overlay {
-                RoundedRectangle(cornerRadius: 18, style: .continuous)
-                    .strokeBorder(tint.opacity(away == 0 && notes.count > 1 ? 0.9 : 0), lineWidth: 2)
-                    .scaleEffect(scale, anchor: side == .right ? .leading : .trailing)
-                    .rotationEffect(.degrees(Double(d) * Self.step * 0.32 * sign),
-                                    anchor: side == .right ? .leading : .trailing)
-                    .allowsHitTesting(false)
-            }
-            .position(x: bloom ? x : centre.x + sign * (Mindspace.ringRadius + 20),
-                      y: bloom ? point.y : centre.y)
-            .zIndex(Double(100 - away * 10) + (lit ? 5 : 0))
-            .allowsHitTesting(shown)
+            .rotationEffect(.degrees(p.tiltDegrees), anchor: p.anchor)
+            .opacity(p.opacity)
+            .shadow(color: .black.opacity(p.shadowOpacity), radius: p.shadowRadius, y: p.shadowY)
+        // The selected note is ringed in its topic's colour, so arrowing
+        // through the curve always shows where you are.
+        let ringed = leaned.overlay {
+            RoundedRectangle(cornerRadius: 18, style: .continuous)
+                .strokeBorder(tint.opacity(ringOpacity), lineWidth: 2)
+                .scaleEffect(p.scale, anchor: p.anchor)
+                .rotationEffect(.degrees(p.tiltDegrees), anchor: p.anchor)
+                .allowsHitTesting(false)
+        }
+        return ringed
+            .position(p.position)
+            .zIndex(p.z)
+            .allowsHitTesting(p.shown)
             .onHover { inside in
                 hovered = inside ? note.url : (hovered == note.url ? nil : hovered)
             }
             .animation(.spring(response: 0.42, dampingFraction: 0.84), value: selected)
-            .animation(.spring(response: 0.55, dampingFraction: 0.8).delay(Double(min(abs(d) + Self.reach, 4)) * 0.04),
-                       value: bloom)
+            .animation(.spring(response: 0.55, dampingFraction: 0.8).delay(p.bloomDelay), value: bloom)
     }
 
     // MARK: the light behind

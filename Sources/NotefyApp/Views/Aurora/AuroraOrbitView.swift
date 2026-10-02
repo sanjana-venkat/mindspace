@@ -353,34 +353,50 @@ struct AuroraOrbitView: View {
 
     // MARK: listening
 
+    /// -160 dB is silence, about -20 is speaking.
+    private static func loudness(_ db: Float) -> Double {
+        let scaled: Double = (Double(db) + 55.0) / 40.0
+        return max(0.0, min(1.0, scaled))
+    }
+
+    /// The listening ticks. Kept out of the view body with every type spelled
+    /// out: the toolchain CI uses gave up type-checking this arithmetic when it
+    /// sat inline in nested closures.
+    private static func drawEar(in ctx: inout GraphicsContext, size: CGSize,
+                                time t: Double, loud: Double, radius: CGFloat) {
+        let c = CGPoint(x: size.width / 2, y: size.height / 2)
+        let ticks: Int = 56
+        let inner: Double = Double(radius) + 6.0
+        for i in 0..<ticks {
+            let fi: Double = Double(i)
+            let a: Double = fi / Double(ticks) * 2.0 * Double.pi - Double.pi / 2.0
+            let wobble: Double = (sin(t * 5.2 + fi * 0.7) + 1.0) / 2.0
+            let len: Double = 6.0 + wobble * (6.0 + loud * 26.0)
+            let outer: Double = inner + len
+            let p1 = CGPoint(x: Double(c.x) + cos(a) * inner, y: Double(c.y) + sin(a) * inner)
+            let p2 = CGPoint(x: Double(c.x) + cos(a) * outer, y: Double(c.y) + sin(a) * outer)
+            var line = Path()
+            line.move(to: p1)
+            line.addLine(to: p2)
+            let colour: Color = i % 5 == 0 ? Aurora.tint(2) : Aurora.accent
+            ctx.stroke(line, with: .color(colour), style: StrokeStyle(lineWidth: 3, lineCap: .round))
+        }
+        var rim = Path()
+        rim.addArc(center: c, radius: radius, startAngle: .degrees(0), endAngle: .degrees(360), clockwise: false)
+        ctx.stroke(rim, with: .color(Aurora.accent), lineWidth: 3)
+    }
+
+
     /// While it listens the folder arcs step aside for ticks that move with
     /// your voice. The ring is the same circle doing a different job, so the
     /// moon never jumps to another screen to hear you.
     private func earRing(centre: CGPoint) -> some View {
         TimelineView(.animation(minimumInterval: 1.0 / 30.0)) { timeline in
-            let t = timeline.date.timeIntervalSinceReferenceDate
-            // -160 dB is silence, about -20 is speaking.
-            let loud = max(0, min(1, (Double(levelDB()) + 55) / 40))
+            let t: Double = timeline.date.timeIntervalSinceReferenceDate
+            let loud: Double = Self.loudness(levelDB())
+            let radius: CGFloat = ringRadius
             Canvas { ctx, size in
-                let c = CGPoint(x: size.width / 2, y: size.height / 2)
-                let ticks = 56
-                for i in 0..<ticks {
-                    let a = Double(i) / Double(ticks) * 2 * .pi - .pi / 2
-                    let wobble = (sin(t * 5.2 + Double(i) * 0.7) + 1) / 2
-                    let len = 6 + wobble * (6 + loud * 26)
-                    let inner = ringRadius + 6
-                    let p1 = CGPoint(x: c.x + cos(a) * inner, y: c.y + sin(a) * inner)
-                    let p2 = CGPoint(x: c.x + cos(a) * (inner + len), y: c.y + sin(a) * (inner + len))
-                    var line = Path()
-                    line.move(to: p1); line.addLine(to: p2)
-                    ctx.stroke(line,
-                               with: .color(i % 5 == 0 ? Aurora.tint(2) : Aurora.accent),
-                               style: StrokeStyle(lineWidth: 3, lineCap: .round))
-                }
-                var rim = Path()
-                rim.addArc(center: c, radius: ringRadius, startAngle: .degrees(0),
-                           endAngle: .degrees(360), clockwise: false)
-                ctx.stroke(rim, with: .color(Aurora.accent), lineWidth: 3)
+                Self.drawEar(in: &ctx, size: size, time: t, loud: loud, radius: radius)
             }
         }
         .frame(width: (ringRadius + 60) * 2, height: (ringRadius + 60) * 2)
