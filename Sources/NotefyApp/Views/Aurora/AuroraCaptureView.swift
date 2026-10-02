@@ -120,9 +120,10 @@ struct AuroraCaptureView: View {
             }
         } else if let text {
             ZStack {
-                // A breath of colour, not a slab: at 22% a page of text tiles
-                // read as a green wall.
-                LinearGradient(colors: [Aurora.tint(tint).opacity(0.10), Aurora.tint(tint).opacity(0.03)],
+                // Enough colour to set the tile off a white window, short of a
+                // slab: at 22% a page of text tiles read as a green wall, and at
+                // 10% they blended into the white. The fade keeps 24% from reading flat.
+                LinearGradient(colors: [Aurora.tint(tint).opacity(0.24), Aurora.tint(tint).opacity(0.13)],
                                startPoint: .topLeading, endPoint: .bottomTrailing)
                 Text(Aurora.marked(text, query: searchMark))
                     .font(Aurora.serif(15))

@@ -40,6 +40,7 @@ struct AuroraOrbitView: View {
     #endif
     @State private var hovered: String?
     @State private var moonDown = false
+    @State private var moonHover = false
     /// Bumped on every hover change, so a delayed clear only lands if nothing
     /// has been hovered since.
     @State private var hoverToken = 0
@@ -291,6 +292,9 @@ struct AuroraOrbitView: View {
         #if DEBUG
         if let previewFace { return previewFace }
         #endif
+        // Pointing at a resting moon makes it smile: the cue that it can be
+        // tapped. While listening it keeps its listening faces.
+        if moonHover && !listening { return .happy }
         return mood.face
     }
 
@@ -353,6 +357,15 @@ struct AuroraOrbitView: View {
             }
             .frame(width: 92, height: 95)
             .tourAnchor("moon")
+            // A small lift and a smile under the pointer, and the hand cursor,
+            // so the moon reads as something you can tap.
+            .scaleEffect(moonHover && !listening ? 1.07 : 1)
+            .offset(y: moonHover && !listening ? -3 : 0)
+            .animation(.spring(response: 0.3, dampingFraction: 0.62), value: moonHover)
+            .onHover { inside in
+                moonHover = inside
+                if inside { NSCursor.pointingHand.push() } else { NSCursor.pop() }
+            }
             .scaleEffect(moonDown ? 0.95 : 1)
             .animation(.spring(response: 0.26, dampingFraction: 0.7), value: moonDown)
         }

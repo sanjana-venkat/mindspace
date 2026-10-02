@@ -158,6 +158,15 @@ enum OrbitSnapshot {
             .frame(width: 1180, height: 780)
             .environment(\.colorScheme, .dark)
         save(viewer, scale: 1, to: dir.appendingPathComponent("viewer.png"))
+        // Text captures on a light window, as they sit in the reading column.
+        let texts = VStack(spacing: 30) {
+            AuroraCaptureView(step: step("aistudio", nil), index: 3)
+            AuroraCaptureView(step: step("google", nil), index: 4)
+        }
+        .clipShape(RoundedRectangle(cornerRadius: 18, style: .continuous))
+        .padding(30).frame(width: 600).background(Aurora.ground)
+        .environment(\.colorScheme, .light)
+        save(texts, scale: 2, to: dir.appendingPathComponent("text-light.png"))
     }
 
     private struct AskCapsulePreview: View {
@@ -211,7 +220,7 @@ enum OrbitSnapshot {
                 art.idle?.resizable().scaledToFit().frame(width: cell, height: cell)
                 Text("ORIGINAL ART").font(.system(size: 13, weight: .bold)).foregroundStyle(.white)
             }
-            ForEach([("IDLE", MoonMood.Face.idle), ("ATTENTIVE", .attentive), ("SURPRISED", .surprised)], id: \.0) { label, face in
+            ForEach([("IDLE", MoonMood.Face.idle), ("HOVER", .happy), ("ATTENTIVE", .attentive), ("SURPRISED", .surprised)], id: \.0) { label, face in
                 VStack(spacing: 10) {
                     ZStack {
                         art.blank?.resizable().scaledToFit()

@@ -102,9 +102,10 @@ enum Aurora {
         return dyn(day[k], night[k])
     }
 
-    /// Ungrouped's arc. Grey read as switched off, so it takes the ring's
-    /// blue, which sits apart from the starter topics' green and violet.
-    static var arcNeutral: Color { arcTint(3) }
+    /// Ungrouped's arc: the aurora's own teal, #54BDBD, a step deeper by day
+    /// so it holds on white. Grey read as switched off, and the ring's blue is
+    /// not an aurora colour.
+    static let arcNeutral = dyn((46, 160, 162), (84, 189, 189))
 
     /// How many tints the hash chooses between. Fixed at the original five so
     /// that adding a colour never moves an existing folder to a different one.

@@ -8,7 +8,8 @@ import SwiftUI
 /// attention while you talk and look up, surprised, when you stop.
 @MainActor
 final class MoonMood: ObservableObject {
-    enum Face: Equatable { case idle, attentive, surprised }
+    /// `happy` is the pointer resting on it: an invitation to tap.
+    enum Face: Equatable { case idle, attentive, surprised, happy }
 
     @Published private(set) var face: Face = .idle
     @Published private(set) var blinking = false
@@ -119,9 +120,19 @@ struct MoonFace: View {
             let ink = GraphicsContext.Shading.color(Self.ink)
 
             // eyes
+            // Happy is the closed, smiling eyes of being pleased to see you:
+            // two little upward arcs instead of dots.
+            if face == .happy {
+                for eye in [Self.leftEye, Self.rightEye] {
+                    var arc = Path()
+                    arc.move(to: p(eye.x - 11, eye.y + 3))
+                    arc.addQuadCurve(to: p(eye.x + 11, eye.y + 3), control: p(eye.x, eye.y - 13))
+                    ctx.stroke(arc, with: ink, style: StrokeStyle(lineWidth: 5.4 * s, lineCap: .round))
+                }
+            }
             let r: CGFloat = face == .surprised ? 13.5 : (face == .attentive ? 10.5 : 11.5)
             let squash: CGFloat = blinking ? 0.12 : 1
-            for eye in [Self.leftEye, Self.rightEye] {
+            for eye in [Self.leftEye, Self.rightEye] where face != .happy {
                 let c = p(eye.x, eye.y)
                 let rect = CGRect(x: c.x - r * s, y: c.y - r * s * squash,
                                   width: r * 2 * s, height: r * 2 * s * squash)
@@ -155,6 +166,16 @@ struct MoonFace: View {
 
             // mouth
             switch face {
+            case .happy:
+                // A wide open smile, the mouth filled, so it reads at a glance.
+                var grin = Path()
+                grin.move(to: p(160.0, 181.0))
+                grin.addQuadCurve(to: p(199.5, 181.0), control: p(179.8, 206.0))
+                grin.addQuadCurve(to: p(160.0, 181.0), control: p(179.8, 186.0))
+                grin.closeSubpath()
+                ctx.fill(grin, with: ink)
+                ctx.fill(Path(ellipseIn: CGRect(x: ox + 172 * s, y: oy + 191 * s, width: 15 * s, height: 7 * s)),
+                         with: .color(Color(red: 0.93, green: 0.52, blue: 0.55)))
             case .idle:
                 var smile = Path()
                 smile.move(to: p(162.5, 182.0))
