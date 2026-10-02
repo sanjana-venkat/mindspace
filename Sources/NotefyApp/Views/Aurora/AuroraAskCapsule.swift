@@ -16,12 +16,12 @@ struct AuroraAskCapsule: View {
     var onListen: () -> Void
 
     private var dockPlaceholder: String { placeholder }
+    @Environment(\.colorScheme) private var scheme
 
     var body: some View {
         let empty = query.trimmingCharacters(in: .whitespaces).isEmpty
         return HStack(spacing: 10) {
-            Image(systemName: "sparkle")
-                .font(.system(size: 12, weight: .semibold))
+            SparkGlyph(size: 13)
             if expanded {
                 TextField(dockPlaceholder, text: $query)
                     .textFieldStyle(.plain)
@@ -75,12 +75,14 @@ struct AuroraAskCapsule: View {
         // the field from the first frame to the last; nothing is swapped.
         .frame(minWidth: 104, maxWidth: expanded ? 620 : 104)
         .background {
-            Capsule().fill(.ultraThinMaterial)
+            // Frosted at night. By day a plain 10% black: frosting over a
+            // white page only turns it a heavier grey.
+            Capsule().fill(scheme == .dark ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.clear))
                 .overlay(Capsule().fill(Aurora.glassFill))
         }
         .clipShape(Capsule())
         .overlay(Capsule().strokeBorder(Aurora.glassEdge, lineWidth: 1))
-        .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
+        .shadow(color: .black.opacity(scheme == .dark ? 0.18 : 0.06), radius: scheme == .dark ? 14 : 8, y: scheme == .dark ? 6 : 3)
         .contentShape(Capsule())
         .onTapGesture { if !expanded { onExpand() } }
         .help(expanded ? "" : "Ask anything  (⌘F)")

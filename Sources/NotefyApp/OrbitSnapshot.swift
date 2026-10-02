@@ -40,6 +40,20 @@ enum OrbitSnapshot {
         renderGridAndViewer(into: dir)
         save(AskCapsulePreview().environment(\.colorScheme, .dark), scale: 2,
              to: dir.appendingPathComponent("ask-capsule.png"))
+        let spark = HStack(spacing: 40) {
+            SparkGlyph(size: 120).foregroundStyle(.white)
+            ForEach([ColorScheme.dark, .light], id: \.self) { mode in
+                ZStack {
+                    Aurora.ground
+                    AuroraAskCapsule(expanded: false, query: .constant(""), focused: FocusState<Bool>().projectedValue,
+                                     placeholder: "", onExpand: {}, onSubmit: {}, onListen: {})
+                }
+                .frame(width: 220, height: 110)
+                .environment(\.colorScheme, mode)
+            }
+        }
+        .padding(30).background(Aurora.ground).environment(\.colorScheme, .dark)
+        save(spark, scale: 2, to: dir.appendingPathComponent("spark.png"))
         let field = VStack(spacing: 26) {
             HStack(spacing: 12) {
                 Image(systemName: "magnifyingglass").foregroundStyle(Aurora.ink3)

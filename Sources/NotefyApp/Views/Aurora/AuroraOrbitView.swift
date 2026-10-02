@@ -116,8 +116,8 @@ struct AuroraOrbitView: View {
             let sweep = minSweep + spare * (weights[i] / total)
             let pathStart = angle + capDegrees
             let pathEnd = max(pathStart, angle + sweep - gapDegrees - capDegrees)
-            // Unfiled is the inbox, not a subject, so it takes no colour of its
-            // own. Hashed, it landed on amber, the same as Hobbies.
+            // Ungrouped gets a fixed colour rather than a hashed one, which
+            // landed on amber, the same as Hobbies.
             let tint = tile.id == Self.overflowID ? Aurora.ink3
                 : tile.isUnfiled ? Aurora.arcNeutral
                 : Aurora.arcTint(tile.tints.first ?? 0)
@@ -311,6 +311,21 @@ struct AuroraOrbitView: View {
         // pulled the eye off the ring. Listening keeps a faint green one, as
         // the signal that the microphone is open.
         return ZStack {
+            // By day a pale moon on a pale page all but disappears, so it
+            // sits on a faint aurora: teal and violet light, blurred well out.
+            if !listening && scheme == .light {
+                ZStack {
+                    Circle().fill(Aurora.arcTint(4).opacity(0.30))
+                        .frame(width: 150, height: 150).offset(x: -22, y: 12)
+                    Circle().fill(Aurora.arcTint(1).opacity(0.24))
+                        .frame(width: 140, height: 140).offset(x: 26, y: -14)
+                    Circle().fill(Aurora.arcTint(0).opacity(0.18))
+                        .frame(width: 110, height: 110).offset(x: 6, y: 30)
+                }
+                .blur(radius: 34)
+                .allowsHitTesting(false)
+                .transition(.opacity)
+            }
             if listening {
                 Circle()
                     .fill(RadialGradient(colors: [Aurora.accent.opacity(0.28), .clear],

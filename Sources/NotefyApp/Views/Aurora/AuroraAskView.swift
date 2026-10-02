@@ -184,8 +184,7 @@ struct AskField: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            Image(systemName: "sparkle")
-                .font(.system(size: 12)).foregroundStyle(Aurora.ink3)
+            SparkGlyph(size: 12).foregroundStyle(Aurora.ink3)
             TextField(placeholder, text: $text)
                 .textFieldStyle(.plain)
                 .font(Aurora.ui(15, .regular))

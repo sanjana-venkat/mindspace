@@ -102,9 +102,9 @@ enum Aurora {
         return dyn(day[k], night[k])
     }
 
-    /// Ungrouped's arc: a neutral that is quiet in either mode. It used the
-    /// secondary text colour, which by day is a heavy green-grey.
-    static let arcNeutral = dyn((188, 192, 198), (176, 182, 190))
+    /// Ungrouped's arc. Grey read as switched off, so it takes the ring's
+    /// blue, which sits apart from the starter topics' green and violet.
+    static var arcNeutral: Color { arcTint(3) }
 
     /// How many tints the hash chooses between. Fixed at the original five so
     /// that adding a colour never moves an existing folder to a different one.
@@ -365,11 +365,11 @@ extension Aurora {
     /// on a white page would vanish.
     static let glassFill = Color(nsColor: NSColor(name: nil) { a in
         a.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(white: 1, alpha: 0.14) : NSColor(srgbRed: 16/255, green: 20/255, blue: 16/255, alpha: 0.06)
+            ? NSColor(white: 1, alpha: 0.14) : NSColor(white: 0, alpha: 0.10)
     })
     static let glassEdge = Color(nsColor: NSColor(name: nil) { a in
         a.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(white: 1, alpha: 0.30) : NSColor(srgbRed: 16/255, green: 20/255, blue: 16/255, alpha: 0.16)
+            ? NSColor(white: 1, alpha: 0.30) : NSColor(white: 0, alpha: 0.08)
     })
     static let glassInk = Color(nsColor: NSColor(name: nil) { a in
         a.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua

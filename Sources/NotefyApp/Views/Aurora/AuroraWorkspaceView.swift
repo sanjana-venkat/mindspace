@@ -23,6 +23,10 @@ struct AuroraWorkspaceView: View {
     @State private var arcSide: AuroraNoteArc.Side = .right
     /// The ask bar is a small pill until clicked, then widens into the field.
     @State private var askExpanded = false
+    /// Where the open bar sits in the window, and the watcher that folds it
+    /// when you click anywhere else.
+    @State private var askFrame: CGRect = .zero
+    @State private var askClickMonitor: Any?
     @State private var settingsOpen = false
     @State private var cancelEdits = 0
     @State private var noteMenu: AuroraNoteTarget?
@@ -618,8 +622,7 @@ struct AuroraWorkspaceView: View {
                     // things whose name you already know.
                     Button { submit() } label: {
                         HStack(spacing: 12) {
-                            Image(systemName: "sparkle")
-                                .font(.system(size: 11, weight: .semibold))
+                            SparkGlyph(size: 11)
                                 .foregroundStyle(Aurora.accent)
                                 .frame(width: 14)
                             Text("Ask your mindspace: \u{201C}\(typed)\u{201D}")
@@ -771,15 +774,16 @@ struct AuroraWorkspaceView: View {
             askCapsule
         }
         .frame(maxWidth: 620)
+        .background(GeometryReader { g in
+            Color.clear
+                .onAppear { askFrame = g.frame(in: .global) }
+                .onChange(of: g.frame(in: .global)) { _, f in askFrame = f }
+        })
         .padding(.horizontal, 24)
-        // Clicking away with nothing typed folds it back into the pill.
-        // A beat's grace, so clicking a suggestion or a result still lands.
-        .onChange(of: searchFocused) { _, focused in
-            guard !focused, askExpanded else { return }
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                if !searchFocused && query.trimmingCharacters(in: .whitespaces).isEmpty { collapseAsk() }
-            }
+        .onChange(of: askExpanded) { _, open in
+            if open { watchClicksAway() } else { stopWatchingClicks() }
         }
+        .onDisappear { stopWatchingClicks() }
     }
 
     private var askCapsule: some View {
@@ -793,6 +797,31 @@ struct AuroraWorkspaceView: View {
     private func expandAsk() {
         withAnimation(.spring(response: 0.42, dampingFraction: 0.84)) { askExpanded = true }
         DispatchQueue.main.async { searchFocused = true }
+    }
+
+    /// A click anywhere outside the open bar folds it back into the pill.
+    ///
+    /// Clicking empty space on a Mac does not take focus from a text field, so
+    /// waiting for focus to change never fired. The click is watched directly
+    /// and still goes through, so clicking an arc closes the bar and opens the
+    /// topic in one go. Whatever was typed is kept for when it reopens.
+    private func watchClicksAway() {
+        stopWatchingClicks()
+        askClickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
+            guard askExpanded, let window = event.window, let content = window.contentView,
+                  window === canvasWindow || canvasWindow == nil else { return event }
+            let p = event.locationInWindow
+            let point = CGPoint(x: p.x, y: content.bounds.height - p.y)
+            if !askFrame.insetBy(dx: -6, dy: -6).contains(point) {
+                DispatchQueue.main.async { collapseAsk() }
+            }
+            return event
+        }
+    }
+
+    private func stopWatchingClicks() {
+        if let askClickMonitor { NSEvent.removeMonitor(askClickMonitor) }
+        askClickMonitor = nil
     }
 
     private func collapseAsk() {
