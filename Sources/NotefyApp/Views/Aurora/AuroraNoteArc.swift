@@ -192,12 +192,14 @@ struct AuroraNoteArc: View {
     /// over it whenever you were at the top of a long topic.
     private func header(centre: CGPoint) -> some View {
         VStack(spacing: 8) {
+            // The close sits on the side the notes are on, next to them.
             HStack(spacing: 9) {
+                if side == .left { closeButton.padding(.trailing, 4) }
                 Circle().fill(tint).frame(width: 9, height: 9)
                 Text(meta)
                     .font(Aurora.mono(11)).tracking(1.2)
                     .foregroundStyle(Aurora.ink3)
-                closeButton
+                if side == .right { closeButton.padding(.leading, 4) }
             }
             if editingTitle {
                 TextField("", text: $draft)
