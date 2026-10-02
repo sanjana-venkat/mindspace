@@ -14,6 +14,8 @@ struct AuroraAskCapsule: View {
     var onExpand: () -> Void
     var onSubmit: () -> Void
     var onListen: () -> Void
+    /// The ✕: puts the box away, back into the pill.
+    var onCancel: () -> Void = {}
 
     private var dockPlaceholder: String { placeholder }
     @Environment(\.colorScheme) private var scheme
@@ -26,19 +28,19 @@ struct AuroraAskCapsule: View {
                 TextField(dockPlaceholder, text: $query)
                     .textFieldStyle(.plain)
                     .font(Aurora.ui(15.5, .regular))
-                    .foregroundStyle(Aurora.glassInk)
+                    .foregroundStyle(Aurora.ink)
                     .focused(focused)
                     .onSubmit { onSubmit() }
                     .transition(.opacity)
                 if !query.isEmpty {
-                    Button { query = "" } label: {
+                    Button { onCancel() } label: {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 13))
-                            .foregroundStyle(Aurora.glassInk.opacity(0.6))
+                            .foregroundStyle(Aurora.ink2)
                             .contentShape(Circle())
                     }
                     .buttonStyle(AuroraTapDown())
-                    .help("Clear")
+                    .help("Close")
                 }
                 Button { onListen() } label: {
                     Image(systemName: "mic.fill")
@@ -67,7 +69,7 @@ struct AuroraAskCapsule: View {
                     .transition(.opacity)
             }
         }
-        .foregroundStyle(Aurora.glassInk)
+        .foregroundStyle(expanded ? Aurora.ink : Aurora.glassInk)
         .padding(.leading, expanded ? 18 : 22)
         .padding(.trailing, expanded ? 8 : 22)
         .frame(height: expanded ? 48 : 44)
@@ -77,12 +79,16 @@ struct AuroraAskCapsule: View {
         .background {
             // Frosted at night. By day a plain 10% black: frosting over a
             // white page only turns it a heavier grey.
-            Capsule().fill(scheme == .dark ? AnyShapeStyle(.ultraThinMaterial) : AnyShapeStyle(Color.clear))
-                .overlay(Capsule().fill(Aurora.glassFill))
+            // At rest, light glass. Open, the same capsule thickens to a
+            // nearly solid frost, because now there are words to read on it.
+            // Always frosted underneath, so whatever is behind cannot show
+            // through and drown the word; the tint on top sets the colour.
+            Capsule().fill(.regularMaterial)
+                .overlay(Capsule().fill(expanded ? Aurora.readableGlass : Aurora.glassFill))
         }
         .clipShape(Capsule())
         .overlay(Capsule().strokeBorder(Aurora.glassEdge, lineWidth: 1))
-        .shadow(color: .black.opacity(scheme == .dark ? 0.18 : 0.06), radius: scheme == .dark ? 14 : 8, y: scheme == .dark ? 6 : 3)
+        .shadow(color: .black.opacity(scheme == .dark ? 0.18 : 0.12), radius: scheme == .dark ? 14 : 10, y: scheme == .dark ? 6 : 4)
         .contentShape(Capsule())
         .onTapGesture { if !expanded { onExpand() } }
         .help(expanded ? "" : "Ask anything  (⌘F)")

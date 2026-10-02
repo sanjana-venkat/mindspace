@@ -146,6 +146,13 @@ enum OrbitSnapshot {
             .background(Aurora.ground)
             .environment(\.colorScheme, .dark)
         save(grid, scale: 1, to: dir.appendingPathComponent("grid.png"))
+        for z in [0.7, 1.3] {
+            let g = AuroraGrid(steps: steps, active: .constant(0), thought: { _ in .constant("why") },
+                               onRightClick: { _, _ in }, commit: { _ in }, open: { _ in },
+                               zoom: z, selection: .constant([]))
+                .frame(width: 1180, height: 1500).background(Aurora.ground).environment(\.colorScheme, .dark)
+            save(g, scale: 0.5, to: dir.appendingPathComponent("grid-zoom-\(Int(z * 100)).png"))
+        }
 
         let viewer = AuroraCaptureViewer(steps: steps, index: .constant(3), thought: { _ in "Saved because the layout here is the one I want to copy." })
             .frame(width: 1180, height: 780)

@@ -365,15 +365,23 @@ extension Aurora {
     /// on a white page would vanish.
     static let glassFill = Color(nsColor: NSColor(name: nil) { a in
         a.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(white: 1, alpha: 0.14) : NSColor(white: 0, alpha: 0.10)
+            ? NSColor(white: 1, alpha: 0.14) : NSColor(white: 0, alpha: 0.16)
     })
     static let glassEdge = Color(nsColor: NSColor(name: nil) { a in
         a.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
-            ? NSColor(white: 1, alpha: 0.30) : NSColor(white: 0, alpha: 0.08)
+            ? NSColor(white: 1, alpha: 0.30) : NSColor(white: 0, alpha: 0.14)
     })
     static let glassInk = Color(nsColor: NSColor(name: nil) { a in
         a.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
             ? NSColor(white: 1, alpha: 0.92) : NSColor(srgbRed: 16/255, green: 20/255, blue: 16/255, alpha: 0.86)
+    })
+
+    /// Behind words you have to read: the open question box and its matches.
+    /// Frosted but nearly solid, so a busy page behind cannot bleed through.
+    static let readableGlass = Color(nsColor: NSColor(name: nil) { a in
+        a.bestMatch(from: [.aqua, .darkAqua]) == .darkAqua
+            ? NSColor(srgbRed: 28/255, green: 30/255, blue: 33/255, alpha: 0.86)
+            : NSColor(white: 1, alpha: 0.86)
     })
 
     static let fieldFill = Color(nsColor: NSColor(name: nil) { appearance in

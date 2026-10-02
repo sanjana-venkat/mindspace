@@ -27,6 +27,10 @@ struct AuroraWorkspaceView: View {
     /// when you click anywhere else.
     @State private var askFrame: CGRect = .zero
     @State private var askClickMonitor: Any?
+    /// The first-run walkthrough: which tip is showing, and whether it has
+    /// been seen. Settings can clear the flag to show it again.
+    @State private var tourStep: Int?
+    @AppStorage("mindspace.tour.v1.done") private var tourDone = false
     @State private var settingsOpen = false
     @State private var cancelEdits = 0
     @State private var noteMenu: AuroraNoteTarget?
@@ -287,6 +291,12 @@ struct AuroraWorkspaceView: View {
                     .transition(.opacity)
             }
         }
+        .overlayPreferenceValue(TourAnchorKey.self) { anchors in
+            if tourStep != nil {
+                AuroraTour(anchors: anchors, step: $tourStep, onFinish: { finishTour() })
+                    .transition(.opacity)
+            }
+        }
         .animation(.smooth(duration: 0.3), value: openNoteURL)
         .animation(.spring(response: 0.45, dampingFraction: 0.86), value: focusedFolder)
         .coordinateSpace(name: "auroraWorkspace")
@@ -297,7 +307,12 @@ struct AuroraWorkspaceView: View {
         .animation(.smooth(duration: 0.22), value: appState.askOpen)
         .animation(.smooth(duration: 0.22), value: appState.isMoonListening)
         .background(shortcuts)
-        .onAppear { canvas.enabled = canvasLive; seedFolderPoints() }
+        .onAppear {
+            canvas.enabled = canvasLive
+            seedFolderPoints()
+            startTourIfNeeded()
+        }
+        .onChange(of: tourDone) { _, done in if !done { startTourIfNeeded() } }
         .onChange(of: focusedFolder) { _, _ in canvas.enabled = canvasLive }
         .onChange(of: openNoteURL) { _, _ in canvas.enabled = canvasLive }
         .onChange(of: mode) { _, _ in canvas.enabled = canvasLive }
@@ -472,6 +487,7 @@ struct AuroraWorkspaceView: View {
         }
         .buttonStyle(AuroraTapDown())
         .help(focusedTile == nil ? "Make a topic" : "Start a note here")
+        .tourAnchor("new")
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .bottomTrailing)
         .padding(.trailing, 28).padding(.bottom, 30)
     }
@@ -574,6 +590,7 @@ struct AuroraWorkspaceView: View {
         .padding(4)
         .background(.regularMaterial, in: Capsule())
         .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
+        .tourAnchor("toggle")
     }
 
     private func modeItem(_ icon: String, _ label: String, _ value: AuroraViewMode) -> some View {
@@ -628,7 +645,7 @@ struct AuroraWorkspaceView: View {
                             Text("Ask your mindspace: \u{201C}\(typed)\u{201D}")
                                 .font(Aurora.ui(14.5)).foregroundStyle(Aurora.ink).lineLimit(1)
                             Spacer(minLength: 8)
-                            Text("↩").font(Aurora.mono(12)).foregroundStyle(Aurora.ink3)
+                            Text("↩").font(Aurora.mono(12)).foregroundStyle(Aurora.ink2)
                         }
                         .padding(.horizontal, 13).padding(.vertical, 9)
                         .contentShape(Rectangle())
@@ -656,7 +673,7 @@ struct AuroraWorkspaceView: View {
                                 Text(tile.name).font(Aurora.ui(14.5)).foregroundStyle(Aurora.ink).lineLimit(1)
                                 Spacer(minLength: 8)
                                 Text("\(tile.notes.count) note\(tile.notes.count == 1 ? "" : "s")")
-                                    .font(Aurora.ui(12.5)).foregroundStyle(Aurora.ink3)
+                                    .font(Aurora.ui(12.5)).foregroundStyle(Aurora.ink2)
                             }
                             .padding(.horizontal, 13).padding(.vertical, 9)
                             .contentShape(Rectangle())
@@ -690,14 +707,14 @@ struct AuroraWorkspaceView: View {
                                        !hit.title.lowercased().contains(typed.lowercased()) {
                                         Text(Aurora.marked(snippet, query: typed))
                                             .font(Aurora.ui(11.5))
-                                            .foregroundStyle(Aurora.ink3)
+                                            .foregroundStyle(Aurora.ink2)
                                             .lineLimit(1)
                                     }
                                 }
                                 Spacer(minLength: 8)
                                 Text(appState.folderPath(for: appState.folderID(for: hit.url)).isEmpty
                                      ? UnfiledName.current : appState.folderPath(for: appState.folderID(for: hit.url)))
-                                    .font(Aurora.ui(12.5, .regular)).foregroundStyle(Aurora.ink3).lineLimit(1)
+                                    .font(Aurora.ui(12.5, .regular)).foregroundStyle(Aurora.ink2).lineLimit(1)
                             }
                             .padding(.horizontal, 13).padding(.vertical, 9)
                             .contentShape(Rectangle())
@@ -707,8 +724,8 @@ struct AuroraWorkspaceView: View {
                 }
                 .padding(8)
                 .background {
-                    RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.ultraThinMaterial)
-                        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Aurora.glassFill))
+                    RoundedRectangle(cornerRadius: 20, style: .continuous).fill(.regularMaterial)
+                        .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).fill(Aurora.readableGlass))
                 }
                 .overlay(RoundedRectangle(cornerRadius: 20, style: .continuous).strokeBorder(Aurora.glassEdge, lineWidth: 1))
                 .shadow(color: .black.opacity(0.12), radius: 26, y: 12)
@@ -791,7 +808,9 @@ struct AuroraWorkspaceView: View {
                          placeholder: dockPlaceholder,
                          onExpand: { expandAsk() },
                          onSubmit: { submit() },
-                         onListen: { collapseAsk(); appState.beginMoonListening() })
+                         onListen: { collapseAsk(); appState.beginMoonListening() },
+                         onCancel: { query = ""; collapseAsk() })
+            .tourAnchor("ask")
     }
 
     private func expandAsk() {
@@ -822,6 +841,23 @@ struct AuroraWorkspaceView: View {
     private func stopWatchingClicks() {
         if let askClickMonitor { NSEvent.removeMonitor(askClickMonitor) }
         askClickMonitor = nil
+    }
+
+    /// Once, on the ring, with nothing else open. A beat's wait so the window
+    /// has settled and every control has reported where it is.
+    private func startTourIfNeeded() {
+        guard !tourDone, tourStep == nil else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.9) {
+            guard !tourDone, openNoteURL == nil, !appState.askOpen else { return }
+            if mode != .orbit { withAnimation { mode = .orbit } }
+            focusedFolder = nil
+            withAnimation(.smooth(duration: 0.3)) { tourStep = 0 }
+        }
+    }
+
+    private func finishTour() {
+        withAnimation(.smooth(duration: 0.25)) { tourStep = nil }
+        tourDone = true
     }
 
     private func collapseAsk() {
@@ -864,6 +900,7 @@ struct AuroraWorkspaceView: View {
     /// Esc, in order of what is nearest to you. One owner for the key: two
     /// buttons both claiming it left which one won down to SwiftUI.
     private func back() {
+        if tourStep != nil { finishTour(); return }
         if panelRenaming { cancelRenameTick += 1; return }
         if appState.capturePreview != nil {
             withAnimation(.smooth(duration: 0.22)) { appState.capturePreview = nil }

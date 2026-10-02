@@ -198,6 +198,13 @@ struct AuroraNoteView: View {
     /// glyph in a 26pt frame left most of the target dead — clicks near the
     /// edge went nowhere and it felt like it needed a second try. The shape is
     /// declared explicitly, and the target given room.
+    /// One step of 15%, landed on a whole percent. Adding 0.15 to a double
+    /// drifted, so the label read 99% or 114% after a step or two.
+    private func stepZoom(_ direction: Int) {
+        let next = (zoom * 100).rounded() + Double(direction) * 15
+        zoom = min(200, max(45, next)) / 100
+    }
+
     private func zoomButton(_ icon: String, enabled: Bool, _ action: @escaping () -> Void) -> some View {
         Button { withAnimation(.smooth(duration: 0.16)) { action() } } label: {
             Image(systemName: icon)
@@ -277,16 +284,22 @@ struct AuroraNoteView: View {
                 // design, so a zoom control there is a dead knob.
                 if mode == .grid {
                     HStack(spacing: 2) {
-                        zoomButton("minus", enabled: zoom > 0.5) { zoom = max(0.45, zoom - 0.15) }
-                            .help("Smaller")
-                        Text("\(Int(zoom * 100))%")
+                        zoomButton("minus", enabled: zoom > 0.5) { stepZoom(-1) }
+                            .help("Smaller  (\u{2318}\u{2212})")
+                            .keyboardShortcut("-", modifiers: .command)
+                        Text("\(Int((zoom * 100).rounded()))%")
                             .font(Aurora.mono(11)).foregroundStyle(Aurora.ink2)
                             .frame(width: 44, height: 28)
                             .contentShape(Rectangle())
                             .onTapGesture { withAnimation(.smooth(duration: 0.2)) { zoom = 1 } }
                             .help("Back to 100%")
-                        zoomButton("plus", enabled: zoom < 1.95) { zoom = min(2.0, zoom + 0.15) }
-                            .help("Bigger")
+                        zoomButton("plus", enabled: zoom < 1.95) { stepZoom(1) }
+                            .help("Bigger  (\u{2318}+)")
+                            .keyboardShortcut("=", modifiers: .command)
+                        // \u{2318}0 resets, as in a browser.
+                        Button("") { withAnimation(.smooth(duration: 0.2)) { zoom = 1 } }
+                            .keyboardShortcut("0", modifiers: .command)
+                            .frame(width: 0, height: 0).opacity(0)
                     }
                     .padding(3)
                     .background(.regularMaterial, in: Capsule())
@@ -539,7 +552,9 @@ struct AuroraPanels: View {
                                 .blur(radius: dimmed(step) ? 4 : 0)
                                 .opacity(dimmed(step) ? 0.45 : 1)
                                 .auroraRightClick(in: "auroraNote") { onRightClick(step, $0) }
-                                .opacity(i == active ? 1 : 0.55)
+                                // Readable even when not the one you're on; the
+                                // ring around the active capture is what marks it.
+                                .opacity(i == active ? 1 : 0.85)
                                 .animation(.smooth(duration: 0.3), value: active)
                                 .id(i)
                                 .background(GeometryReader { g in

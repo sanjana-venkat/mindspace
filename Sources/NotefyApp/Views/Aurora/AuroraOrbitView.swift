@@ -216,7 +216,8 @@ struct AuroraOrbitView: View {
             // ring when one folder holds nearly everything.
             Circle()
                 .stroke(Aurora.line.opacity(0.5), lineWidth: 1)
-                .frame(width: ringRadius * 2, height: ringRadius * 2)
+                .frame(width: ringRadius * 2 + thickness * 2, height: ringRadius * 2 + thickness * 2)
+                .tourAnchor("ring")
                 .position(centre)
 
             ForEach(segments) { seg in
@@ -351,6 +352,7 @@ struct AuroraOrbitView: View {
                 }
             }
             .frame(width: 92, height: 95)
+            .tourAnchor("moon")
             .scaleEffect(moonDown ? 0.95 : 1)
             .animation(.spring(response: 0.26, dampingFraction: 0.7), value: moonDown)
         }

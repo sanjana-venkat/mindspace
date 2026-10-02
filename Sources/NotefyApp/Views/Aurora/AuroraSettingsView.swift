@@ -115,6 +115,16 @@ struct AuroraSettingsView: View {
                     badge("Accessibility", snap.accessibility)
                     badge("Screen & audio", snap.screenRecording)
                     Spacer(minLength: 0)
+                    Button("Show tips") {
+                        dismiss()
+                        UserDefaults.standard.set(false, forKey: "mindspace.tour.v1.done")
+                    }
+                        .buttonStyle(.plain)
+                        .font(Aurora.ui(12))
+                        .foregroundStyle(Aurora.ink)
+                        .padding(.horizontal, 12).padding(.vertical, 7)
+                        .background(Aurora.surface2, in: Capsule())
+                        .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
                     Button("Run setup") { dismiss(); appState.showPermissionOnboarding() }
                         .buttonStyle(.plain)
                         .font(Aurora.ui(12))
