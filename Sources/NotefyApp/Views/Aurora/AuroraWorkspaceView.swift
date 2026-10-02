@@ -23,7 +23,6 @@ struct AuroraWorkspaceView: View {
     @State private var arcSide: AuroraNoteArc.Side = .right
     /// The ask bar is a small pill until clicked, then widens into the field.
     @State private var askExpanded = false
-    @Namespace private var askSpace
     @State private var settingsOpen = false
     @State private var cancelEdits = 0
     @State private var noteMenu: AuroraNoteTarget?
@@ -710,53 +709,7 @@ struct AuroraWorkspaceView: View {
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
 
-            HStack(spacing: 10) {
-                    Image(systemName: "magnifyingglass")
-                        .font(.system(size: 15, weight: .semibold)).foregroundStyle(Aurora.ink3)
-                // Matches appear as you type; Return asks. The bar is the
-                // same in both views, mic and all.
-                    TextField(dockPlaceholder, text: $query)
-                        .textFieldStyle(.plain)
-                        .font(Aurora.ui(16, .regular))
-                        .foregroundStyle(Aurora.ink)
-                        .focused($searchFocused)
-                        .onSubmit { submit() }
-                    if !query.isEmpty {
-                        Button { query = "" } label: {
-                            Image(systemName: "xmark.circle.fill")
-                                .font(.system(size: 13))
-                                .foregroundStyle(Aurora.ink3)
-                                .contentShape(Circle())
-                        }
-                        .buttonStyle(AuroraTapDown())
-                        .help("Clear")
-                    }
-                    Button { appState.beginMoonListening() } label: {
-                        Image(systemName: "mic.fill")
-                            .font(.system(size: 12))
-                            .foregroundStyle(Aurora.ink2)
-                            .frame(width: 30, height: 30)
-                            .background(Aurora.surface2, in: Circle())
-                    }
-                    .buttonStyle(AuroraTapDown())
-                    .help("Ask out loud")
 
-                    Button { submit() } label: {
-                        Image(systemName: "arrow.right")
-                            .font(.system(size: 12, weight: .semibold))
-                            .foregroundStyle(.white)
-                            .frame(width: 30, height: 30)
-                            .background(Aurora.accent, in: Circle())
-                    }
-                    .buttonStyle(AuroraTapDown())
-                    .disabled(query.trimmingCharacters(in: .whitespaces).isEmpty)
-                    .opacity(query.trimmingCharacters(in: .whitespaces).isEmpty ? 0.4 : 1)
-                    .help("Ask your mindspace")
-                }
-            .padding(.horizontal, 20)
-            .frame(height: 51)
-            .background(Capsule().fill(Color.clear).matchedGeometryEffect(id: "ask", in: askSpace))
-            .auroraRaisedField()
         }
         .frame(maxWidth: 620)
         .animation(.smooth(duration: 0.22), value: query)
@@ -809,52 +762,91 @@ struct AuroraWorkspaceView: View {
     /// whole library.
     private var asksTheNote: Bool { openNoteURL != nil && appState.noteMode == .organized }
 
-    @ViewBuilder
     private var askBar: some View {
-        if askExpanded {
-            VStack(spacing: 12) {
-                searchDock
-                if query.isEmpty && openNoteURL == nil { suggestionPills }
+        VStack(spacing: 12) {
+            if askExpanded { searchDock }
+            askCapsule
+            if askExpanded && query.isEmpty && openNoteURL == nil { suggestionPills }
+        }
+        .frame(maxWidth: 620)
+        .padding(.horizontal, 24)
+        // Clicking away with nothing typed folds it back into the pill.
+        // A beat's grace, so clicking a suggestion or a result still lands.
+        .onChange(of: searchFocused) { _, focused in
+            guard !focused, askExpanded else { return }
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
+                if !searchFocused && query.trimmingCharacters(in: .whitespaces).isEmpty { collapseAsk() }
             }
-            .frame(maxWidth: 620)
-            .padding(.horizontal, 24)
-            // Clicking away with nothing typed folds it back into the pill.
-            // A beat's grace, so clicking a suggestion or a result still lands.
-            .onChange(of: searchFocused) { _, focused in
-                guard !focused else { return }
-                DispatchQueue.main.asyncAfter(deadline: .now() + 0.25) {
-                    if !searchFocused && query.trimmingCharacters(in: .whitespaces).isEmpty { collapseAsk() }
-                }
-            }
-        } else {
-            askPill
         }
     }
 
-    /// The bar at rest: frosted glass, the same as the arrows beside a
-    /// capture, so it reads as part of the app rather than a button on it.
-    private var askPill: some View {
-        Button { expandAsk() } label: {
-            HStack(spacing: 8) {
-                Image(systemName: "sparkle")
-                    .font(.system(size: 12, weight: .semibold))
+    /// One capsule that is the button and the field. At rest it says Ask; a
+    /// click stretches the same glass sideways and the word becomes the place
+    /// you type. Frosted like the arrows beside a capture, in both states.
+    private var askCapsule: some View {
+        let empty = query.trimmingCharacters(in: .whitespaces).isEmpty
+        return HStack(spacing: 10) {
+            Image(systemName: "sparkle")
+                .font(.system(size: 12, weight: .semibold))
+            if askExpanded {
+                TextField(dockPlaceholder, text: $query)
+                    .textFieldStyle(.plain)
+                    .font(Aurora.ui(15.5, .regular))
+                    .foregroundStyle(Aurora.glassInk)
+                    .focused($searchFocused)
+                    .onSubmit { submit() }
+                    .transition(.opacity)
+                if !query.isEmpty {
+                    Button { query = "" } label: {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 13))
+                            .foregroundStyle(Aurora.glassInk.opacity(0.6))
+                            .contentShape(Circle())
+                    }
+                    .buttonStyle(AuroraTapDown())
+                    .help("Clear")
+                }
+                Button { collapseAsk(); appState.beginMoonListening() } label: {
+                    Image(systemName: "mic.fill")
+                        .font(.system(size: 12))
+                        .frame(width: 30, height: 30)
+                        .background(Aurora.glassFill, in: Circle())
+                        .overlay(Circle().strokeBorder(Aurora.glassEdge, lineWidth: 1))
+                }
+                .buttonStyle(AuroraTapDown())
+                .help("Ask out loud")
+                Button { submit() } label: {
+                    Image(systemName: "arrow.right")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.white)
+                        .frame(width: 30, height: 30)
+                        .background(Aurora.accent, in: Circle())
+                }
+                .buttonStyle(AuroraTapDown())
+                .disabled(empty)
+                .opacity(empty ? 0.45 : 1)
+                .help("Ask")
+            } else {
                 Text("Ask")
                     .font(Aurora.ui(15, .semibold))
+                    .fixedSize()
+                    .transition(.opacity)
             }
-            .foregroundStyle(Aurora.glassInk)
-            .padding(.horizontal, 22)
-            .frame(height: 44)
-            .background {
-                Capsule().fill(.ultraThinMaterial)
-                    .overlay(Capsule().fill(Aurora.glassFill))
-                    .matchedGeometryEffect(id: "ask", in: askSpace)
-            }
-            .overlay(Capsule().strokeBorder(Aurora.glassEdge, lineWidth: 1))
-            .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
-            .contentShape(Capsule())
         }
-        .buttonStyle(AuroraTapDown())
-        .help("Ask anything  (⌘F)")
+        .foregroundStyle(Aurora.glassInk)
+        .padding(.leading, askExpanded ? 18 : 22)
+        .padding(.trailing, askExpanded ? 8 : 22)
+        .frame(width: askExpanded ? 620 : nil, height: askExpanded ? 48 : 44)
+        .frame(maxWidth: askExpanded ? .infinity : nil)
+        .background {
+            Capsule().fill(.ultraThinMaterial)
+                .overlay(Capsule().fill(Aurora.glassFill))
+        }
+        .overlay(Capsule().strokeBorder(Aurora.glassEdge, lineWidth: 1))
+        .shadow(color: .black.opacity(0.18), radius: 14, y: 6)
+        .contentShape(Capsule())
+        .onTapGesture { if !askExpanded { expandAsk() } }
+        .help(askExpanded ? "" : "Ask anything  (⌘F)")
     }
 
     private func expandAsk() {
