@@ -38,6 +38,8 @@ enum OrbitSnapshot {
             .map { tile($0.0, counts: [], tint: $0.1, chosen: true) }
         renderFaces(to: dir.appendingPathComponent("faces.png"))
         renderGridAndViewer(into: dir)
+        save(AskCapsulePreview().environment(\.colorScheme, .dark), scale: 2,
+             to: dir.appendingPathComponent("ask-capsule.png"))
         let field = VStack(spacing: 26) {
             HStack(spacing: 12) {
                 Image(systemName: "magnifyingglass").foregroundStyle(Aurora.ink3)
@@ -135,6 +137,36 @@ enum OrbitSnapshot {
             .frame(width: 1180, height: 780)
             .environment(\.colorScheme, .dark)
         save(viewer, scale: 1, to: dir.appendingPathComponent("viewer.png"))
+    }
+
+    private struct AskCapsulePreview: View {
+        @FocusState var f: Bool
+        var body: some View {
+            VStack(spacing: 30) {
+                ForEach([false, true], id: \.self) { open in
+                    ZStack {
+                        Aurora.ground
+                        AuroraAskCapsule(expanded: open, query: .constant(""), focused: $f,
+                                         placeholder: "Ask \u{201C}what did I save last week?\u{201D}",
+                                         onExpand: {}, onSubmit: {}, onListen: {})
+                            .frame(maxWidth: 620)
+                    }
+                    .frame(width: 760, height: 110)
+                }
+                ZStack {
+                    Color.white
+                    Text("Learning about Dance: Dance as an Art Form & Entertainment")
+                        .font(.system(size: 18)).foregroundStyle(.black).offset(y: -26)
+                    AuroraAskCapsule(expanded: true, query: .constant(""), focused: $f,
+                                     placeholder: "Ask \u{201C}what did I save last week?\u{201D}",
+                                     onExpand: {}, onSubmit: {}, onListen: {})
+                        .frame(maxWidth: 620)
+                }
+                .frame(width: 760, height: 110)
+            }
+            .padding(30)
+            .background(Aurora.ground)
+        }
     }
 
     private static func save<V: View>(_ view: V, scale: CGFloat, to url: URL) {
