@@ -32,25 +32,27 @@ For Macs running macOS 14 (Sonoma) or newer. Works on Apple silicon and Intel.
 <table>
   <tr>
     <td width="50%"><img src="docs/screenshots/captures-grid.jpg" alt="A note's captures as a grid: screenshots, highlighted text and voice notes side by side"></td>
-    <td width="50%"><img src="docs/screenshots/talk-to-the-moon.jpg" alt="The moon listening, with the spoken question written out underneath"></td>
+    <td width="50%"><img src="docs/screenshots/your-thought.jpg" alt="A note opened one capture at a time, with the thought written beside it"></td>
   </tr>
   <tr>
-    <td><b>Grab anything, and say why.</b> A window, part of the screen, a paragraph you highlighted, a voice note, a whole meeting, all in one note, each with the thought you had about it. Double-click one to see it full size.</td>
-    <td><b>Or just talk to it.</b> Tap the moon and ask out loud. It listens on your Mac and writes your question out as you speak.</td>
+    <td><b>Grab anything.</b> A window, part of the screen, a paragraph you highlighted, a voice note, a whole meeting, all kept together in one note. Double-click one to see it full size.</td>
+    <td><b>Add what you were thinking.</b> Step through a note one capture at a time and write your thought beside each. Those words are what Mindspace searches, cites and builds on.</td>
   </tr>
   <tr>
+    <td><img src="docs/screenshots/talk-to-the-moon.jpg" alt="The moon listening, with the spoken question written out underneath"></td>
     <td><img src="docs/screenshots/ask-mindspace.jpg" alt="An answer built from saved captures, each claim cited to its source"></td>
-    <td><img src="docs/screenshots/topic-notes.jpg" alt="A topic opened from the ring, its notes fanned out beside the moon"></td>
   </tr>
   <tr>
+    <td><b>Talk to it.</b> Tap the moon and ask out loud. It listens on your Mac and writes your question out as you speak.</td>
     <td><b>Ask from anywhere.</b> Answers come only from what you saved, and every claim points to the capture it came from. If it isn't in there, it says so.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/topic-notes.jpg" alt="A topic opened from the ring, its notes fanned out beside the moon"></td>
+    <td><img src="docs/screenshots/write-up.jpg" alt="A note organized by AI into key ideas, as bullets or an essay"></td>
+  </tr>
+  <tr>
     <td><b>Open a topic from the ring.</b> Its notes fan out beside the moon. Scroll or use the arrow keys to go through them.</td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center"><img src="docs/screenshots/write-up.jpg" alt="A note organized by AI into key ideas, as bullets or an essay" width="70%"></td>
-  </tr>
-  <tr>
-    <td colspan="2" align="center"><b>A tidy version, written for you.</b> A note full of captures becomes its key ideas, as bullets or an essay, beside your own words, and it tells you when it has gone out of date.</td>
+    <td><b>A tidy version, written for you.</b> A note full of captures becomes its key ideas, as bullets or an essay, beside your own words.</td>
   </tr>
 </table>
 
