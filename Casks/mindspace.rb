@@ -1,6 +1,6 @@
 cask "mindspace" do
-  version "0.1.11"
-  sha256 "6e0cb1f45e88d05dcd87e5fd89d1aaf617a70d129970f2693fc2a1de70527e16"
+  version "0.1.12"
+  sha256 "d35b1d791eb6379259e7aa0479dd05ff6ec7a489802fe6ac2ac6e2064daf21e4"
 
   url "https://github.com/sanjana-venkat/mindspace/releases/download/v#{version}/Mindspace-#{version}.dmg"
   name "Mindspace"
