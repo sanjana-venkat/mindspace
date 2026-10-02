@@ -32,6 +32,7 @@ struct AuroraOrbitView: View {
     var previewHover: String? = nil
     #endif
 
+    @Environment(\.colorScheme) private var scheme
     @StateObject private var mood = MoonMood()
     #if DEBUG
     /// Lets the offscreen renderer draw a particular face.
@@ -118,8 +119,8 @@ struct AuroraOrbitView: View {
             // Unfiled is the inbox, not a subject, so it takes no colour of its
             // own. Hashed, it landed on amber, the same as Hobbies.
             let tint = tile.id == Self.overflowID ? Aurora.ink3
-                : tile.isUnfiled ? Aurora.ink2
-                : Aurora.tint(tile.tints.first ?? 0)
+                : tile.isUnfiled ? Aurora.arcNeutral
+                : Aurora.arcTint(tile.tints.first ?? 0)
             out.append(Segment(id: tile.id, tile: tile,
                                start: pathStart, end: pathEnd,
                                slotStart: angle, slotEnd: angle + sweep,
@@ -224,7 +225,10 @@ struct AuroraOrbitView: View {
                     .stroke(seg.tint.opacity(lit ? 1 : 0.85),
                             style: StrokeStyle(lineWidth: lit ? thickness + 5 : thickness,
                                                lineCap: .round))
-                    .shadow(color: lit ? seg.tint.opacity(0.7) : .clear, radius: 14)
+                    // By day a glow in the arc's own colour is a smudge, so it
+                    // is fainter and tighter there.
+                    .shadow(color: lit ? seg.tint.opacity(scheme == .dark ? 0.7 : 0.35) : .clear,
+                            radius: scheme == .dark ? 14 : 8)
                     .frame(width: trackSize, height: trackSize)
                     .position(centre)
                     .allowsHitTesting(false)
@@ -430,7 +434,7 @@ struct AuroraOrbitView: View {
             Capsule().fill(.regularMaterial)
                 .overlay(Capsule().fill(Aurora.surface.opacity(0.72)))
                 .overlay(Capsule().strokeBorder(Aurora.line, lineWidth: 1))
-                .shadow(color: .black.opacity(0.3), radius: 18, y: 6)
+                .shadow(color: .black.opacity(scheme == .dark ? 0.3 : 0.1), radius: scheme == .dark ? 18 : 12, y: 6)
         }
         .fixedSize()
         .contentShape(Capsule())

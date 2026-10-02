@@ -58,6 +58,8 @@ enum OrbitSnapshot {
         render(starters, hover: "Learning", to: dir.appendingPathComponent("8-new-user.png"))
         render(starters + [tile("Unfiled", unfiled: true, counts: [8], tint: 2)],
                hover: nil, to: dir.appendingPathComponent("9-you-after-seeding.png"))
+        render(starters + [tile("Unfiled", unfiled: true, counts: [8], tint: 2)],
+               hover: "Unfiled", light: true, to: dir.appendingPathComponent("9b-light.png"))
         let psych = tile("Cognitive Psych", counts: [6, 5, 4, 3], tint: 0, chosen: true,
                          titles: ["Correlation is not causation", "Memory and encoding",
                                   "Seminar 9, the bits I missed", "Exam 2, likely themes"])
@@ -186,7 +188,7 @@ enum OrbitSnapshot {
 
     private static func render(_ tiles: [AuroraFolderTile], hover: String? = nil,
                                listening: String? = nil, panel: AuroraFolderTile? = nil,
-                               side: AuroraNoteArc.Side = .right, to url: URL) {
+                               side: AuroraNoteArc.Side = .right, light: Bool = false, to url: URL) {
         let transcript = LiveTranscriptEngine()
         if let listening { transcript.debugSay(listening) }
 
@@ -205,9 +207,9 @@ enum OrbitSnapshot {
             if listening == nil && panel == nil { chromeOutline }
         }
         .frame(width: size.width, height: size.height)
-        .environment(\.colorScheme, .dark)
+        .environment(\.colorScheme, light ? .light : .dark)
 
-        NSAppearance(named: .darkAqua)!.performAsCurrentDrawingAppearance {
+        NSAppearance(named: light ? .aqua : .darkAqua)!.performAsCurrentDrawingAppearance {
             let renderer = ImageRenderer(content: view)
             renderer.scale = 1.5
             guard let image = renderer.nsImage,

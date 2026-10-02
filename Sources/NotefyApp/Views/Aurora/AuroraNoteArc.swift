@@ -36,11 +36,16 @@ struct AuroraNoteArc: View {
 
     /// Where the moon sits across the window while a topic is open: away from
     /// the side the notes come out of, so the curve has room.
-    static func ringCentreFraction(for side: Side) -> CGFloat { side == .right ? 0.34 : 0.66 }
+    /// The moon stays where it is. Sliding it aside left a wide empty band on
+    /// one side of the window and made the ring feel like it had been moved.
+    static func ringCentreFraction(for side: Side) -> CGFloat { 0.5 }
 
     private static let card = CGSize(width: 218, height: 186)
-    /// The curve the cards sit on, measured from the moon's centre.
-    private static let orbit: CGFloat = 300
+    /// The curve the cards sit on, measured from the moon's centre. As wide
+    /// as the window allows with the moon in the middle, within limits.
+    private func orbit(_ width: CGFloat) -> CGFloat {
+        min(300, max(190, width / 2 - Self.card.width - 36))
+    }
     /// The turn between neighbours. About 110pt apart vertically, so the
     /// 186pt cards overlap like a fanned deck, as in the folder band.
     private static let step: Double = 15
@@ -51,15 +56,23 @@ struct AuroraNoteArc: View {
     private static let reach = 2
 
     private var notes: [CanvasNoteSnapshot] { tile.notesByRecency }
-    private var tint: Color { Aurora.tint(tile.tints.first ?? 0) }
+    private var tint: Color { tile.isUnfiled ? Aurora.arcNeutral : Aurora.arcTint(tile.tints.first ?? 0) }
 
     var body: some View {
         GeometryReader { geo in
             let centre = CGPoint(x: geo.size.width * Self.ringCentreFraction(for: side),
                                  y: geo.size.height / 2 - 40)
+            let r = orbit(geo.size.width)
             ZStack {
-                aurora(centre: centre)
-                header(centre: centre)
+                // Clicking anywhere off the cards closes the topic, except on
+                // the ring, which keeps its own clicks for switching topics.
+                Color.black.opacity(0.001)
+                    .contentShape(RingHole(centre: centre, radius: Mindspace.ringRadius + 34),
+                                  eoFill: true)
+                    .onTapGesture(perform: onClose)
+
+                aurora(centre: centre, r: r)
+                header(centre: centre, r: r)
 
                 if notes.isEmpty {
                     Text("Nothing in \(tile.name) yet. Captures land here while it is the destination.")
@@ -67,11 +80,11 @@ struct AuroraNoteArc: View {
                         .foregroundStyle(Aurora.ink3)
                         .multilineTextAlignment(side == .right ? .leading : .trailing)
                         .frame(width: 260, alignment: side == .right ? .leading : .trailing)
-                        .position(x: centre.x + (side == .right ? 1 : -1) * (Self.orbit + 130),
+                        .position(x: centre.x + (side == .right ? 1 : -1) * (r + 130),
                                   y: centre.y)
                 } else {
                     ForEach(Array(notes.enumerated()), id: \.element.id) { i, note in
-                        card(note, at: i, centre: centre)
+                        card(note, at: i, centre: centre, r: r)
                     }
                 }
             }
@@ -117,7 +130,7 @@ struct AuroraNoteArc: View {
         return min(max(selected, Self.reach), notes.count - 1 - Self.reach)
     }
 
-    private func card(_ note: CanvasNoteSnapshot, at i: Int, centre: CGPoint) -> some View {
+    private func card(_ note: CanvasNoteSnapshot, at i: Int, centre: CGPoint, r: CGFloat) -> some View {
         // Place by position in the window; weight by distance from the selection.
         let d = i - windowCentre
         let away = abs(i - selected)
@@ -126,8 +139,8 @@ struct AuroraNoteArc: View {
         // Right: angles run downward from 3 o'clock. Left: from 9 o'clock.
         let angle = (side == .right ? 0 : 180) + Double(d) * Self.step * sign
         let a = angle * .pi / 180
-        let point = CGPoint(x: centre.x + cos(a) * Self.orbit,
-                            y: centre.y + Self.drop + sin(a) * Self.orbit)
+        let point = CGPoint(x: centre.x + cos(a) * r,
+                            y: centre.y + Self.drop + sin(a) * r)
         // The card's near edge sits on the curve and the card reaches outward.
         let x = point.x + sign * Self.card.width / 2
         let lit = hovered == note.url
@@ -170,7 +183,7 @@ struct AuroraNoteArc: View {
 
     // MARK: the light behind
 
-    private func aurora(centre: CGPoint) -> some View {
+    private func aurora(centre: CGPoint, r: CGFloat) -> some View {
         let sign: CGFloat = side == .right ? 1 : -1
         return ZStack {
             ForEach(0..<3, id: \.self) { i in
@@ -186,7 +199,7 @@ struct AuroraNoteArc: View {
         }
         .blur(radius: 46)
         .opacity(bloom ? 0.9 : 0)
-        .position(x: centre.x + sign * (Self.orbit + Self.card.width * 0.45), y: centre.y)
+        .position(x: centre.x + sign * (r + Self.card.width * 0.45), y: centre.y)
         .allowsHitTesting(false)
     }
 
@@ -194,18 +207,15 @@ struct AuroraNoteArc: View {
 
     /// Above the cards, lined up with their near edge, so the name heads the
     /// stack it belongs to.
-    private func header(centre: CGPoint) -> some View {
+    private func header(centre: CGPoint, r: CGFloat) -> some View {
         let sign: CGFloat = side == .right ? 1 : -1
-        let edge = centre.x + sign * (Self.orbit - 6)
+        let edge = centre.x + sign * (r - 6)
         return VStack(alignment: side == .right ? .leading : .trailing, spacing: 8) {
-            // The close sits on the side the notes are on, next to them.
             HStack(spacing: 9) {
-                if side == .left { closeButton.padding(.trailing, 4) }
                 Circle().fill(tint).frame(width: 9, height: 9)
                 Text(meta)
                     .font(Aurora.mono(11)).tracking(1.2)
                     .foregroundStyle(Aurora.ink3)
-                if side == .right { closeButton.padding(.leading, 4) }
             }
             if editingTitle {
                 TextField("", text: $draft)
@@ -231,18 +241,6 @@ struct AuroraNoteArc: View {
         .frame(width: 1, height: 1, alignment: side == .right ? .topLeading : .topTrailing)
         .position(x: edge, y: 52)
         .opacity(bloom ? 1 : 0)
-    }
-
-    private var closeButton: some View {
-        Button(action: onClose) {
-            Image(systemName: "xmark")
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(Aurora.ink2)
-                .frame(width: 26, height: 26)
-                .contentShape(Circle())
-        }
-        .buttonStyle(AuroraTapDown())
-        .help("Close (Esc)")
     }
 
     private var meta: String {
@@ -303,4 +301,18 @@ struct AuroraNoteArc: View {
 /// Shared geometry the ring and the curve both need.
 enum Mindspace {
     static let ringRadius: CGFloat = 116
+}
+
+/// The whole window with a round hole in it, so a tap catcher can cover
+/// everything but the ring.
+private struct RingHole: Shape {
+    let centre: CGPoint
+    let radius: CGFloat
+
+    func path(in rect: CGRect) -> Path {
+        var p = Path(rect)
+        p.addEllipse(in: CGRect(x: centre.x - radius, y: centre.y - radius,
+                                width: radius * 2, height: radius * 2))
+        return p
+    }
 }

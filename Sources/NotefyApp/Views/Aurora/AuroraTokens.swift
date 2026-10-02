@@ -90,6 +90,22 @@ enum Aurora {
         dyn((214, 150, 180), (224, 110, 160))   // rose
     ]
 
+    /// The ring's colours. The folder tints go pastel by day, which on a ring
+    /// against white read as faded rather than calm, so the ring keeps the
+    /// saturated night palette in both modes, a touch deeper by day.
+    static func arcTint(_ i: Int) -> Color {
+        let night: [(Int, Int, Int)] = [(52, 176, 124), (146, 112, 224), (208, 158, 74),
+                                         (72, 138, 220), (56, 176, 186), (224, 110, 160)]
+        let day: [(Int, Int, Int)] = [(40, 156, 106), (128, 94, 206), (192, 140, 56),
+                                       (58, 120, 204), (40, 156, 168), (208, 92, 144)]
+        let k = ((i % night.count) + night.count) % night.count
+        return dyn(day[k], night[k])
+    }
+
+    /// Ungrouped's arc: a neutral that is quiet in either mode. It used the
+    /// secondary text colour, which by day is a heavy green-grey.
+    static let arcNeutral = dyn((188, 192, 198), (176, 182, 190))
+
     /// How many tints the hash chooses between. Fixed at the original five so
     /// that adding a colour never moves an existing folder to a different one.
     static let hashedTintCount = 5
