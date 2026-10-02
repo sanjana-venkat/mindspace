@@ -2321,8 +2321,6 @@ final class AppState: ObservableObject {
         // Whatever it was — a region, a sentence, a voice note, a stretch of a
         // meeting — the light says it landed.
         flourish.play(.captured)
-        pet.state.caught("Saved to \(activeNoteTitle)",
-                         tint: Aurora.tintIndex(for: activeNoteTitle))
         let isRecordedTranscript = step.appName == "Audio"
             || step.appName == "Computer audio"
             || step.appName == "Meeting"
@@ -2330,6 +2328,13 @@ final class AppState: ObservableObject {
             step.screenshotPath != nil
                 || (step.appName != "Notefy Voice" && !(step.selectedText ?? "").isEmpty)
         )
+        // Only say it was saved once it was: a capture going to review is
+        // kept or thrown away there.
+        if shouldReview {
+            pet.state.noticed(tint: Aurora.tintIndex(for: activeNoteTitle))
+        } else {
+            pet.state.caught("Saved to \(activeNoteTitle)", tint: Aurora.tintIndex(for: activeNoteTitle))
+        }
         if shouldReview {
             captureReview.present(
                 step: step,
@@ -2375,6 +2380,7 @@ final class AppState: ObservableObject {
     }
 
     private func keepReviewedCapture(_ step: ExplorationStep, note: String, voiceURL: URL?) {
+        pet.state.caught("Saved to \(activeNoteTitle)", tint: Aurora.tintIndex(for: activeNoteTitle))
         appendCaptureToRaw(step)
         if !note.isEmpty {
             stepAnnotations[step.id] = note
@@ -2406,6 +2412,7 @@ final class AppState: ObservableObject {
         if let path = step.htmlPath { try? FileManager.default.removeItem(atPath: path) }
         persistCurrentRawNote()
         recordingStatus = "Capture discarded"
+        pet.state.discarded()
     }
 
     private func appendCaptureToRaw(_ step: ExplorationStep) {

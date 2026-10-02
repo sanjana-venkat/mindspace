@@ -428,6 +428,21 @@ final class MoonPetState: ObservableObject {
     private var settle: Task<Void, Never>?
     private var quiet: Task<Void, Never>?
 
+    /// A capture is waiting on Keep or Discard. The moon reacts, but says
+    /// nothing yet: "Saved" before you have decided is a promise it may not keep.
+    func noticed(tint: Int) {
+        self.tint = tint
+        pose = .catching
+        settle?.cancel()
+    }
+
+    /// The capture you were looking at was thrown away.
+    func discarded() {
+        pose = .idle
+        settle?.cancel()
+        say("Discarded", forSeconds: 2.5)
+    }
+
     /// A capture landed.
     func caught(_ what: String, tint: Int) {
         self.tint = tint
@@ -475,12 +490,20 @@ final class MoonPetState: ObservableObject {
     /// The pose relaxes; what it said stays on the bubble. A message that
     /// vanishes after two seconds is a message you will miss while you are
     /// looking at the thing you just captured.
+    /// Holding a folder is a reaction to something just filed, not a way of
+    /// life: after a while the moon puts it down and goes back to idle.
+    private static let holdFor: Double = 20
+
     private func settleBack(after seconds: Double, to pose: MoonPetView.Pose) {
         settle?.cancel()
         settle = Task { @MainActor [weak self] in
             try? await Task.sleep(for: .seconds(seconds))
             guard !Task.isCancelled, let self else { return }
             self.pose = self.filed > 0 ? pose : .idle
+            guard self.pose != .idle else { return }
+            try? await Task.sleep(for: .seconds(Self.holdFor))
+            guard !Task.isCancelled else { return }
+            self.pose = .idle
         }
     }
 }

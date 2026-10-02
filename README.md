@@ -10,10 +10,29 @@ what it was written from.
 For Macs running macOS 14 (Sonoma) or newer. Works on Apple silicon and Intel.
 
 <p align="center">
-  <img src="docs/screenshots/mobile-home.jpg" alt="Mindspace home: the moon, ringed by one arc per folder" width="300">
+  <img src="docs/screenshots/home-ring.jpg" alt="Mindspace home: the moon, ringed by one arc per topic, with an Ask anything bar underneath" width="760">
 </p>
 
-<p align="center"><em>Tap the moon and talk. Each arc is a folder, sized by how much of your mind lives in it.</em></p>
+<p align="center"><em>Your topics as a ring around the moon, each arc sized by how much you have kept there. Ask anything underneath.</em></p>
+
+<table>
+  <tr>
+    <td width="50%"><img src="docs/screenshots/capture.jpg" alt="A screen capture waiting to be kept, with a line about why"></td>
+    <td width="50%"><img src="docs/screenshots/topic-notes.jpg" alt="A topic opened from the ring, its notes fanned out beside it"></td>
+  </tr>
+  <tr>
+    <td><b>Grab anything, and say why.</b> A window, part of the screen, some text, your voice. The line you add is what makes it worth finding later.</td>
+    <td><b>Open a topic from the ring.</b> Its notes fan out beside the moon. Scroll or use the arrow keys to go through them.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/ask-a-note.jpg" alt="Asking a question of a note, with the answer citing numbered sources"></td>
+    <td><img src="docs/screenshots/captures-grid.jpg" alt="Every capture in a note, as a grid of screenshots, text and voice notes"></td>
+  </tr>
+  <tr>
+    <td><b>Ask your own notes.</b> Answers come only from what you saved, and every one points to the capture it came from.</td>
+    <td><b>Every capture in one place.</b> Screenshots, highlighted text and voice notes, each with the thought you had about it.</td>
+  </tr>
+</table>
 
 ---
 
@@ -69,13 +88,15 @@ downloads.
 
 ## Using it
 
+<img src="docs/screenshots/desktop-moon.jpg" alt="The moon on the desktop, its four options fanned out around it" width="170" align="right">
+
 **The moon.** A small moon floats on your desktop. It is how you capture things without
 leaving whatever you are doing. Hover it and its options fan out around it:
 
 | Icon | What it does |
 |---|---|
 | Camera | Take a picture of a whole window, or drag a box around part of the screen |
-| Text | Save the text you have selected right now |
+| Text | Highlight some text afterwards, and it is kept |
 | Waveform | Record — your microphone, or the sound your Mac is playing |
 | People | Take meeting notes: you on one side, everyone else on the other |
 
