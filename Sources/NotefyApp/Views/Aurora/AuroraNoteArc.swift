@@ -43,7 +43,10 @@ struct AuroraNoteArc: View {
     private static let orbit: CGFloat = 300
     /// The turn between neighbours. About 110pt apart vertically, so the
     /// 186pt cards overlap like a fanned deck, as in the folder band.
-    private static let step: Double = 18
+    private static let step: Double = 15
+    /// The cards' curve sits a little below the moon's centre, leaving room
+    /// above the top card for the topic's name.
+    private static let drop: CGFloat = 58
     /// Cards beyond this many either side of the one you are on are hidden.
     private static let reach = 2
 
@@ -123,7 +126,8 @@ struct AuroraNoteArc: View {
         // Right: angles run downward from 3 o'clock. Left: from 9 o'clock.
         let angle = (side == .right ? 0 : 180) + Double(d) * Self.step * sign
         let a = angle * .pi / 180
-        let point = CGPoint(x: centre.x + cos(a) * Self.orbit, y: centre.y + sin(a) * Self.orbit)
+        let point = CGPoint(x: centre.x + cos(a) * Self.orbit,
+                            y: centre.y + Self.drop + sin(a) * Self.orbit)
         // The card's near edge sits on the curve and the card reaches outward.
         let x = point.x + sign * Self.card.width / 2
         let lit = hovered == note.url
@@ -188,10 +192,12 @@ struct AuroraNoteArc: View {
 
     // MARK: the title, floating
 
-    /// Above the moon, centred on it. Beside the cards, the first one rose
-    /// over it whenever you were at the top of a long topic.
+    /// Above the cards, lined up with their near edge, so the name heads the
+    /// stack it belongs to.
     private func header(centre: CGPoint) -> some View {
-        VStack(spacing: 8) {
+        let sign: CGFloat = side == .right ? 1 : -1
+        let edge = centre.x + sign * (Self.orbit - 6)
+        return VStack(alignment: side == .right ? .leading : .trailing, spacing: 8) {
             // The close sits on the side the notes are on, next to them.
             HStack(spacing: 9) {
                 if side == .left { closeButton.padding(.trailing, 4) }
@@ -206,7 +212,7 @@ struct AuroraNoteArc: View {
                     .textFieldStyle(.plain)
                     .font(Aurora.display(34))
                     .foregroundStyle(Aurora.ink)
-                    .multilineTextAlignment(.center)
+                    .multilineTextAlignment(side == .right ? .leading : .trailing)
                     .focused($fieldFocused)
                     .onSubmit(commitTitle)
                     .frame(width: 360)
@@ -222,8 +228,8 @@ struct AuroraNoteArc: View {
             }
         }
         .fixedSize()
-        .frame(width: 1, height: 1, alignment: .top)
-        .position(x: centre.x, y: 58)
+        .frame(width: 1, height: 1, alignment: side == .right ? .topLeading : .topTrailing)
+        .position(x: edge, y: 52)
         .opacity(bloom ? 1 : 0)
     }
 
