@@ -6,12 +6,20 @@
 
 **Imagine you could Cmd + F your brain.**
 
-Keep the things you see and the thoughts you had about them, in one place.
+Mindspace is a personal memory for your Mac. Keep anything you see, hear or think with one
+keystroke, add a line about why it mattered, and find it again later by simply asking.
 
-Press a key, grab whatever is on your screen — a window, part of a window, text you have
-selected, something you say out loud, a whole meeting — and write a line about why you kept
-it. When a note has enough in it, Mindspace writes the tidy version for you, and shows you
-what it was written from.
+- **Keep anything.** A window, part of the screen, a paragraph you highlighted, a thought you
+  said out loud, a whole meeting. The line you add about why is kept with it.
+- **Find it by asking.** "What did I save about pricing?" Answers come only from what you kept,
+  and every claim links to the exact capture it came from.
+- **Get the tidy version.** A note full of captures becomes its key ideas, written beside your
+  own words, never instead of them.
+
+Everything lives on your Mac, in plain files you own. Over time it becomes a record of what you
+pay attention to and how you think, and that is where we are taking it: a memory that helps you
+remember for yourself, and one day carries your context and your voice into the AI you already
+use. [More on that below.](#where-this-is-going)
 
 For Macs running macOS 14 (Sonoma) or newer. Works on Apple silicon and Intel.
 
@@ -54,13 +62,13 @@ For Macs running macOS 14 (Sonoma) or newer. Works on Apple silicon and Intel.
 
 ### The easy way
 
-1. **[Download Mindspace](https://github.com/sanjana-venkat/mindspace/releases/latest)** — the
+1. **[Download Mindspace](https://github.com/sanjana-venkat/mindspace/releases/latest)**: the
    file ending in `.dmg` on that page.
 2. Open the downloaded file.
 3. Drag the **Mindspace** icon onto the **Applications** folder shown beside it.
 4. Open Mindspace from Applications (or Launchpad).
 
-That is all. The app is signed and approved by Apple, so it opens straight away — no scary
+That is all. The app is signed and approved by Apple, so it opens straight away. No scary
 warnings, nothing to click through in System Settings.
 
 ### With Homebrew
@@ -79,7 +87,7 @@ Later, to get the newest version:
 brew update && brew upgrade --cask mindspace
 ```
 
-(If you have not heard of Homebrew, ignore this section — use the easy way above.)
+(If you have not heard of Homebrew, ignore this section and use the easy way above.)
 
 ---
 
@@ -88,9 +96,9 @@ brew update && brew upgrade --cask mindspace
 Mindspace walks you through setup the first time you open it. Three things it will ask for,
 and why:
 
-- **Screen recording** — this is how it captures anything at all. Without it nothing works.
-- **Microphone** — only for voice notes and meetings.
-- **Accessibility** — so it can read the text you have selected when you ask it to.
+- **Screen recording.** This is how it captures anything at all. Without it nothing works.
+- **Microphone.** Only for voice notes and meetings.
+- **Accessibility.** So it can read the text you highlight when you ask it to.
 
 macOS asks for each one in its own window. Say yes, and setup carries on.
 
@@ -111,7 +119,7 @@ leaving whatever you are doing. Hover it and its options fan out around it:
 |---|---|
 | Camera | Take a picture of a whole window, or drag a box around part of the screen |
 | Text | Highlight some text afterwards, and it is kept |
-| Waveform | Record — your microphone, or the sound your Mac is playing |
+| Waveform | Record your microphone, or the sound your Mac is playing |
 | People | Take meeting notes: you on one side, everyone else on the other |
 
 Drag the moon anywhere you like. It stays put, out of the way, and tells you where things are
@@ -129,13 +137,13 @@ being saved.
 | ⌘⇧M | Start or stop meeting notes |
 
 **After each capture** Mindspace asks what you were thinking, in a line or two. That line is
-the point — it is what makes the capture worth anything later.
+the point: it is what makes the capture worth finding later.
 
 **In a meeting?** If you join a Zoom or Google Meet call, Mindspace offers to take notes. It
 records nothing until you click **Take notes**.
 
 **Your notes** live in a folder on your Desktop called **Mindspace**. They are ordinary text
-files — readable in any app, yours to move or back up, and there whether or not Mindspace is
+files, readable in any app, yours to move or back up, and there whether or not Mindspace is
 running.
 
 ---
@@ -180,7 +188,7 @@ it over the old one. With Homebrew, `brew update && brew upgrade --cask mindspac
 
 ## Connecting a smarter model (optional)
 
-Out of the box the write-ups are done by a model running on your Mac — free and private, but
+Out of the box the write-ups are done by a model running on your Mac: free and private, but
 slower and rougher. In **Settings** you can paste a key from any of these instead:
 
 | Service | Where the key comes from |
@@ -188,7 +196,7 @@ slower and rougher. In **Settings** you can paste a key from any of these instea
 | OpenAI | platform.openai.com |
 | Gemini | aistudio.google.com |
 | Claude | console.anthropic.com |
-| Ollama | Nothing to paste — install Ollama and pull a model |
+| Ollama | Nothing to paste. Install Ollama and pull a model |
 
 Each service keeps its own key, so switching between them does not lose the others. Keys are
 stored on your Mac in a file only your account can read.
@@ -197,7 +205,7 @@ stored on your Mac in a file only your account can read.
 
 ## For developers
 
-Build it yourself — macOS 14+ and Xcode 16+:
+Build it yourself with macOS 14+ and Xcode 16+:
 
 ```bash
 git clone https://github.com/sanjana-venkat/mindspace.git
@@ -228,7 +236,7 @@ delete the file whenever you like.
 
 ## License
 
-MIT — see [LICENSE](LICENSE). Use it, change it, ship it; keep the copyright notice.
+MIT. See [LICENSE](LICENSE). Use it, change it, ship it; keep the copyright notice.
 
 One part is not ours: `ThirdParty/FluidAudio` is a vendored copy of
 [FluidAudio](https://github.com/FluidInference/FluidAudio), under the Apache License 2.0,
