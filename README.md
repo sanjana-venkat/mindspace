@@ -1,4 +1,10 @@
+<p align="center">
+  <img src="docs/screenshots/banner.jpg" alt="Mindspace, by OpenHuman, over an aurora and snowy mountains" width="100%">
+</p>
+
 # Mindspace
+
+**Imagine you could Cmd + F your brain.**
 
 Keep the things you see and the thoughts you had about them, in one place.
 
@@ -10,27 +16,35 @@ what it was written from.
 For Macs running macOS 14 (Sonoma) or newer. Works on Apple silicon and Intel.
 
 <p align="center">
-  <img src="docs/screenshots/home-ring.jpg" alt="Mindspace home: the moon, ringed by one arc per topic, with an Ask anything bar underneath" width="760">
+  <img src="docs/screenshots/home-ring.jpg" alt="Mindspace home: the moon ringed by one arc per topic, with the Ask button at the bottom" width="760">
 </p>
 
-<p align="center"><em>Your topics as a ring around the moon, each arc sized by how much you have kept there. Ask anything underneath.</em></p>
+<p align="center"><em>Your topics as a ring around the moon, each arc sized by how much you have kept there. Ask is at the bottom of every screen.</em></p>
 
 <table>
   <tr>
     <td width="50%"><img src="docs/screenshots/capture.jpg" alt="A screen capture waiting to be kept, with a line about why"></td>
-    <td width="50%"><img src="docs/screenshots/topic-notes.jpg" alt="A topic opened from the ring, its notes fanned out beside it"></td>
+    <td width="50%"><img src="docs/screenshots/talk-to-the-moon.jpg" alt="The moon listening, with the spoken question written out underneath"></td>
   </tr>
   <tr>
     <td><b>Grab anything, and say why.</b> A window, part of the screen, some text, your voice. The line you add is what makes it worth finding later.</td>
+    <td><b>Or just talk to it.</b> Tap the moon and ask out loud. It listens on your Mac and writes your question out as you speak.</td>
+  </tr>
+  <tr>
+    <td><img src="docs/screenshots/ask-mindspace.jpg" alt="An answer built from saved captures, each claim cited to its source"></td>
+    <td><img src="docs/screenshots/topic-notes.jpg" alt="A topic opened from the ring, its notes fanned out beside the moon"></td>
+  </tr>
+  <tr>
+    <td><b>Ask from anywhere.</b> Answers come only from what you saved, and every claim points to the capture it came from. If it isn't in there, it says so.</td>
     <td><b>Open a topic from the ring.</b> Its notes fan out beside the moon. Scroll or use the arrow keys to go through them.</td>
   </tr>
   <tr>
-    <td><img src="docs/screenshots/ask-mindspace.jpg" alt="Asking Mindspace why it was built, answered from a saved capture with its source attached"></td>
+    <td><img src="docs/screenshots/write-up.jpg" alt="A note organized by AI into key ideas, as bullets or an essay"></td>
     <td><img src="docs/screenshots/captures-grid.jpg" alt="Every capture in a note, as a grid of screenshots, text and voice notes"></td>
   </tr>
   <tr>
-    <td><b>Ask your mindspace.</b> Answers come only from what you saved, and every one points to the capture it came from. If it isn't in there, it says so.</td>
-    <td><b>Every capture in one place.</b> Screenshots, highlighted text and voice notes, each with the thought you had about it.</td>
+    <td><b>A tidy version, written for you.</b> Mindspace turns a note full of captures into key ideas, as bullets or an essay, and tells you when it has gone out of date.</td>
+    <td><b>Every capture in one place.</b> Screenshots, highlighted text and voice notes, each with the thought you had about it. Double-click one to see it full size.</td>
   </tr>
 </table>
 
