@@ -36,7 +36,7 @@ struct AuroraSettingsView: View {
                         hostedNote: "A hosted provider only writes the finished transcript, when you stop. The live transcript you watch while recording is always Parakeet on this Mac — it downloads once, about 215MB, whichever provider is set here."
                     ) { audioFooter }
                     provider(
-                        title: "Screen understanding",
+                        title: "Multimodal summary and retrieval",
                         icon: "eye",
                         provider: $appState.settings.vision.provider,
                         apiURL: $appState.settings.vision.apiURL,
@@ -159,7 +159,7 @@ struct AuroraSettingsView: View {
         modelName: Binding<String>,
         localHint: String,
         modelPlaceholder: String,
-        /// On-device means Ollama for screen understanding and Parakeet for
+        /// On-device means Ollama for summaries and retrieval and Parakeet for
         /// speech. Only the first has a model to choose or an address to reach.
         localRunsOllama: Bool,
         /// Said when a hosted provider is chosen — what it will and won't do.
