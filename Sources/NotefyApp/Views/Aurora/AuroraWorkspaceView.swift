@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import NotefyCore
 
 /// The Aurora shell: an infinite canvas of folders, a sorted feed of the same
 /// library, and the note reader. Everything it draws comes from AppState — the
@@ -311,6 +312,12 @@ struct AuroraWorkspaceView: View {
             canvas.enabled = canvasLive
             seedFolderPoints()
             startTourIfNeeded()
+            #if DEBUG
+            if let name = ProcessInfo.processInfo.environment["MINDSPACE_OPEN_NOTE"] {
+                tourStep = nil
+                open(note: MindspaceStorage.defaultDirectory().appendingPathComponent(name))
+            }
+            #endif
         }
         .onChange(of: tourDone) { _, done in if !done { startTourIfNeeded() } }
         .onChange(of: focusedFolder) { _, _ in canvas.enabled = canvasLive }

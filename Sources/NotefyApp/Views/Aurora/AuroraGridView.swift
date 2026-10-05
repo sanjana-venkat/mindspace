@@ -16,6 +16,10 @@ struct AuroraGrid: View {
     /// Double-click: the capture full size, over a dark room.
     var preview: (Int) -> Void = { _ in }
     var zoom: Double = 1
+    /// A pinch or zoom step in flight: the grid is drawn scaled by this, not
+    /// laid out again, until the gesture ends.
+    var liveScale: CGFloat = 1
+    var liveAnchor: UnitPoint = .top
     @Binding var selection: Set<UUID>
 
     @State private var dragging: UUID?
@@ -144,6 +148,8 @@ struct AuroraGrid: View {
                 if Self.drawsUnscrolled { tiles } else { ScrollView { tiles } }
             }
             .scrollIndicators(.never)
+            .scaleEffect(liveScale, anchor: liveAnchor)
+            .clipped()
             .background {
                 GeometryReader { geo in
                     Color.clear
@@ -151,7 +157,6 @@ struct AuroraGrid: View {
                         .onChange(of: geo.size.width) { _, width in available = width - 68 }
                 }
             }
-            .animation(.smooth(duration: 0.18), value: zoom)
             .focusable()
             .focused($keyboard)
             .focusEffectDisabled()

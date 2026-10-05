@@ -43,6 +43,16 @@ struct AuroraNoteView: View {
     /// Where the zoom was when the current pinch started.
     @State private var pinchBase: Double = 1
     @State private var pinching = false
+    /// While a pinch or a zoom step is in flight the grid is scaled as a
+    /// picture by this much, and laid out at the new size once, at the end.
+    /// Laying it out on every pinch event redrew every caption in every tile
+    /// over a hundred times a second, which froze the window.
+    @State private var liveScale: CGFloat = 1
+    @State private var liveAnchor: UnitPoint = .top
+    @State private var glideToken = 0
+    /// The size shown in the label: where the zoom is heading, not where the
+    /// layout has got to.
+    private var shownZoom: Double { zoom * Double(liveScale) }
     /// Set when a search result asks for a particular capture, cleared once
     /// the panel list has scrolled to it.
     @State private var focusRequest: Int?
@@ -98,6 +108,8 @@ struct AuroraNoteView: View {
                                        withAnimation(.smooth(duration: 0.22)) { appState.capturePreview = i }
                                    },
                                    zoom: zoom,
+                                   liveScale: liveScale,
+                                   liveAnchor: liveAnchor,
                                    selection: Binding(
                                        get: { appState.selectedStepIDs },
                                        set: { appState.selectedStepIDs = $0 }
@@ -111,20 +123,10 @@ struct AuroraNoteView: View {
                 .gesture(
                     MagnifyGesture()
                         .onChanged { value in
-                            guard mode == .grid else { return }
-                            // The base is taken once, when the fingers land —
-                            // updating it mid-pinch compounds the scale and
-                            // the page runs away from you.
-                            if !pinching {
-                                pinching = true
-                                pinchBase = zoom
-                            }
-                            zoom = min(2.0, max(0.45, pinchBase * value.magnification))
+                            liveAnchor = value.startAnchor
+                            pinchChanged(value.magnification)
                         }
-                        .onEnded { _ in
-                            pinching = false
-                            pinchBase = zoom
-                        }
+                        .onEnded { _ in pinchEnded() }
                 )
             }
 
@@ -158,7 +160,12 @@ struct AuroraNoteView: View {
             }
         }
         .coordinateSpace(name: "auroraNote")
-        .onAppear { appState.noteMode = mode }
+        .onAppear {
+            appState.noteMode = mode
+            #if DEBUG
+            pinchStress()
+            #endif
+        }
         .onChange(of: mode) { _, m in appState.noteMode = m }
         .onDisappear { appState.noteMode = nil }
         .animation(.smooth(duration: 0.22), value: menuTarget)
@@ -200,13 +207,99 @@ struct AuroraNoteView: View {
     /// declared explicitly, and the target given room.
     /// One step of 15%, landed on a whole percent. Adding 0.15 to a double
     /// drifted, so the label read 99% or 114% after a step or two.
+    private func pinchChanged(_ magnification: CGFloat) {
+        guard mode == .grid else { return }
+        // The base is taken once, when the fingers land; updating it mid-pinch
+        // compounds the scale and the page runs away from you.
+        if !pinching {
+            pinching = true
+            pinchBase = zoom
+        }
+        let target = min(2.0, max(0.45, pinchBase * magnification))
+        liveScale = CGFloat(target / zoom)
+    }
+
+    private func pinchEnded() {
+        guard pinching else { return }
+        pinching = false
+        commitZoom((shownZoom * 100).rounded() / 100)
+    }
+
+    /// Lays the grid out at its new size in one pass, without animating the
+    /// layout, and drops the picture scale in the same transaction so nothing
+    /// jumps between the two.
+    private func commitZoom(_ target: Double) {
+        var t = Transaction()
+        t.disablesAnimations = true
+        withTransaction(t) {
+            zoom = target
+            liveScale = 1
+        }
+        pinchBase = target
+    }
+
+    /// Buttons and keys: glide the picture to the new size, then lay it out.
+    private func glideZoom(to target: Double) {
+        // A pinch the system cancelled never reports its end; a button
+        // press means it is over, so settle it rather than ignore the press.
+        if pinching { pinchEnded() }
+        guard abs(target - zoom) > 0.001 || liveScale != 1 else { return }
+        liveAnchor = .top
+        withAnimation(.smooth(duration: 0.16)) {
+            liveScale = CGFloat(target / zoom)
+        }
+        // Lay out once the glide has landed. A timer rather than the
+        // animation's completion, which can wait for the next frame that
+        // happens to be drawn. Rapid presses keep only the last one.
+        glideToken += 1
+        let token = glideToken
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.2) {
+            if token == glideToken, !pinching { commitZoom(target) }
+        }
+    }
+
+    #if DEBUG
+    /// MINDSPACE_PINCH_STRESS=1: opens the grid and plays a pinch out and back
+    /// at trackpad rate, then presses minus, timing each frame on stderr.
+    private func pinchStress() {
+        guard ProcessInfo.processInfo.environment["MINDSPACE_PINCH_STRESS"] != nil else { return }
+        mode = .grid
+        Task { @MainActor in
+            try? await Task.sleep(for: .seconds(2))
+            var worst = 0.0
+            var path: [Double] = []
+            for i in 0...60 { path.append(1 + Double(i) / 60 * 0.9) }
+            for i in 0...60 { path.append(1.9 - Double(i) / 60 * 1.4) }
+            for m in path {
+                let t = Date()
+                pinchChanged(m)
+                try? await Task.sleep(for: .milliseconds(16))
+                worst = max(worst, Date().timeIntervalSince(t))
+            }
+            pinchEnded()
+            fputs("[pinch] done zoom=\(zoom) worstFrame=\(Int(worst * 1000))ms\n", stderr)
+            for _ in 0..<3 {
+                stepZoom(1)
+                try? await Task.sleep(for: .milliseconds(300))
+                fputs("[pinch] plus -> \(zoom)\n", stderr)
+            }
+            for _ in 0..<3 {
+                stepZoom(-1)
+                try? await Task.sleep(for: .milliseconds(300))
+                fputs("[pinch] minus -> \(zoom)\n", stderr)
+            }
+        }
+    }
+    #endif
+
     private func stepZoom(_ direction: Int) {
-        let next = (zoom * 100).rounded() + Double(direction) * 15
-        zoom = min(200, max(45, next)) / 100
+        if pinching { pinchEnded() }
+        let next = (shownZoom * 100).rounded() + Double(direction) * 15
+        glideZoom(to: min(200, max(45, next)) / 100)
     }
 
     private func zoomButton(_ icon: String, enabled: Bool, _ action: @escaping () -> Void) -> some View {
-        Button { withAnimation(.smooth(duration: 0.16)) { action() } } label: {
+        Button { action() } label: {
             Image(systemName: icon)
                 .font(.system(size: 11, weight: .bold))
                 .foregroundStyle(enabled ? Aurora.ink : Aurora.ink3)
@@ -284,20 +377,20 @@ struct AuroraNoteView: View {
                 // design, so a zoom control there is a dead knob.
                 if mode == .grid {
                     HStack(spacing: 2) {
-                        zoomButton("minus", enabled: zoom > 0.5) { stepZoom(-1) }
+                        zoomButton("minus", enabled: shownZoom > 0.5) { stepZoom(-1) }
                             .help("Smaller  (\u{2318}\u{2212})")
                             .keyboardShortcut("-", modifiers: .command)
-                        Text("\(Int((zoom * 100).rounded()))%")
+                        Text("\(Int((shownZoom * 100).rounded()))%")
                             .font(Aurora.mono(11)).foregroundStyle(Aurora.ink2)
                             .frame(width: 44, height: 28)
                             .contentShape(Rectangle())
-                            .onTapGesture { withAnimation(.smooth(duration: 0.2)) { zoom = 1 } }
+                            .onTapGesture { glideZoom(to: 1) }
                             .help("Back to 100%")
-                        zoomButton("plus", enabled: zoom < 1.95) { stepZoom(1) }
+                        zoomButton("plus", enabled: shownZoom < 1.95) { stepZoom(1) }
                             .help("Bigger  (\u{2318}+)")
                             .keyboardShortcut("=", modifiers: .command)
                         // \u{2318}0 resets, as in a browser.
-                        Button("") { withAnimation(.smooth(duration: 0.2)) { zoom = 1 } }
+                        Button("") { glideZoom(to: 1) }
                             .keyboardShortcut("0", modifiers: .command)
                             .frame(width: 0, height: 0).opacity(0)
                     }
